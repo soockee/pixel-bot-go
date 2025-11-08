@@ -1,0 +1,31 @@
+# Ensure consistent line endings
+* text=auto eol=lf
+
+# Go source always LF
+*.go text eol=lf
+# Shell / batch scripts - keep CRLF for Windows convenience
+*.bat text eol=crlf
+*.cmd text eol=crlf
+# Markdown & docs LF
+*.md text eol=lf
+# Images and binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text
+# Archives
+*.zip binary
+*.tar binary
+*.gz binary
+*.bz2 binary
+# Fonts
+*.ttf binary
+*.otf binary
+# Audio
+*.mp3 binary
+*.wav binary
+*.ogg binary
+# Prevent Git from altering these (already marked as binary)
+*.gif !text !filter !merge !diff
