@@ -6,6 +6,9 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"log/slog"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -23,13 +26,29 @@ const (
 )
 
 type app struct {
-	config  *config.Config
-	width   int
-	height  int
-	ticks   []time.Duration
-	start   time.Time
-	afterID string
-	text    *TextWidget // displays elapsed milliseconds
+	config    *config.Config
+	logger    *slog.Logger
+	width     int
+	height    int
+	start     time.Time // app start (still used for scheduling only)
+	afterID   string
+	text      *TextWidget // session capture-active duration (MM:SS)
+	totalText *TextWidget // total accumulated capture time (MM:SS)
+
+	// Layout bookkeeping
+	captureRow int // dedicated row for capture preview (below config panel)
+
+	// Per-key config widgets
+	minScaleText    *TextWidget
+	maxScaleText    *TextWidget
+	scaleStepText   *TextWidget
+	thresholdText   *TextWidget
+	strideText      *TextWidget
+	stopOnScoreText *TextWidget
+	refineText      *TextWidget // true/false
+	useRGBText      *TextWidget // true/false
+	returnBestText  *TextWidget // true/false
+	applyBtn        *ButtonWidget
 
 	// Debug widget for last target detection status
 	debugLabel *LabelWidget
@@ -38,20 +57,32 @@ type app struct {
 	captureEnabled atomic.Bool
 	frameCh        chan *image.RGBA
 	targetImg      image.Image
-	targetLabel    *LabelWidget // shows the loaded target image
 	lastDetectX    int
 	lastDetectY    int
 	lastDetectOK   atomic.Bool
 
 	captureFrame *LabelWidget
+
+	// Capture duration tracking
+	captureStart        time.Time     // time when capture last toggled ON (session start)
+	accumulated         time.Duration // total active capture time across completed sessions
+	lastWasCapturing    bool          // previous state to detect OFF transitions
+	lastSessionDuration time.Duration // duration of most recently completed session
 }
 
-func NewApp(title string, width, height int, config *config.Config) *app {
-	a := &app{}
+func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Logger) *app {
+	a := &app{config: cfg, logger: logger}
 
 	App.WmTitle("")
+	if a.logger != nil {
+		a.logger.Info("initial config", "config", *cfg)
+	}
 	a.width = width
 	a.height = height
+	//Init target
+	if img, err := assets.FishingTargetImage(); err == nil {
+		a.targetImg = img
+	}
 
 	WmProtocol(App, "WM_DELETE_WINDOW", a.exitHandler)
 	WmGeometry(App, fmt.Sprintf("%dx%d+100+100", width, height))
@@ -59,55 +90,84 @@ func NewApp(title string, width, height int, config *config.Config) *app {
 }
 
 func (a *app) Start() {
-	// Create a Text widget for displaying elapsed time.
-	a.text = Text(Height(1), Width(30))
-	Pack(a.text)
-
-	// Debug label (initial state: no target yet)
-	a.debugLabel = Label(Txt("Target: <none>"), Borderwidth(1), Relief("ridge"))
-	Pack(a.debugLabel, Padx("1m"), Pady("1m"))
-
-	// Exit button.
-	Pack(Button(Txt("Exit"), Command(a.exitHandler)))
-
-	// Toggle capture button.
-	Pack(Button(Txt("Toggle Capture"), Command(func() { a.toggleCapture() })))
-
-	// Load template image (target) from embedded bytes and display a small preview.
-	if img, err := assets.FishingTargetImage(); err != nil {
-		if a.text != nil {
-			a.text.Delete("1.0", END)
-			a.text.Insert("1.0", fmt.Sprintf("Target load error: %v", err))
-		}
-	} else {
-		a.targetImg = img
-		if a.targetLabel == nil {
-			a.targetLabel = Label(Image(NewPhoto(Data(assets.FishingTargetPNG))), Borderwidth(1), Relief("groove"))
-			Pack(a.targetLabel, Padx("1m"), Pady("1m"))
-		} else {
-			// If already exists, refresh in case of future template reload.
-			a.targetLabel.Configure(Image(NewPhoto(Data(assets.FishingTargetPNG))))
-		}
+	if a.config == nil {
+		a.config = config.DefaultConfig()
 	}
 
-	// Initialize timer start.
-	a.start = time.Now()
+	// Row 0: session time, total time, debug label, buttons frame
+	a.text = Text(Height(1), Width(14))
+	Grid(a.text, Row(0), Column(0), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
+	a.totalText = Text(Height(1), Width(14))
+	Grid(a.totalText, Row(0), Column(1), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
 
-	// Kick off update loop.
+	a.debugLabel = Label(Txt("Target: <none>"), Borderwidth(1), Relief("ridge"))
+	Grid(a.debugLabel, Row(0), Column(2), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
+
+	btnFrame := Frame()
+	Grid(btnFrame, Row(0), Column(3), Sticky("ne"), Padx("0.3m"), Pady("0.3m"))
+	// Button frame uses default column sizing.
+	captureBtn := Button(Txt("Toggle Capture"), Command(func() { a.toggleCapture() }))
+	Grid(captureBtn, In(btnFrame), Row(0), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
+	exitBtn := Button(Txt("Exit"), Command(a.exitHandler))
+	Grid(exitBtn, In(btnFrame), Row(1), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
+
+	// Row 1+: configuration panel (columns 0-1)
+	endRow := a.buildConfigPanelGrid(1) // returns next free row after config
+	a.captureRow = endRow
+
+	// Pre-allocate a stable placeholder capture preview spanning all columns so layout doesn't jump later.
+	placeholder := image.NewRGBA(image.Rect(0, 0, 200, 120))
+	pngBytes := encodePNG(placeholder)
+	a.captureFrame = Label(Image(NewPhoto(Data(pngBytes))), Borderwidth(1), Relief("sunken"))
+	Grid(a.captureFrame, Row(a.captureRow), Column(0), Columnspan(4), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
+
+	a.setConfigEditable(true)
+
+	// Initialize timer and start update loop
+	a.start = time.Now()
 	a.scheduleUpdate()
 
 	App.Wait()
 }
 
 func (a *app) update() {
-	// Compute elapsed time in milliseconds.
-	elapsed := time.Since(a.start).Milliseconds()
+	// Session and total capture time handling.
+	capturing := a.captureEnabled.Load()
+	if capturing {
+		if !a.lastWasCapturing { // session start
+			a.captureStart = time.Now()
+			a.lastSessionDuration = 0
+		}
+		a.lastSessionDuration = time.Since(a.captureStart)
+	} else if a.lastWasCapturing { // session end
+		// finalize session
+		a.lastSessionDuration = time.Since(a.captureStart)
+		a.accumulated += a.lastSessionDuration
+	}
+	a.lastWasCapturing = capturing
 
+	session := a.lastSessionDuration
+	total := a.accumulated
+	if capturing { // include ongoing time in total display
+		total = a.accumulated + session
+	}
+
+	sessMin := int(session.Minutes())
+	sessSec := int(session.Seconds()) % 60
+	totMin := int(total.Minutes())
+	totSec := int(total.Seconds()) % 60
 	if a.text != nil {
 		func() {
 			defer func() { _ = recover() }()
 			a.text.Delete("1.0", END)
-			a.text.Insert("1.0", fmt.Sprintf("Elapsed: %d ms", elapsed))
+			a.text.Insert("1.0", fmt.Sprintf("Session: %02d:%02d", sessMin, sessSec))
+		}()
+	}
+	if a.totalText != nil {
+		func() {
+			defer func() { _ = recover() }()
+			a.totalText.Delete("1.0", END)
+			a.totalText.Insert("1.0", fmt.Sprintf("Total: %02d:%02d", totMin, totSec))
 		}()
 	}
 
@@ -115,7 +175,7 @@ func (a *app) update() {
 	if a.captureEnabled.Load() && a.targetImg != nil && a.frameCh != nil {
 		select {
 		case frame := <-a.frameCh:
-			x, y, ok := capture.DetectTemplate(frame, a.targetImg)
+			x, y, ok := capture.DetectTemplate(frame, a.targetImg, a.config)
 			if ok {
 				a.lastDetectX, a.lastDetectY = x, y
 				a.lastDetectOK.Store(true)
@@ -154,6 +214,130 @@ func (a *app) update() {
 	a.scheduleUpdate()
 }
 
+// populateConfigText writes current config values into cfgText.
+// buildConfigPanel creates per-parameter single-line Text widgets and Apply button.
+func (a *app) buildConfigPanelGrid(startRow int) int {
+	c := a.config
+	row := startRow
+	makeRow := func(label, value string, target **TextWidget) {
+		lbl := Label(Txt(label), Anchor("w"))
+		Grid(lbl, Row(row), Column(0), Sticky("w"), Padx("0.4m"), Pady("0.15m"))
+		w := Text(Height(1), Width(16))
+		Grid(w, Row(row), Column(1), Sticky("we"), Padx("0.4m"), Pady("0.15m"))
+		// Column weight omitted (API may differ); relying on natural expansion.
+		func() { defer func() { _ = recover() }(); w.Delete("1.0", END); w.Insert("1.0", value) }()
+		*target = w
+		row++
+	}
+	makeRow("Min Scale", fmt.Sprintf("%.2f", c.MinScale), &a.minScaleText)
+	makeRow("Max Scale", fmt.Sprintf("%.2f", c.MaxScale), &a.maxScaleText)
+	makeRow("Scale Step", fmt.Sprintf("%.3f", c.ScaleStep), &a.scaleStepText)
+	makeRow("Threshold", fmt.Sprintf("%.3f", c.Threshold), &a.thresholdText)
+	makeRow("Stride", fmt.Sprintf("%d", c.Stride), &a.strideText)
+	makeRow("Stop On Score", fmt.Sprintf("%.3f", c.StopOnScore), &a.stopOnScoreText)
+	makeRow("Refine (true/false)", fmt.Sprintf("%t", c.Refine), &a.refineText)
+	makeRow("Use RGB (true/false)", fmt.Sprintf("%t", c.UseRGB), &a.useRGBText)
+	makeRow("Return Best Even (true/false)", fmt.Sprintf("%t", c.ReturnBestEven), &a.returnBestText)
+	a.applyBtn = Button(Txt("Apply Changes"), Command(func() { a.applyConfigFromWidgets() }))
+	Grid(a.applyBtn, Row(row), Column(0), Columnspan(2), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
+	row++
+	return row
+}
+
+// applyConfigFromWidgets updates config from individual widgets (only if capture OFF).
+func (a *app) applyConfigFromWidgets() {
+	if a.captureEnabled.Load() {
+		a.appendStatus("Cannot apply while capture ON")
+		return
+	}
+	cfg := *a.config
+	parseF := func(w *TextWidget, dst *float64) {
+		if w == nil {
+			return
+		}
+		v := strings.TrimSpace(a.safeGetText(w))
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			*dst = f
+		}
+	}
+	parseI := func(w *TextWidget, dst *int) {
+		if w == nil {
+			return
+		}
+		v := strings.TrimSpace(a.safeGetText(w))
+		if i, err := strconv.Atoi(v); err == nil {
+			*dst = i
+		}
+	}
+	parseB := func(w *TextWidget, dst *bool) {
+		if w == nil {
+			return
+		}
+		v := strings.ToLower(strings.TrimSpace(a.safeGetText(w)))
+		if v == "true" || v == "1" {
+			*dst = true
+		} else if v == "false" || v == "0" {
+			*dst = false
+		}
+	}
+	parseF(a.minScaleText, &cfg.MinScale)
+	parseF(a.maxScaleText, &cfg.MaxScale)
+	parseF(a.scaleStepText, &cfg.ScaleStep)
+	parseF(a.thresholdText, &cfg.Threshold)
+	parseI(a.strideText, &cfg.Stride)
+	parseF(a.stopOnScoreText, &cfg.StopOnScore)
+	parseB(a.refineText, &cfg.Refine)
+	parseB(a.useRGBText, &cfg.UseRGB)
+	parseB(a.returnBestText, &cfg.ReturnBestEven)
+	_ = cfg.Validate()
+	*a.config = cfg
+	if a.logger != nil {
+		a.logger.Info("config applied", "config", cfg)
+	}
+	a.appendStatus("Config applied")
+}
+
+// setConfigEditable enables/disables all config widgets.
+func (a *app) setConfigEditable(enabled bool) {
+	state := "disabled"
+	if enabled {
+		state = "normal"
+	}
+	set := func(w *TextWidget) {
+		if w != nil {
+			func() { defer func() { _ = recover() }(); w.Configure(State(state)) }()
+		}
+	}
+	set(a.minScaleText)
+	set(a.maxScaleText)
+	set(a.scaleStepText)
+	set(a.thresholdText)
+	set(a.strideText)
+	set(a.stopOnScoreText)
+	set(a.refineText)
+	set(a.useRGBText)
+	set(a.returnBestText)
+	if a.applyBtn != nil {
+		func() { defer func() { _ = recover() }(); a.applyBtn.Configure(State(state)) }()
+	}
+}
+
+func (a *app) appendStatus(msg string) {
+	if a.text == nil {
+		return
+	}
+	func() { defer func() { _ = recover() }(); a.text.Insert("end", "\n"+msg) }()
+}
+
+func (a *app) safeGetText(t *TextWidget) string {
+	if t == nil {
+		return ""
+	}
+	var out []string
+	func() { defer func() { _ = recover() }(); out = t.Get("1.0", END) }()
+	return strings.Join(out, "")
+}
+
 func (a *app) exitHandler() {
 	// Cancel scheduled after event if any.
 	if a.afterID != "" {
@@ -178,9 +362,11 @@ func (a *app) toggleCapture() {
 			default:
 			}
 		}
+		// Reset preview to placeholder instead of destroying to keep layout stable.
 		if a.captureFrame != nil {
-			func() { defer func() { _ = recover() }(); Destroy(a.captureFrame) }()
-			a.captureFrame = nil
+			placeholder := image.NewRGBA(image.Rect(0, 0, 200, 120))
+			pngBytes := encodePNG(placeholder)
+			func() { defer func() { _ = recover() }(); a.captureFrame.Configure(Image(NewPhoto(Data(pngBytes)))) }()
 		}
 		// Reset debug widget state
 		if a.debugLabel != nil {
@@ -191,6 +377,8 @@ func (a *app) toggleCapture() {
 		if a.text != nil {
 			a.text.Insert("end", "\nCapture OFF")
 		}
+		// Re-enable config editing
+		a.setConfigEditable(true)
 		return
 	}
 	// Enable capture
@@ -203,6 +391,8 @@ func (a *app) toggleCapture() {
 	if a.text != nil {
 		a.text.Insert("end", "\nCapture ON")
 	}
+	// Disable config editing while running
+	a.setConfigEditable(false)
 }
 
 // captureLoop runs in a goroutine and pushes latest frames.
@@ -243,16 +433,11 @@ func (a *app) updateCaptureFrame(frame *image.RGBA) {
 	}
 
 	scaled := scaleToFit(frame, maxW, maxH)
-	// Lazily create preview label if it doesn't exist yet (in case capture started after first frame arrives).
-	if a.captureFrame == nil {
-		pngBytes := encodePNG(scaled)
-		a.captureFrame = Label(Image(NewPhoto(Data(pngBytes))), Borderwidth(1), Relief("sunken"))
-		Pack(a.captureFrame, Padx("1m"), Pady("1m"))
-		return
-	}
-	// Update the existing label's image without recreating the widget.
+	// Update the existing label's image (already allocated during Start).
 	pngBytes := encodePNG(scaled)
-	a.captureFrame.Configure(Image(NewPhoto(Data(pngBytes))))
+	if a.captureFrame != nil {
+		func() { defer func() { _ = recover() }(); a.captureFrame.Configure(Image(NewPhoto(Data(pngBytes)))) }()
+	}
 }
 
 // encodePNG converts an image.Image to PNG bytes. On error it returns an empty slice.

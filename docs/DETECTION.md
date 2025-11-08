@@ -1,127 +1,106 @@
-# Object Detection Algorithm
+# Detection Guide (Beginner-Friendly)
 
-This document explains the multi-scale template matching algorithm used to locate the target object (e.g. fishing bobber) in captured screen frames. The GUI and screen capture flow are simple wrappers around this core routine.
+This guide explains how Pixel Bot spots a target image (for example a small game object) on your screen. It is written for CS students at a beginner to intermediate level. You do NOT need prior experience in machine learning or advanced computer vision.
 
-## Overview
+## 1. The Problem
+Given a larger screenshot (the frame) and a smaller picture (the template), we want to know: "Where does this smaller picture appear in the larger one?" If we find a good match we move the mouse there.
 
-The detector performs masked, normalized cross-correlation (NCC) between a template image and the current screen frame across a range of scale factors. It returns the best match (highest correlation score) subject to a configurable threshold. The algorithm is robust to moderate size changes, transparency in the template, and optional color-channel differences.
+## 2. Core Idea: Compare Small Patch Against the Screen
+We slide (imagine moving) the template over the screen and at each possible position we measure how similar they look. The best similarity score wins.
 
-Core components:
+## 3. Similarity via Normalized Cross-Correlation (NCC)
+NCC gives a score from -1 to +1 where:
+- +1 means "identical pattern" (perfect match)
+- 0 means "no clear relationship"
+- -1 means "inverted pattern" (not relevant here)
 
-1. Single-scale NCC (`MatchTemplateNCC`)
-2. Parallel multi-scale orchestration (`MultiScaleMatchParallel`)
-3. Adaptive scale generation (`MultiScaleOptions` with `MinScale`, `MaxScale`, `ScaleStep`)
-4. Optional RGB correlation (`UseRGB`) for increased precision when color patterns matter.
-
-## Data Structures
-
-### `NCCOptions`
-- `Threshold`: Minimum score to consider a match valid.
-- `Stride`: Coarse scan step in pixels (trade-off between speed and accuracy).
-- `Refine`: If true and `Stride > 1`, performs a local refinement pass around the best coarse candidate.
-- `ReturnBestEven`: If true, returns best coordinates even if score < threshold (caller uses `Found` flag).
-- `DebugTiming`: Collects timing info (duration only).
-- `UseRGB`: Use R,G,B channels separately then average channel correlations; improves robustness vs. grayscale.
-
-### `MultiScaleOptions`
-- `Scales`: Explicit list of scale factors; if empty, adaptive generation is used.
-- `MinScale`, `MaxScale`, `ScaleStep`: Define continuous range of scales if `Scales` not provided.
-- `NCC`: Options passed down to NCC for each scale.
-- `StopOnScore`: Early termination threshold (e.g. >= 0.95).
-
-### `MultiScaleResult` / `NCCResult`
-Contain coordinates (`X`,`Y`), best `Score`, `Scale` (for multi-scale), `Found` flag, and optional `Dur`.
-
-## Single-Scale NCC Details
-
-For a given frame `F` and template `T` (possibly resized), NCC computes:
+Simplified formula (details at the link below):
 
 ```math
-  \text{score} = \frac{\sum (F_i T_i) - n \bar{F}\bar{T}}{n \sigma_F \sigma_T}
+	ext{score} = \frac{\sum_{i=1}^{n} F_i T_i - n\,\bar F\,\bar T}{n\,\sigma_F\,\sigma_T}
 ```
 
 Where:
-- `i` indexes masked template pixels (transparent template pixels are skipped).
-- `n` is number of unmasked pixels.
-- `\bar{F}` and `\bar{T}` are means over those pixels.
-- `\sigma_F`, `\sigma_T` are standard deviations.
+- $F_i$ is the $i$-th frame pixel under the template window (after masking)
+- $T_i$ is the corresponding template pixel
+- $n$ is the number of (non-transparent) template pixels used
+- $\bar F, \bar T$ are the means of $F_i$ and $T_i$
+- $\sigma_F, \sigma_T$ are their standard deviations
 
-The template and frame are converted either to a single grayscale luminance channel or three separate channels. Transparent pixels (alpha == 0) provide a natural mask to exclude irrelevant regions.
+We only use pixels from the non-transparent parts of the template (so see-through areas are ignored). Normalization (the denominator) makes the score independent of lighting differences.
 
-### Performance Considerations
-- A stride (`Stride`) reduces the number of candidate positions during the coarse pass.
-- A refinement pass re-scans fully around the best coarse location with stride 1 (or smaller effective region) to improve output accuracy.
-- Early constant-template shortcut: if variance of template is near zero, matching degrades to equality check.
+Further reading (optional):
+https://xcdskd.readthedocs.io/en/latest/cross_correlation/cross_correlation_coefficient.html
 
-## Multi-Scale Matching
+## 4. Why We Also Change Scale
+Sometimes the object on screen appears slightly bigger or smaller than our stored template (distance, resolution changes, etc.). To handle that we try several scale factors: we resize the template, run NCC, keep the best score.
 
-Size variability is addressed by scaling the template across multiple factors. For each scale factor:
+## 5. RGB vs Grayscale
+- Grayscale: Convert colors to brightness and compare one channel (faster).
+- RGB: Compare Red, Green, Blue separately and average their scores (slower, but better when color distinguishes objects).
 
-1. Compute scaled width/height.
-2. Resample template using Catmull-Rom interpolation.
-3. Run NCC and record the best score.
-4. If `StopOnScore` reached, trigger atomic early stop.
+If colors matter (often in games), using RGB reduces false positives.
 
-Concurrency model:
-- Each scale factor executes in a goroutine.
-- A bounded semaphore (`runtime.NumCPU()`) limits simultaneous workers to avoid overwhelming the CPU.
-- A channel collects results; early-stop sets an atomic flag causing remaining goroutines to skip work.
+## 6. Making It Fast
+Searching every pixel at every scale can be slow. We use two tricks:
+1. Stride: skip some positions (e.g. move 4 pixels at a time) for a quick coarse scan.
+2. Refinement: after finding the best coarse spot, re-check a small region precisely (stride 1) to fine-tune coordinates.
 
-Adaptive scales are generated when the caller does not provide an explicit list:
-```
-for s := MinScale; s <= MaxScale; s += ScaleStep { append(scales, s) }
-```
-Safety cap prevents pathological ranges (e.g. thousands of scales).
+We also stop early if a score is "good enough" (StopOnScore) to save time.
 
-## Color (RGB) vs Grayscale Matching
-
-In some game scenes, grayscale collapses distinguishing information (e.g. similarly bright but differently colored UI elements). Setting `UseRGB` performs NCC independently per channel and averages the three resulting correlations. This mitigates false positives where only one channel correlates by chance.
-
-Trade-offs:
-- Slightly higher memory and CPU cost (three arrays instead of one).
-- Better discrimination for colorful targets against noisy backgrounds.
-
-## Typical Configuration Example
-
-```go
-opts := capture.MultiScaleOptions{
-    MinScale:   0.60,
-    MaxScale:   1.40,
-    ScaleStep:  0.05,
-    NCC: capture.NCCOptions{
-        Threshold:      0.80,
-        Stride:         4,
-        Refine:         true,
-        ReturnBestEven: true,
-        UseRGB:         true,
-    },
-    StopOnScore: 0.95,
-}
-result := capture.MultiScaleMatch(frame, template, opts)
-if result.Found {
-    // Use result.X, result.Y
-}
+## 7. Putting It Together (Pseudo-code)
+```pseudo
+best = none
+for scale in generated_scales:
+    scaledTemplate = resize(template, scale)
+    result = NCC_Search(frame, scaledTemplate, stride)
+    if result.score > best.score:
+        best = result with scale
+    if best.score >= StopOnScore:
+        break (early stop)
+if stride > 1 and Refine:
+    best = refine_search(frame, scaledTemplate, around best.position)
+return best
 ```
 
-## Edge Cases & Handling
-| Case                                   | Handling                                                                  |
-| -------------------------------------- | ------------------------------------------------------------------------- |
-| Template fully transparent             | Early exit (no pixels).                                                   |
-| Constant template                      | Equality shortcut; score set to 1 on match.                               |
-| Scale produces very small (w<2 or h<2) | Ignored.                                                                  |
-| Threshold unreachable                  | `Found` false; optionally returns best coordinates (if `ReturnBestEven`). |
-| High score encountered                 | Early-stop prevents unnecessary remaining scale work.                     |
+`NCC_Search` loops over candidate positions and computes the NCC score for each; `refine_search` only looks near the best coarse position.
 
-## Potential Future Enhancements
-- Integrate integral images for O(1) mean/variance updates per window.
-- Multi-stage pyramid: coarse detection at lower resolutions then refine at full scale.
-- Sub-pixel peak fitting (e.g. quadratic fit around best NCC response) for finer cursor placement.
-- Top-N candidate list with secondary verification (color histogram or edge gradient matching).
-- Dynamic stride: start large, progressively tighten around promising areas.
+## 8. Configuration (Plain Terms)
+| Setting             | What It Means                                     | Typical Effect                                         |
+| ------------------- | ------------------------------------------------- | ------------------------------------------------------ |
+| MinScale / MaxScale | Smallest and largest size to try for the template | Wider range handles more size variation but costs time |
+| ScaleStep           | How big each jump is when scaling                 | Smaller step = more scales = slower but thorough       |
+| Threshold           | Minimum score to call it a "found" match          | Higher = fewer false positives                         |
+| Stride              | Pixel step when scanning                          | Larger stride = faster, might miss best exact spot     |
+| Refine              | Re-check around best spot with stride 1           | Improves coordinate accuracy                           |
+| UseRGB              | Use color channels                                | Better precision; slightly slower                      |
+| StopOnScore         | Early stop score                                  | Saves time once confidence is high                     |
+| ReturnBestEven      | Provide best coordinates even if below threshold  | Useful for debugging                                   |
 
-## Interaction With GUI & Capture
+## 9. Edge Cases
+- Fully transparent template: nothing to match → skip.
+- Template with no variation (e.g. all one color): correlation degenerates → special handling (treated like equality check).
+- Too small after scaling (<2 pixels wide or high): skip (not meaningful).
+- No score above threshold: report "not found" (or still give best if `ReturnBestEven`).
 
-Screen capture supplies frames; the GUI periodically pulls latest frame and invokes the detector. On a positive match, the application moves the mouse cursor to the detected location. The GUI also shows a small preview and textual debug status.
+## 10. Performance Notes
+- More scales or smaller strides increase CPU time.
+- Early stopping plus refinement keeps interaction responsive.
+- Parallel workers process different scales concurrently (bounded by CPU cores).
+
+## 11. Limitations
+- Lighting or heavy motion blur can reduce score reliability.
+- Very busy backgrounds may produce false positives (raise Threshold or use RGB).
+- Large perspective changes (object tilted or rotated) are not handled.
+
+## 12. Possible Future Improvements (Optional Reading)
+- Integral images to speed mean/variance calculations.
+- Multi-resolution pyramid: search coarse, then refine at full resolution.
+- Sub-pixel estimation to get smoother cursor placement.
+- Multiple top candidates for secondary checks (color histogram, edges).
+
+## 13. Relationship to the GUI
+The GUI just feeds new frames into this detection pipeline and displays status. When a match passes the threshold the cursor moves to the match coordinates.
 
 ---
-*This algorithm documentation focuses solely on the detection engine; peripheral components (Tk GUI and capture loop) are lightweight wrappers.*
+If you understand the sections above you already grasp the core of template matching with NCC at an approachable level. Dive into the source if you want more detail.
