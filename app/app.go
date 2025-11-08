@@ -274,9 +274,10 @@ func (a *app) applyConfigFromWidgets() {
 			return
 		}
 		v := strings.ToLower(strings.TrimSpace(a.safeGetText(w)))
-		if v == "true" || v == "1" {
+		switch v {
+		case "true", "1":
 			*dst = true
-		} else if v == "false" || v == "0" {
+		case "false", "0":
 			*dst = false
 		}
 	}
