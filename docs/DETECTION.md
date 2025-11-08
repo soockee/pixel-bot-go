@@ -32,6 +32,8 @@ We only use pixels from the non-transparent parts of the template (so see-throug
 Further reading (optional):
 https://xcdskd.readthedocs.io/en/latest/cross_correlation/cross_correlation_coefficient.html
 
+https://www.ipb.uni-bonn.de/html/teaching/photo12-2021/2021-pho1-09-matching-cc.pptx.pdf
+
 ## 4. Why We Also Change Scale
 Sometimes the object on screen appears slightly bigger or smaller than our stored template (distance, resolution changes, etc.). To handle that we try several scale factors: we resize the template, run NCC, keep the best score.
 
