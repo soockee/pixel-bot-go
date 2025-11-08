@@ -4,9 +4,10 @@ import (
 	"image"
 
 	"github.com/vova616/screenshot"
+	"github.com/soocke/pixel-bot-go/config"
 )
 
-// Grab returns a screen capture of the current active monitor
+// Grab returns a screen capture of the current active monitor.
 func Grab() (*image.RGBA, error) {
 	img, err := screenshot.CaptureScreen()
 	if err != nil {
@@ -15,25 +16,29 @@ func Grab() (*image.RGBA, error) {
 	return img, nil
 }
 
-// DetectTemplate performs a normalized cross-correlation (NCC) template match.
+// DetectTemplate performs a multi-scale NCC template match using dynamic config.
 // Returns x,y,ok where (x,y) is the top-left of the best match whose NCC score
-// exceeds the internal threshold. Transparent pixels (alpha==0) in the template
-// are ignored (masked out).
-func DetectTemplate(frame *image.RGBA, tmpl image.Image) (int, int, bool) {
-	// Multi-scale match to handle size variability. Defaults tuned for moderate UI scaling.
+// meets the configured threshold. Transparent template pixels are masked out.
+func DetectTemplate(frame *image.RGBA, tmpl image.Image, cfg *config.Config) (int, int, bool) {
+	if frame == nil || tmpl == nil {
+		return 0, 0, false
+	}
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
 	ms := MultiScaleMatch(frame, tmpl, MultiScaleOptions{
-		// Leave Scales empty to auto-generate from MinScale..MaxScale
-		MinScale:  0.60,
-		MaxScale:  1.40,
-		ScaleStep: 0.05,
+		Scales:    nil, // force adaptive generation path
+		MinScale:  cfg.MinScale,
+		MaxScale:  cfg.MaxScale,
+		ScaleStep: cfg.ScaleStep,
 		NCC: NCCOptions{
-			Threshold:      0.80,
-			Stride:         4,
-			Refine:         true,
-			ReturnBestEven: true,
-			UseRGB:         true,
+			Threshold:      cfg.Threshold,
+			Stride:         cfg.Stride,
+			Refine:         cfg.Refine,
+			ReturnBestEven: cfg.ReturnBestEven,
+			UseRGB:         cfg.UseRGB,
 		},
-		StopOnScore: 0.95,
+		StopOnScore: cfg.StopOnScore,
 	})
 	return ms.X, ms.Y, ms.Found
 }
