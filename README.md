@@ -1,24 +1,30 @@
-# WoW Fishing Bot (Go)
+# Pixel Bot (Go)
 
-This small Go project captures a screen region, attempts simple bobber detection by hue, and simulates a mouse click when a bite is detected.
+This Go application captures the screen, runs a multi-scale template matching algorithm to locate a target object, and optionally moves the mouse to the detected coordinates. A lightweight Tk GUI shows elapsed time, detection status, and a live scaled preview.
 
-Important notes:
-- This is written for Windows. It uses `github.com/kbinani/screenshot` for capturing and `github.com/go-vgo/robotgo` for input simulation.
-- Build and run on Windows with Go installed (1.20+).
+> Detailed documentation of the object search algorithm is in `docs/DETECTION.md`.
 
-Quickstart:
+## Quickstart
 
-1. Install Go (https://go.dev/dl/)
-2. From PowerShell in the `go-bot` directory:
+1. Install Go (https://go.dev/dl/) (Go 1.20+ recommended).
+2. From PowerShell in the project directory:
+3. Make sure to run as administrator to allow mouse control within games.
 
 ```powershell
 go mod tidy
-go build -o wowzer-bot.exe
-.
+go build -o pixel-bot.exe
+./pixel-bot.exe
 ```
 
-3. Run the binary and adjust `config.json` to set the capture region or thresholds.
+## Core Features
+- Screen capture (Windows) feeding frames to a detection loop.
+- Multi-scale, masked normalized cross-correlation (NCC) with optional RGB channel matching.
+- Adjustable scale range (`MinScale`, `MaxScale`, `ScaleStep`) or explicit scale list.
+- Early-stop on high-confidence score to reduce latency.
+- Simple GUI for status + preview.
 
-Limitations and safety:
-- This project is a starting point and uses naive detection. For production you should implement robust image processing.
-- Using automation with games may violate their terms of service. Use responsibly.
+See `docs/DETECTION.md` for algorithmic details, configuration examples, and future enhancement ideas.
+
+## Safety & Disclaimer
+Using automation in games may violate their terms of service. This project is for educational experimentation; use responsibly.
+
