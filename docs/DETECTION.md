@@ -36,7 +36,9 @@ Contain coordinates (`X`,`Y`), best `Score`, `Scale` (for multi-scale), `Found` 
 
 For a given frame `F` and template `T` (possibly resized), NCC computes:
 
-\[ \text{score} = \frac{\sum (F_i T_i) - n \bar{F}\bar{T}}{n \sigma_F \sigma_T} \]
+```math
+  \text{score} = \frac{\sum (F_i T_i) - n \bar{F}\bar{T}}{n \sigma_F \sigma_T}
+```
 
 Where:
 - `i` indexes masked template pixels (transparent template pixels are skipped).
