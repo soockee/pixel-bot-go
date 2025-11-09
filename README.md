@@ -64,3 +64,15 @@ Automating input in games can break their rules. Use at your own risk and only i
 
 Enjoy experimenting!
 
+
+## Selection Grid (Partial Capture)
+A new button labeled "Selection Grid" has been added (early prototype). Right now it toggles a mock rectangle (640x360 at the top-left of the primary monitor) instead of the full screen. When active the app uses `GrabSelection(rect)`; when cleared it falls back to `Grab()`.
+
+Current behavior:
+- First click: sets mock selection and status line notes the change.
+- Second click: clears selection; full-screen capture resumes.
+
+Planned upgrade (not yet implemented): a draggable, resizable overlay window you can position over any region to define the exact capture rectangle visually. The capture loop integration is already in place—only the interactive chooser window remains.
+
+If you want the full interactive selector next, ask and it can be prioritized.
+

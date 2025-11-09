@@ -3,13 +3,24 @@ package capture
 import (
 	"image"
 
-	"github.com/vova616/screenshot"
 	"github.com/soocke/pixel-bot-go/config"
+	"github.com/vova616/screenshot"
 )
 
 // Grab returns a screen capture of the current active monitor.
 func Grab() (*image.RGBA, error) {
 	img, err := screenshot.CaptureScreen()
+
+	screenshot.ScreenRect()
+	if err != nil {
+		return nil, err
+	}
+	return img, nil
+}
+
+func GrabSelection(selecationArea image.Rectangle) (*image.RGBA, error) {
+	img, err := screenshot.CaptureRect(selecationArea)
+
 	if err != nil {
 		return nil, err
 	}
