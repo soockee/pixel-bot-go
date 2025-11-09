@@ -37,7 +37,7 @@ func DefaultConfig() *Config {
 		Threshold:      0.80,
 		Stride:         4,
 		Refine:         true,
-		UseRGB:         true,
+		UseRGB:         false,
 		StopOnScore:    0.95,
 		ReturnBestEven: true,
 		SelectionX:     0,
