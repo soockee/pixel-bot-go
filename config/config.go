@@ -25,25 +25,40 @@ type Config struct {
 	SelectionY int `json:"selection_y"`
 	SelectionW int `json:"selection_w"`
 	SelectionH int `json:"selection_h"`
+
+	// Reel key configuration (e.g. "F3" or "R")
+	ReelKey string `json:"reel_key"`
+
+	// Bite detection configuration (only actively used fields retained).
+	ROISizePx int `json:"roi_size_px"` // square ROI side length in pixels
+	// MaxCastDurationSeconds defines the maximum expected lifetime of a fishing cast (bobber present).
+	// If monitoring exceeds this duration, the target is considered lost and the system returns to searching.
+	MaxCastDurationSeconds int `json:"max_cast_duration_seconds"`
+	// CooldownSeconds defines how long to wait after reeling before attempting the next cast.
+	CooldownSeconds int `json:"cooldown_seconds"`
 }
 
 // DefaultConfig returns a Config populated with standard defaults.
 func DefaultConfig() *Config {
 	return &Config{
-		Debug:          false,
-		MinScale:       0.60,
-		MaxScale:       1.40,
-		ScaleStep:      0.05,
-		Threshold:      0.80,
-		Stride:         4,
-		Refine:         true,
-		UseRGB:         false,
-		StopOnScore:    0.95,
-		ReturnBestEven: true,
-		SelectionX:     0,
-		SelectionY:     0,
-		SelectionW:     0,
-		SelectionH:     0,
+		Debug:                  false,
+		MinScale:               0.90,
+		MaxScale:               1.90,
+		ScaleStep:              0.1,
+		Threshold:              0.80,
+		Stride:                 4,
+		Refine:                 true,
+		UseRGB:                 false,
+		StopOnScore:            0.93,
+		ReturnBestEven:         true,
+		SelectionX:             0,
+		SelectionY:             0,
+		SelectionW:             0,
+		SelectionH:             0,
+		ReelKey:                "F3",
+		ROISizePx:              80,
+		MaxCastDurationSeconds: 16,
+		CooldownSeconds:        7,
 	}
 }
 
@@ -70,6 +85,32 @@ func (c *Config) Validate() error {
 	if c.StopOnScore < 0 || c.StopOnScore > 1 {
 		c.StopOnScore = 0.95
 	}
+	if c.ReelKey == "" {
+		c.ReelKey = "F3"
+	}
+	// Bite detection validation & sane clamps
+	if c.ROISizePx < 32 {
+		c.ROISizePx = 32
+	}
+	if c.ROISizePx > 256 { // keep ROI modest for performance
+		c.ROISizePx = 256
+	}
+
+	if c.MaxCastDurationSeconds < 5 { // extremely short casts are unlikely; enforce reasonable floor
+		c.MaxCastDurationSeconds = 5
+	}
+	if c.MaxCastDurationSeconds > 180 { // safety upper bound (3 minutes) though typical is ~30s
+		c.MaxCastDurationSeconds = 180
+	}
+
+	// Cooldown seconds sanity (allow zero -> default minimal, clamp upper bound for safety)
+	if c.CooldownSeconds <= 0 {
+		c.CooldownSeconds = 1
+	}
+	if c.CooldownSeconds > 60 { // more than a minute likely unnecessary
+		c.CooldownSeconds = 60
+	}
+
 	return nil
 }
 
