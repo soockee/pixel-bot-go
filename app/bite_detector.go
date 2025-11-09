@@ -3,6 +3,7 @@ package app
 import (
 	"image"
 	"log/slog"
+	"math"
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
@@ -37,21 +38,31 @@ type BiteDetector struct {
 	prevCandidate   bool      // last frame candidate state (for debug transition logs)
 	candidateFrames int       // consecutive candidate frames count (frame-based debounce)
 	statsFrozen     bool      // once candidate starts, freeze mean/std update until trigger/clear
+
+	// Instrumentation / diagnostics
+	framesCandidateStarted                                               int
+	framesCandidateAborted                                               int
+	maxConsecutiveCandidate                                              int
+	minDT, maxDT                                                         float64
+	minRatioChanged, maxRatioChanged                                     float64
+	minDiffBaseMean, maxDiffBaseMean                                     float64
+	lastDT, lastRatioChanged, lastDiffBaseMean                           float64
+	lastCandidateSpike, lastCandidateBaseJump, lastCandidateBigImmediate bool
 }
 
-// Internal detection tuning constants (less sensitive; adjust empirically).
+// Internal detection tuning constants (tuned for increased sensitivity; still conservative but lower than original).
 const (
 	windowSize          = 20   // frames (~1s at ~20fps)
-	minFramesForStats   = 7    // require more frames before using z-score spike logic
-	pixelDiffThreshold  = 16   // require larger per-pixel change to count toward changed pixel ratio
-	ratioThresholdSpike = 0.28 // higher changed pixel ratio needed for spike condition
-	ratioThresholdBase  = 0.18 // higher changed pixel ratio for baseline departure
-	baselineDiffThresh  = 22   // higher absolute baseline departure threshold
-	stdDevMultiplier    = 2.8  // higher z-score threshold for spike persistence
-	bigImmediateRatio   = 0.45 // require even larger early large-change shortcut
-	bigImmediateDiff    = 24   // paired with bigImmediateRatio (higher)
-	emaAlpha            = 0.03 // slightly slower baseline adaptation
-	frameDebounceNeeded = 3    // require more consecutive candidate frames to trigger
+	minFramesForStats   = 5    // fewer frames needed before spike logic uses z-score
+	pixelDiffThreshold  = 10   // per-pixel diff threshold (captures moderate changes)
+	ratioThresholdSpike = 0.18 // changed pixel ratio for spike condition
+	ratioThresholdBase  = 0.12 // changed pixel ratio for baseline departure
+	baselineDiffThresh  = 14   // absolute baseline departure threshold
+	stdDevMultiplier    = 2.0  // z-score threshold
+	bigImmediateRatio   = 0.20 // early large-change shortcut ratio (allows 0.25 region changes)
+	bigImmediateDiff    = 12   // paired diff threshold for bigImmediateRatio
+	emaAlpha            = 0.03 // baseline adaptation speed
+	frameDebounceNeeded = 1    // allow single-frame spike detection
 )
 
 func NewBiteDetector(cfg *config.Config, logger *slog.Logger) *BiteDetector {
@@ -71,6 +82,22 @@ func (b *BiteDetector) Reset() {
 	b.wIdx, b.wCount, b.frameCnt = 0, 0, 0
 	b.triggered = false
 	b.lastSpike = time.Time{}
+	b.lastFrameTS = time.Time{}
+	b.prevCandidate = false
+	b.candidateFrames = 0
+	b.statsFrozen = false
+	b.framesCandidateStarted = 0
+	b.framesCandidateAborted = 0
+	b.maxConsecutiveCandidate = 0
+	b.minDT, b.maxDT = 0, 0
+	b.minRatioChanged, b.maxRatioChanged = 0, 0
+	b.minDiffBaseMean, b.maxDiffBaseMean = 0, 0
+	b.lastDT, b.lastRatioChanged, b.lastDiffBaseMean = 0, 0, 0
+	b.lastCandidateSpike, b.lastCandidateBaseJump, b.lastCandidateBigImmediate = false, false, false
+	// Clear window contents (optional; wCount=0 already prevents use)
+	for i := range b.window {
+		b.window[i] = 0
+	}
 }
 
 // FeedFrame ingests an ROI frame (RGBA) at time t. Returns true exactly once
@@ -158,7 +185,7 @@ func (b *BiteDetector) FeedFrame(frame *image.RGBA, t time.Time) bool {
 	if b.wCount > 1 {
 		std = (m2 / float64(b.wCount-1))
 		if std > 0 {
-			std = sqrt(std)
+			std = math.Sqrt(std)
 		}
 	}
 
@@ -168,10 +195,42 @@ func (b *BiteDetector) FeedFrame(frame *image.RGBA, t time.Time) bool {
 	bigImmediate := (b.wCount < minFramesForStats) && (ratioChanged > bigImmediateRatio) && (dt > bigImmediateDiff)
 	candidate := spike || baseJump || bigImmediate
 
+	// Update instrumentation metrics (after computing values, before potential trigger)
+	if b.frameCnt > 0 { // skip first frame initialization
+		if b.minDT == 0 && b.maxDT == 0 {
+			// first metrics sample
+			b.minDT, b.maxDT = dt, dt
+			b.minRatioChanged, b.maxRatioChanged = ratioChanged, ratioChanged
+			b.minDiffBaseMean, b.maxDiffBaseMean = diffBaseMean, diffBaseMean
+		} else {
+			if dt < b.minDT {
+				b.minDT = dt
+			} else if dt > b.maxDT {
+				b.maxDT = dt
+			}
+			if ratioChanged < b.minRatioChanged {
+				b.minRatioChanged = ratioChanged
+			} else if ratioChanged > b.maxRatioChanged {
+				b.maxRatioChanged = ratioChanged
+			}
+			if diffBaseMean < b.minDiffBaseMean {
+				b.minDiffBaseMean = diffBaseMean
+			} else if diffBaseMean > b.maxDiffBaseMean {
+				b.maxDiffBaseMean = diffBaseMean
+			}
+		}
+		b.lastDT = dt
+		b.lastRatioChanged = ratioChanged
+		b.lastDiffBaseMean = diffBaseMean
+	}
+
 	// Debug logging for state transitions and periodic metrics
 	if b.cfg != nil && b.cfg.Debug && b.logger != nil {
-		// Transition logs
-		if candidate && !b.prevCandidate {
+		if candidate && !b.prevCandidate { // candidate start
+			b.framesCandidateStarted++
+			b.lastCandidateSpike = spike
+			b.lastCandidateBaseJump = baseJump
+			b.lastCandidateBigImmediate = bigImmediate
 			b.logger.Debug("bite candidate start",
 				"dt", dt,
 				"meanDt", mean,
@@ -183,7 +242,8 @@ func (b *BiteDetector) FeedFrame(frame *image.RGBA, t time.Time) bool {
 				"baseJump", baseJump,
 				"bigImmediate", bigImmediate,
 			)
-		} else if !candidate && b.prevCandidate {
+		} else if !candidate && b.prevCandidate { // candidate cleared
+			b.framesCandidateAborted++
 			b.logger.Debug("bite candidate cleared",
 				"dt", dt,
 				"meanDt", mean,
@@ -191,6 +251,9 @@ func (b *BiteDetector) FeedFrame(frame *image.RGBA, t time.Time) bool {
 				"changedRatio", ratioChanged,
 				"diffBaseMean", diffBaseMean,
 				"frames", b.frameCnt,
+				"wasSpike", b.lastCandidateSpike,
+				"wasBaseJump", b.lastCandidateBaseJump,
+				"wasBigImmediate", b.lastCandidateBigImmediate,
 			)
 		} else if b.frameCnt%10 == 0 { // periodic snapshot (every ~0.5s at 20fps)
 			b.logger.Debug("bite metrics",
@@ -203,6 +266,15 @@ func (b *BiteDetector) FeedFrame(frame *image.RGBA, t time.Time) bool {
 				"spike", spike,
 				"baseJump", baseJump,
 				"bigImmediate", bigImmediate,
+				"minDT", b.minDT,
+				"maxDT", b.maxDT,
+				"minRatioChanged", b.minRatioChanged,
+				"maxRatioChanged", b.maxRatioChanged,
+				"minDiffBaseMean", b.minDiffBaseMean,
+				"maxDiffBaseMean", b.maxDiffBaseMean,
+				"candidateStarts", b.framesCandidateStarted,
+				"candidateAborts", b.framesCandidateAborted,
+				"maxConsecutiveCandidate", b.maxConsecutiveCandidate,
 			)
 		}
 	}
@@ -212,7 +284,11 @@ func (b *BiteDetector) FeedFrame(frame *image.RGBA, t time.Time) bool {
 		if !b.prevCandidate { // first frame of candidate sequence
 			b.statsFrozen = true // freeze mean/std (window not updated) during candidate run
 		}
-		if b.candidateFrames >= frameDebounceNeeded {
+		if b.candidateFrames > b.maxConsecutiveCandidate {
+			b.maxConsecutiveCandidate = b.candidateFrames
+		}
+		// Trigger conditions: either debounce satisfied or bigImmediate single-frame spike
+		if b.candidateFrames >= frameDebounceNeeded || (bigImmediate && b.candidateFrames == 1) {
 			b.triggered = true
 			if b.logger != nil {
 				b.logger.Info("bite detected", "dt", dt, "meanDt", mean, "stdDt", std, "changedRatio", ratioChanged, "diffBaseMean", diffBaseMean, "framesInCandidate", b.candidateFrames)
@@ -254,19 +330,6 @@ func (b *BiteDetector) FeedFrame(frame *image.RGBA, t time.Time) bool {
 	b.frameCnt++
 	b.lastFrameTS = t
 	return false
-}
-
-// sqrt is a tiny helper (avoid importing math for single use); uses Newton iteration.
-func sqrt(x float64) float64 {
-	if x <= 0 {
-		return 0
-	}
-	// Initial guess.
-	g := x
-	for i := 0; i < 6; i++ { // sufficient for our small precision needs
-		g = 0.5 * (g + x/g)
-	}
-	return g
 }
 
 // TargetLostHeuristic returns true once the monitoring duration exceeds the

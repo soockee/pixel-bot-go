@@ -1,8 +1,9 @@
 package app
 
 import (
+	"image"
 	"log/slog"
-	"sync"
+	"runtime/debug"
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
@@ -12,15 +13,19 @@ import (
 type FishingState int
 
 const (
-	StateSearching  FishingState = iota // searching for the target object
-	StateMonitoring                     // monitoring target for bite movement
-	StateReeling                        // performing reel action (mouse press)
-	StateCooldown                       // waiting for loot/timeout before next cast
-	StateCasting                        // casting the fishing rod (key press)
+	StateSearching    FishingState = iota // searching for the target object
+	StateMonitoring                       // monitoring target for bite movement
+	StateReeling                          // performing reel action (mouse press)
+	StateCooldown                         // waiting for loot/timeout before next cast
+	StateCasting                          // casting the fishing rod (key press)
+	StateHalt                             // currently waiting for actionable state
+	StateWaitingFocus                     // waiting for focus on game window
 )
 
 func (s FishingState) String() string {
 	switch s {
+	case StateHalt:
+		return "halt"
 	case StateSearching:
 		return "searching"
 	case StateMonitoring:
@@ -31,6 +36,8 @@ func (s FishingState) String() string {
 		return "cooldown"
 	case StateCasting:
 		return "casting"
+	case StateWaitingFocus:
+		return "focus"
 	default:
 		return "unknown"
 	}
@@ -39,191 +46,210 @@ func (s FishingState) String() string {
 // FishingStateListener is invoked on every successful state transition.
 type FishingStateListener func(prev, next FishingState)
 
-// FishingStateMachine coordinates transitions between fishing states.
-// It is concurrency-safe; external events may call its exported methods
-// from any goroutine.
+// internal events
+type fsmEvent interface{}
+type (
+	evtTick             struct{ now time.Time }
+	evtTargetAcquired   struct{}
+	evtTargetAcquiredAt struct{ x, y int }
+	evtTargetLost       struct{}
+	evtHalt             struct{}
+	evtFishBite         struct{}
+	evtFocusAcquired    struct{}
+	evtAwaitFocus       struct{}
+	evtForceCast        struct{}
+	evtAddListener      struct{ l FishingStateListener }
+	evtCancel           struct{}
+	evtMonitoringFrame  struct {
+		roi *image.RGBA
+		now time.Time
+	}
+)
+
+// FishingStateMachine runs as a single goroutine (actor). All state mutations
+// happen on that goroutine, removing the need for locks and eliminating
+// re-entrancy issues.
 type FishingStateMachine struct {
-	mu        sync.Mutex
-	state     FishingState
-	logger    *slog.Logger
-	listeners []FishingStateListener
-	cfg       *config.Config
-
-	// Configuration
-	cooldownDuration time.Duration // time spent in cooldown before recast
-
-	// Internal timing bookkeeping
-	cooldownUntil time.Time // zero if not in cooldown
-	searchStarted time.Time // time when we entered searching (for auto-recast timeout)
-
-	// Target coordinate captured when entering monitoring (acquired) state.
-	coordX   int
-	coordY   int
-	coordSet bool
+	state            FishingState
+	logger           *slog.Logger
+	cfg              *config.Config
+	listeners        []FishingStateListener
+	events           chan fsmEvent
+	cooldownDuration time.Duration
+	cooldownUntil    time.Time
+	searchStarted    time.Time
+	coordX, coordY   int
+	coordSet         bool
+	biteDetector     *BiteDetector
+	closed           bool
 }
 
-// NewFishingStateMachine creates a new machine starting in StateSearching.
+// NewFishingStateMachine creates and starts the event loop.
 func NewFishingStateMachine(logger *slog.Logger, cfg *config.Config) *FishingStateMachine {
-	cooldown := time.Duration(1) * time.Second
+	cooldown := time.Second
 	if cfg != nil && cfg.CooldownSeconds > 0 {
 		cooldown = time.Duration(cfg.CooldownSeconds) * time.Second
 	}
-	return &FishingStateMachine{
-		state:            StateSearching,
+	m := &FishingStateMachine{
+		state:            StateHalt,
 		logger:           logger,
 		cfg:              cfg,
 		cooldownDuration: cooldown,
 		searchStarted:    time.Now(),
+		events:           make(chan fsmEvent, 64),
 	}
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if logger != nil {
+					logger.Error("fsm panic", "error", r, "stack", string(debug.Stack()))
+				}
+			}
+		}()
+		m.loop()
+	}()
+	return m
 }
 
-// AddListener registers a listener for state transitions.
-func (m *FishingStateMachine) AddListener(l FishingStateListener) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.listeners = append(m.listeners, l)
+// loop processes events sequentially.
+func (m *FishingStateMachine) loop() {
+	for ev := range m.events {
+		switch e := ev.(type) {
+		case evtAddListener:
+			m.listeners = append(m.listeners, e.l)
+		case evtTick:
+			m.handleTick(e.now)
+		case evtTargetAcquired:
+			if m.state == StateSearching {
+				m.transition(StateMonitoring)
+			}
+		case evtTargetAcquiredAt:
+			m.coordX, m.coordY, m.coordSet = e.x, e.y, true
+			if m.state == StateSearching {
+				m.transition(StateMonitoring)
+			}
+		case evtTargetLost:
+			if m.state == StateMonitoring {
+				m.transition(StateCasting)
+			}
+		case evtHalt:
+			m.cooldownUntil = time.Time{}
+			m.coordSet = false
+			if m.biteDetector != nil {
+				m.biteDetector.Reset()
+			}
+			m.transition(StateHalt)
+		case evtFishBite:
+			if m.state == StateMonitoring {
+				m.transition(StateReeling)
+			}
+		case evtMonitoringFrame:
+			if m.state == StateMonitoring && m.biteDetector != nil && e.roi != nil {
+				if m.biteDetector.FeedFrame(e.roi, e.now) {
+					m.transition(StateReeling)
+				} else if m.biteDetector.TargetLostHeuristic() {
+					m.transition(StateCasting)
+				}
+			}
+		case evtFocusAcquired:
+			if m.state == StateWaitingFocus {
+				m.transition(StateSearching)
+			}
+		case evtAwaitFocus:
+			if m.state == StateHalt {
+				m.transition(StateWaitingFocus)
+			}
+		case evtForceCast:
+			if m.state != StateCasting {
+				m.transition(StateCasting)
+			}
+		case evtCancel:
+			m.cooldownUntil = time.Time{}
+		}
+	}
+	m.closed = true
 }
 
-// Current returns the current state.
-func (m *FishingStateMachine) Current() FishingState {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.state
-}
-
-// transition performs the state change if valid and runs side effects.
+// transition performs side effects then updates the state.
 func (m *FishingStateMachine) transition(next FishingState) {
 	prev := m.state
 	if prev == next {
 		return
 	}
-	// Determine final state after applying any ephemeral entry actions.
-	final := next
-	ephemeralPerformed := false
+
 	switch next {
 	case StateCasting:
-		// Casting: press configured key (reusing ReelKey until dedicated cast key exists).
 		if m.cfg != nil {
 			vk := parseVK(m.cfg.ReelKey)
-			pressKey(vk)
+			go func() {
+				defer func() {
+					if r := recover(); r != nil && m.logger != nil {
+						m.logger.Error("cast goroutine panic", "error", r)
+					}
+				}()
+				pressKey(vk)
+			}()
 			if m.logger != nil {
 				m.logger.Info("cast action executed", "key", m.cfg.ReelKey)
 			}
 		}
-		final = StateSearching
-		ephemeralPerformed = true
+		// Immediately move to searching; casting is ephemeral.
+		next = StateSearching
 	case StateReeling:
-		// Reeling: move cursor to stored target; wait 0.5s; right-click, then press key.
 		if m.coordSet {
 			cx, cy := m.coordX, m.coordY
 			go func(x, y int) {
+				defer func() {
+					if r := recover(); r != nil && m.logger != nil {
+						m.logger.Error("reel goroutine panic", "error", r)
+					}
+				}()
 				moveCursor(x, y)
-				time.Sleep(300 * time.Millisecond) // requested delay before right-click
+				time.Sleep(300 * time.Millisecond)
 				clickRight()
 				if m.logger != nil {
-					m.logger.Info("reel action executed", "x", x, "y", y, "delay_ms", 300)
+					m.logger.Info("reel action executed", "x", x, "y", y)
 				}
 			}(cx, cy)
 		} else if m.logger != nil {
 			m.logger.Info("reel action skipped - no target coords")
 		}
-		// Include the delay in cooldown timing so overall cycle accounts for it.
+		// Set cooldown and immediately advance to cooldown state so we don't remain stuck in reeling.
 		m.cooldownUntil = time.Now().Add(m.cooldownDuration + 500*time.Millisecond)
-		final = StateCooldown
-		ephemeralPerformed = true
+		next = StateCooldown
 	case StateCooldown:
 		if m.cooldownUntil.IsZero() {
 			m.cooldownUntil = time.Now().Add(m.cooldownDuration)
 		}
 	case StateMonitoring:
-		// Monitoring has no immediate entry side-effects here.
+		if m.coordSet {
+			cx, cy := m.coordX, m.coordY
+			go func(x, y int) {
+				moveCursor(x, y)
+				if m.logger != nil {
+					m.logger.Info("found blobber", "x", x, "y", y)
+				}
+			}(cx, cy)
+		}
+		m.biteDetector = NewBiteDetector(m.cfg, m.logger)
+		m.biteDetector.Reset()
+	case StateHalt:
+		// no-op side effects
 	}
-	// Commit final state.
-	m.state = final
-	if final == StateSearching { // record start of searching period for timeout logic
+
+	m.state = next
+	if m.state == StateSearching {
 		m.searchStarted = time.Now()
 	}
 	if m.logger != nil {
-		if ephemeralPerformed {
-			m.logger.Debug("fishing state transition", "from", prev.String(), "via", next.String(), "to", final.String())
-		} else {
-			m.logger.Debug("fishing state transition", "from", prev.String(), "to", final.String())
-		}
+		m.logger.Debug("fishing state transition", "from", prev.String(), "to", next.String())
 	}
-	// Single listener notification (prev -> final). Ephemeral intermediate states are not emitted.
 	for _, l := range m.listeners {
-		l(prev, final)
+		l(prev, next)
 	}
 }
 
-// EventTargetAcquired should be called when the bobber/target becomes detectable.
-func (m *FishingStateMachine) EventTargetAcquired() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.state == StateSearching {
-		m.transition(StateMonitoring)
-	}
-}
-
-// EventTargetAcquiredAt stores the coordinates and transitions to monitoring.
-func (m *FishingStateMachine) EventTargetAcquiredAt(x, y int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.coordX, m.coordY, m.coordSet = x, y, true
-	if m.state == StateSearching {
-		m.transition(StateMonitoring)
-	}
-}
-
-// EventTargetLost can be called when tracking lost (optional fallback).
-func (m *FishingStateMachine) EventTargetLost() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	// Only revert to searching if we were monitoring.
-	if m.state == StateMonitoring {
-		m.transition(StateCasting)
-	}
-}
-
-// EventFishBite indicates movement/bite detected while monitoring.
-func (m *FishingStateMachine) EventFishBite() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.state == StateMonitoring {
-		m.transition(StateReeling)
-	}
-}
-
-// ForceCast allows external code to initiate a cast (e.g. user command) from any state except when already casting.
-func (m *FishingStateMachine) ForceCast() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.state != StateCasting {
-		m.transition(StateCasting)
-	}
-}
-
-// Cancel stops timers and leaves machine in its current state.
-func (m *FishingStateMachine) Cancel() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.cooldownUntil = time.Time{}
-}
-
-// Reset forces machine back to searching (clearing timers) without performing actions.
-func (m *FishingStateMachine) Reset() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.cooldownUntil = time.Time{}
-	m.coordSet = false
-	m.transition(StateSearching)
-}
-
-// Tick should be called periodically (e.g. from app.update) to advance cooldown.
-func (m *FishingStateMachine) Tick(now time.Time) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	// Auto-recast if searching has exceeded hard timeout (5s) without acquiring target.
+func (m *FishingStateMachine) handleTick(now time.Time) {
 	if m.state == StateSearching && !m.searchStarted.IsZero() && now.Sub(m.searchStarted) > 5*time.Second {
 		m.transition(StateCasting)
 		return
@@ -233,15 +259,42 @@ func (m *FishingStateMachine) Tick(now time.Time) {
 	}
 }
 
-// TargetCoordinates returns last stored target coordinates.
+// Exported API (event senders)
+func (m *FishingStateMachine) AddListener(l FishingStateListener) { m.events <- evtAddListener{l: l} }
+func (m *FishingStateMachine) Current() FishingState              { return m.state }
+func (m *FishingStateMachine) EventTargetAcquired()               { m.events <- evtTargetAcquired{} }
+func (m *FishingStateMachine) EventTargetAcquiredAt(x, y int) {
+	m.events <- evtTargetAcquiredAt{x: x, y: y}
+}
+func (m *FishingStateMachine) EventTargetLost()   { m.events <- evtTargetLost{} }
+func (m *FishingStateMachine) EventHalt()         { m.events <- evtHalt{} }
+func (m *FishingStateMachine) EventFishBite()     { m.events <- evtFishBite{} }
+func (m *FishingStateMachine) EventFocusAquired() { m.events <- evtFocusAcquired{} }
+func (m *FishingStateMachine) EventAwaitFocus()   { m.events <- evtAwaitFocus{} }
+func (m *FishingStateMachine) ForceCast()         { m.events <- evtForceCast{} }
+func (m *FishingStateMachine) Cancel()            { m.events <- evtCancel{} }
+func (m *FishingStateMachine) Tick(now time.Time) { m.events <- evtTick{now: now} }
+
+// ProcessMonitoringFrame enqueues a monitoring ROI frame for bite/loss evaluation.
+func (m *FishingStateMachine) ProcessMonitoringFrame(roiImg *image.RGBA, now time.Time) {
+	if roiImg == nil {
+		return
+	}
+	m.events <- evtMonitoringFrame{roi: roiImg, now: now}
+}
+
+// TargetCoordinates returns last stored target coordinates (snapshot).
 func (m *FishingStateMachine) TargetCoordinates() (x, y int, ok bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
 	if !m.coordSet {
 		return 0, 0, false
 	}
 	return m.coordX, m.coordY, true
 }
 
-// SetMaxCastDuration allows external code (app) to override the monitoring timeout based on config.
-// SetMaxCastDuration removed; timeout handled exclusively by BiteDetector heuristic.
+// Close stops the event loop. Further events are ignored.
+func (m *FishingStateMachine) Close() {
+	if m.closed {
+		return
+	}
+	close(m.events)
+}

@@ -16,7 +16,6 @@ type Config struct {
 	Threshold      float64 `json:"threshold"`
 	Stride         int     `json:"stride"`
 	Refine         bool    `json:"refine"`
-	UseRGB         bool    `json:"use_rgb"`
 	StopOnScore    float64 `json:"stop_on_score"`
 	ReturnBestEven bool    `json:"return_best_even"`
 
@@ -48,7 +47,6 @@ func DefaultConfig() *Config {
 		Threshold:              0.80,
 		Stride:                 4,
 		Refine:                 true,
-		UseRGB:                 false,
 		StopOnScore:            0.93,
 		ReturnBestEven:         true,
 		SelectionX:             0,

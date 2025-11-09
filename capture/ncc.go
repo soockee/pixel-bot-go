@@ -64,25 +64,8 @@ func integralSum(I []float64, W int, x0, y0, x1, y1 int) float64 {
 	return A(x1, y1) - A(x0-1, y1) - A(x1, y0-1) + A(x0-1, y0-1)
 }
 
-// isTemplateFullyOpaque scans template alpha and returns true if all pixels are fully opaque (a != 0).
-func isTemplateFullyOpaque(tmpl image.Image) bool {
-	if tmpl == nil {
-		return false
-	}
-	b := tmpl.Bounds()
-	for y := b.Min.Y; y < b.Max.Y; y++ {
-		for x := b.Min.X; x < b.Max.X; x++ {
-			_, _, _, a := tmpl.At(x, y).RGBA()
-			if a == 0 {
-				return false
-			}
-		}
-	}
-	return true
-}
-
 // matchTemplateNCCGrayIntegral performs NCC using precomputed grayscale + integral tables assuming
-// fully opaque template (all pixels relevant). Falls back to standard path if template constant.
+// fully opaque template (all pixels relevant).
 func matchTemplateNCCGrayIntegral(frame *image.RGBA, tmpl image.Image, opts NCCOptions, pre *grayPrecomp) NCCResult {
 	start := time.Now()
 	res := NCCResult{Score: -1}
@@ -245,7 +228,6 @@ type NCCOptions struct {
 	Refine         bool    // If true and Stride>1, do a refinement pass around best window
 	ReturnBestEven bool    // If true, Found=false but best coordinates returned even if below threshold
 	DebugTiming    bool    // If true, measure elapsed time (no logging here; hook point)
-	UseRGB         bool    // If true, perform NCC over RGB channels (averaged) instead of grayscale
 }
 
 // NCCResult holds the outcome of template matching.
@@ -274,219 +256,11 @@ func MatchTemplateNCC(frame *image.RGBA, tmpl image.Image, opts NCCOptions) NCCR
 	if tb.Dx() == 0 || tb.Dy() == 0 || fb.Dx() < tb.Dx() || fb.Dy() < tb.Dy() {
 		return NCCResult{Score: -1}
 	}
-	// Dispatch paths
-	if opts.UseRGB {
-		return matchTemplateNCCRBG(frame, tmpl, opts)
+	pre := buildGrayPrecomp(frame)
+	if pre == nil {
+		return NCCResult{Score: -1}
 	}
-	if isTemplateFullyOpaque(tmpl) { // try integral accelerated path
-		pre := buildGrayPrecomp(frame)
-		if pre != nil {
-			return matchTemplateNCCGrayIntegral(frame, tmpl, opts, pre)
-		}
-	}
-	// Fallback: use RGB path for templates with transparency instead of separate grayscale masked path.
-	return matchTemplateNCCRBG(frame, tmpl, opts)
-}
-
-// matchTemplateNCCRBG handles RGB averaged NCC with masking.
-func matchTemplateNCCRBG(frame *image.RGBA, tmpl image.Image, opts NCCOptions) NCCResult {
-	start := time.Now()
-	fb := frame.Bounds()
-	tb := tmpl.Bounds()
-	W, H := fb.Dx(), fb.Dy()
-	w, h := tb.Dx(), tb.Dy()
-	res := NCCResult{Score: -1}
-	indices := make([]int, 0, w*h)
-	tR := make([]float64, 0, w*h)
-	tG := make([]float64, 0, w*h)
-	tB := make([]float64, 0, w*h)
-	var sumTR, sumTR2, sumTG, sumTG2, sumTB, sumTB2 float64
-	for ty := 0; ty < h; ty++ {
-		for tx := 0; tx < w; tx++ {
-			r, g, b, a := tmpl.At(tb.Min.X+tx, tb.Min.Y+ty).RGBA()
-			if a == 0 {
-				continue
-			}
-			off := ty*w + tx
-			indices = append(indices, off)
-			rv, gv, bv := float64(r), float64(g), float64(b)
-			tR = append(tR, rv)
-			tG = append(tG, gv)
-			tB = append(tB, bv)
-			sumTR += rv
-			sumTR2 += rv * rv
-			sumTG += gv
-			sumTG2 += gv * gv
-			sumTB += bv
-			sumTB2 += bv * bv
-		}
-	}
-	n := float64(len(indices))
-	if n == 0 {
-		return res
-	}
-	meanTR := sumTR / n
-	varTR := (sumTR2 - sumTR*sumTR/n) / n
-	meanTG := sumTG / n
-	varTG := (sumTG2 - sumTG*sumTG/n) / n
-	meanTB := sumTB / n
-	varTB := (sumTB2 - sumTB*sumTB/n) / n
-	if varTR <= 1e-9 && varTG <= 1e-9 && varTB <= 1e-9 { // constant template equality shortcut (red channel basis)
-		refR := tR[0]
-		for y := fb.Min.Y; y <= fb.Max.Y-h; y += opts.Stride {
-			for x := fb.Min.X; x <= fb.Max.X-w; x += opts.Stride {
-				r0, _, _, a0 := frame.At(x, y).RGBA()
-				if a0 == 0 {
-					continue
-				}
-				if math.Abs(float64(r0)-refR) < 1e-9 {
-					res.X, res.Y, res.Score, res.Found = x, y, 1, true
-					if opts.DebugTiming {
-						res.Dur = time.Since(start)
-					}
-					return res
-				}
-			}
-		}
-		if opts.DebugTiming {
-			res.Dur = time.Since(start)
-		}
-		return res
-	}
-	stdTR := math.Sqrt(varTR)
-	stdTG := math.Sqrt(varTG)
-	stdTB := math.Sqrt(varTB)
-
-	fR := make([]float64, W*H)
-	fG := make([]float64, W*H)
-	fB := make([]float64, W*H)
-	for y := 0; y < H; y++ {
-		for x := 0; x < W; x++ {
-			r, g, b, a := frame.At(fb.Min.X+x, fb.Min.Y+y).RGBA()
-			if a == 0 {
-				continue
-			}
-			off := y*W + x
-			fR[off] = float64(r)
-			fG[off] = float64(g)
-			fB[off] = float64(b)
-		}
-	}
-	bestX, bestY, bestScore := 0, 0, -1.0
-	stride := opts.Stride
-	for y := 0; y <= H-h; y += stride {
-		for x := 0; x <= W-w; x += stride {
-			var sumFR, sumFR2, sumFTR float64
-			var sumFG, sumFG2, sumFTG float64
-			var sumFB, sumFB2, sumFTB float64
-			for i, off := range indices {
-				py := off / w
-				px := off % w
-				idx := (y+py)*W + (x + px)
-				vr := fR[idx]
-				vg := fG[idx]
-				vb := fB[idx]
-				sumFR += vr
-				sumFR2 += vr * vr
-				sumFTR += vr * tR[i]
-				sumFG += vg
-				sumFG2 += vg * vg
-				sumFTG += vg * tG[i]
-				sumFB += vb
-				sumFB2 += vb * vb
-				sumFTB += vb * tB[i]
-			}
-			meanFR := sumFR / n
-			varFR := (sumFR2 - sumFR*sumFR/n) / n
-			meanFG := sumFG / n
-			varFG := (sumFG2 - sumFG*sumFG/n) / n
-			meanFB := sumFB / n
-			varFB := (sumFB2 - sumFB*sumFB/n) / n
-			if varFR <= 1e-9 || varFG <= 1e-9 || varFB <= 1e-9 {
-				continue
-			}
-			stdFR := math.Sqrt(varFR)
-			stdFG := math.Sqrt(varFG)
-			stdFB := math.Sqrt(varFB)
-			nR := sumFTR - n*meanFR*meanTR
-			dR := n * stdFR * stdTR
-			nG := sumFTG - n*meanFG*meanTG
-			dG := n * stdFG * stdTG
-			nB := sumFTB - n*meanFB*meanTB
-			dB := n * stdFB * stdTB
-			if dR <= 0 || dG <= 0 || dB <= 0 {
-				continue
-			}
-			score := (nR/dR + nG/dG + nB/dB) / 3.0
-			if score > bestScore {
-				bestScore, bestX, bestY = score, x, y
-			}
-		}
-	}
-	if opts.Refine && stride > 1 {
-		minY := max(0, bestY-stride)
-		maxY := min(H-h, bestY+stride)
-		minX := max(0, bestX-stride)
-		maxX := min(W-w, bestX+stride)
-		for y := minY; y <= maxY; y++ {
-			for x := minX; x <= maxX; x++ {
-				var sumFR, sumFR2, sumFTR float64
-				var sumFG, sumFG2, sumFTG float64
-				var sumFB, sumFB2, sumFTB float64
-				for i, off := range indices {
-					py := off / w
-					px := off % w
-					idx := (y+py)*W + (x + px)
-					vr := fR[idx]
-					vg := fG[idx]
-					vb := fB[idx]
-					sumFR += vr
-					sumFR2 += vr * vr
-					sumFTR += vr * tR[i]
-					sumFG += vg
-					sumFG2 += vg * vg
-					sumFTG += vg * tG[i]
-					sumFB += vb
-					sumFB2 += vb * vb
-					sumFTB += vb * tB[i]
-				}
-				meanFR := sumFR / n
-				varFR := (sumFR2 - sumFR*sumFR/n) / n
-				meanFG := sumFG / n
-				varFG := (sumFG2 - sumFG*sumFG/n) / n
-				meanFB := sumFB / n
-				varFB := (sumFB2 - sumFB*sumFB/n) / n
-				if varFR <= 1e-9 || varFG <= 1e-9 || varFB <= 1e-9 {
-					continue
-				}
-				stdFR := math.Sqrt(varFR)
-				stdFG := math.Sqrt(varFG)
-				stdFB := math.Sqrt(varFB)
-				nR := sumFTR - n*meanFR*meanTR
-				dR := n * stdFR * stdTR
-				nG := sumFTG - n*meanFG*meanTG
-				dG := n * stdFG * stdTG
-				nB := sumFTB - n*meanFB*meanTB
-				dB := n * stdFB * stdTB
-				if dR <= 0 || dG <= 0 || dB <= 0 {
-					continue
-				}
-				score := (nR/dR + nG/dG + nB/dB) / 3.0
-				if score > bestScore {
-					bestScore, bestX, bestY = score, x, y
-				}
-			}
-		}
-	}
-	res.X, res.Y, res.Score = bestX+fb.Min.X, bestY+fb.Min.Y, bestScore
-	res.Found = bestScore >= opts.Threshold
-	if !res.Found && opts.ReturnBestEven {
-		res.X, res.Y = bestX+fb.Min.X, bestY+fb.Min.Y
-	}
-	if opts.DebugTiming {
-		res.Dur = time.Since(start)
-	}
-	return res
+	return matchTemplateNCCGrayIntegral(frame, tmpl, opts, pre)
 }
 
 // matchTemplateNCCGrayMasked handles original masked grayscale NCC path.
