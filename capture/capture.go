@@ -47,7 +47,6 @@ func DetectTemplate(frame *image.RGBA, tmpl image.Image, cfg *config.Config) (in
 			Stride:         cfg.Stride,
 			Refine:         cfg.Refine,
 			ReturnBestEven: cfg.ReturnBestEven,
-			UseRGB:         cfg.UseRGB,
 		},
 		StopOnScore: cfg.StopOnScore,
 	})

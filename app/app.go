@@ -9,12 +9,12 @@ import (
 	"image/png"
 	"log/slog"
 	"regexp"
+	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
-
-	"golang.org/x/sys/windows"
 
 	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders.
 	. "modernc.org/tk9.0"
@@ -50,9 +50,11 @@ type app struct {
 	strideText      *TextWidget
 	stopOnScoreText *TextWidget
 	refineText      *TextWidget // true/false
-	useRGBText      *TextWidget // true/false
 	returnBestText  *TextWidget // true/false
 	reelKeyText     *TextWidget // reel key (e.g. F3 or R)
+	// Window selection widgets/state (Windows only)
+	windowSelect   *TComboboxWidget // dropdown of active window titles
+	selectedWindow string           // currently selected target window title
 	// Bite detection config widgets (optional tuning)
 	roiSizeText        *TextWidget
 	cooldownText       *TextWidget // cooldown seconds
@@ -66,9 +68,6 @@ type app struct {
 	captureEnabled atomic.Bool
 	frameCh        chan *image.RGBA
 	targetImg      image.Image
-	lastDetectX    int
-	lastDetectY    int
-	lastDetectOK   atomic.Bool
 	detectionRect  image.Rectangle // global coordinates of current ROI used for monitoring
 
 	captureFrame   *LabelWidget
@@ -85,12 +84,15 @@ type app struct {
 
 	// Fishing automation state
 	fsm *FishingStateMachine
-	// Bite detection (monitoring phase)
-	biteDetector *BiteDetector
+	// fatalErr stores first fatal error or panic recovered; returned by Run.
+	fatalErr atomic.Value // error
+	goErrCh  chan error   // unified goroutine error channel
+	goWg     sync.WaitGroup
+	stateCh  chan FishingState // FSM state updates for UI (Tk thread)
 }
 
 func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Logger) *app {
-	a := &app{config: cfg, logger: logger, configPath: "pixle_bot_config.json"}
+	a := &app{config: cfg, logger: logger, configPath: "pixle_bot_config.json", goErrCh: make(chan error, 8), stateCh: make(chan FishingState, 16)}
 
 	App.WmTitle("")
 	if a.logger != nil {
@@ -113,11 +115,74 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 	return a
 }
 
-func (a *app) Start() {
+// Run initializes UI and enters the main event loop. It returns on application shutdown.
+// Any recovered panic is converted to an error and returned.
+func (a *app) Run() (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			perr := fmt.Errorf("panic: %v\n%s", r, debug.Stack())
+			a.fatalErr.Store(perr)
+			if a.logger != nil {
+				a.logger.Error("panic recovered", "error", r, "stack", string(debug.Stack()))
+			}
+			err = perr
+		}
+		// On normal exit propagate stored fatalErr if set.
+		if err == nil {
+			if v := a.fatalErr.Load(); v != nil {
+				if e, ok := v.(error); ok {
+					err = e
+				}
+			}
+		}
+	}()
 	if a.config == nil {
 		a.config = config.DefaultConfig()
 	}
 
+	a.layout()
+	a.setConfigEditable(true)
+
+	// Initialize timer and start update loop
+	a.start = time.Now()
+
+	// Initialize fishing state machine using configured cooldown.
+	a.fsm = NewFishingStateMachine(a.logger, a.config)
+
+	// Forward state changes to channel for safe UI update.
+	a.fsm.AddListener(func(prev, next FishingState) {
+		select {
+		case a.stateCh <- next:
+		default: // drop if full
+		}
+	})
+	// Launch error aggregator watcher
+	a.goWg.Add(1)
+	go a.safeGo(func() {
+		defer a.goWg.Done()
+		for e := range a.goErrCh {
+			if e == nil {
+				continue
+			}
+			// store first fatal
+			if a.fatalErr.Load() == nil {
+				a.fatalErr.Store(e)
+			}
+			if a.logger != nil {
+				a.logger.Error("goroutine error", "error", e)
+			}
+		}
+	})
+
+	a.scheduleUpdate()
+	App.Wait()
+	// Close channel and wait on watcher
+	close(a.goErrCh)
+	a.goWg.Wait()
+	return nil
+}
+
+func (a *app) layout() {
 	// Row 0: session time, total time, debug label, buttons frame
 	a.sessionText = Text(Height(1), Width(14))
 	Grid(a.sessionText, Row(0), Column(0), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
@@ -133,10 +198,37 @@ func (a *app) Start() {
 	// Button frame uses default column sizing.
 	captureBtn := Button(Txt("Toggle Capture"), Command(func() { a.toggleCapture() }))
 	Grid(captureBtn, In(btnFrame), Row(0), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
+
+	// Window selection dropdown (populated lazily at layout time)
+	// Only created on Windows; enumeration failures silently ignored.
+	var titles []string
+	if list, err := ListWindows(); err == nil {
+		titles = list
+	}
+	if len(titles) == 0 {
+		// Fallback option
+		titles = []string{"<none>"}
+	}
+	a.windowSelect = TCombobox(Values(titles), Width(26))
+	Grid(a.windowSelect, In(btnFrame), Row(1), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
+	// Set initial selection index 0.
+	a.windowSelect.Current(0)
+	a.selectedWindow = titles[0]
+	// Whenever selection changes, update stored selectedWindow.
+	Bind(a.windowSelect, "<<ComboboxSelected>>", Command(func() {
+		if a.windowSelect != nil {
+			idxStr := a.windowSelect.Current(nil)
+			idx, err := strconv.Atoi(idxStr)
+			if err != nil {
+				a.logger.Error("window selection error", slog.Any("err", err))
+			}
+			a.selectedWindow = titles[idx]
+		}
+	}))
 	selectionBtn := Button(Txt("Selection Grid"), Command(func() { a.openSelectionWindow() }))
-	Grid(selectionBtn, In(btnFrame), Row(1), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
+	Grid(selectionBtn, In(btnFrame), Row(2), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
 	exitBtn := Button(Txt("Exit"), Command(a.exitHandler))
-	Grid(exitBtn, In(btnFrame), Row(2), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
+	Grid(exitBtn, In(btnFrame), Row(3), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
 
 	// Row 1+: configuration panel (columns 0-1)
 	endRow := a.buildConfigPanelGrid(1) // returns next free row after config
@@ -147,41 +239,25 @@ func (a *app) Start() {
 	pngBytes := encodePNG(placeholder)
 	a.captureFrame = Label(Image(NewPhoto(Data(pngBytes))), Borderwidth(1), Relief("sunken"))
 	a.detectionFrame = Label(Image(NewPhoto(Data(pngBytes))), Borderwidth(1), Relief("sunken"))
+
 	// Capture frame spans config columns 0-3; detection ROI preview sits at column 4.
 	Grid(a.captureFrame, Row(a.captureRow), Column(0), Columnspan(4), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
 	Grid(a.detectionFrame, Row(a.captureRow), Column(4), Columnspan(1), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
-
-	a.setConfigEditable(true)
-
-	// Initialize timer and start update loop
-	a.start = time.Now()
-
-	// Initialize fishing state machine using configured cooldown.
-	a.fsm = NewFishingStateMachine(a.logger, a.config)
-
-	// Update state label synchronously on state changes.
-	a.fsm.AddListener(func(prev, next FishingState) {
-		if a.stateLabel == nil {
-			return
-		}
-		if next == StateSearching {
-			// Show target search info if currently searching.
-			a.stateLabel.Configure(Txt("State: <searching>"))
-			return
-		}
-		if next == StateMonitoring {
-			// Initialize bite detector on monitoring entry.
-			a.biteDetector = NewBiteDetector(a.config, a.logger)
-			a.biteDetector.Reset()
-		}
-		a.stateLabel.Configure(Txt(fmt.Sprintf("State: %s", next)))
-	})
-	a.scheduleUpdate()
-
-	App.Wait()
 }
 
 func (a *app) update() {
+	// Drain FSM state updates and apply on Tk thread.
+	for {
+		select {
+		case s := <-a.stateCh:
+			if a.stateLabel != nil {
+				a.stateLabel.Configure(Txt(fmt.Sprintf("State: %s", s)))
+			}
+		default:
+			goto stateDone
+		}
+	}
+stateDone:
 	// Session and total capture time handling.
 	if a.fsm != nil { // advance FSM timers (cooldown -> casting)
 		a.fsm.Tick(time.Now())
@@ -224,7 +300,19 @@ func (a *app) update() {
 	if a.fsm != nil {
 		fsmState = a.fsm.Current()
 	}
-	if a.captureEnabled.Load() && a.frameCh != nil {
+	// If waiting for focus, check foreground window and fire event if matched.
+	if fsmState == StateWaitingFocus {
+		if a.selectedWindow != "" && a.selectedWindow != "<none>" {
+			if title, err := ForegroundWindowTitle(); err == nil && title == a.selectedWindow {
+				// Focus acquired -> advance FSM
+				if a.fsm != nil {
+					a.fsm.EventFocusAquired()
+					fsmState = a.fsm.Current()
+				}
+			}
+		}
+	}
+	if a.captureEnabled.Load() && a.frameCh != nil && fsmState != StateWaitingFocus {
 		select {
 		case frame := <-a.frameCh:
 			// Always update preview regardless of state.
@@ -237,16 +325,11 @@ func (a *app) update() {
 						x += sel.Min.X
 						y += sel.Min.Y
 					}
-					a.lastDetectX, a.lastDetectY = x, y
-					a.lastDetectOK.Store(true)
-					moveCursor(x, y)
-					if a.fsm != nil {
-						a.fsm.EventTargetAcquiredAt(x, y)
-					}
-				} else {
-					a.lastDetectOK.Store(false)
+
+					a.fsm.EventTargetAcquiredAt(x, y)
+
 				}
-			} else if fsmState == StateMonitoring && a.biteDetector != nil {
+			} else if fsmState == StateMonitoring {
 				x, y, ok := a.fsm.TargetCoordinates()
 				if ok {
 					// Adjust for selection subset if active (coordinates stored absolute)
@@ -309,15 +392,9 @@ func (a *app) update() {
 						roiPNG := encodePNG(roiImg)
 						a.detectionFrame.Configure(Image(NewPhoto(Data(roiPNG))))
 					}
-					// Feed ROI frame to bite detector
-					if a.biteDetector.FeedFrame(roiImg, time.Now()) {
-						if a.fsm != nil {
-							a.fsm.EventFishBite()
-						}
-					} else if a.biteDetector.TargetLostHeuristic() {
-						if a.fsm != nil {
-							a.fsm.EventTargetLost()
-						}
+					// Feed ROI frame via FSM event (actor processes bite/loss heuristics)
+					if a.fsm != nil {
+						a.fsm.ProcessMonitoringFrame(roiImg, time.Now())
 					}
 				}
 			}
@@ -350,7 +427,6 @@ func (a *app) buildConfigPanelGrid(startRow int) int {
 	makeRow("Stride", fmt.Sprintf("%d", c.Stride), &a.strideText)
 	makeRow("Stop On Score", fmt.Sprintf("%.3f", c.StopOnScore), &a.stopOnScoreText)
 	makeRow("Refine (true/false)", fmt.Sprintf("%t", c.Refine), &a.refineText)
-	makeRow("Use RGB (true/false)", fmt.Sprintf("%t", c.UseRGB), &a.useRGBText)
 	makeRow("Return Best Even (true/false)", fmt.Sprintf("%t", c.ReturnBestEven), &a.returnBestText)
 	makeRow("Reel Key (e.g. F3 or R)", c.ReelKey, &a.reelKeyText)
 	makeRow("ROI Size Px", fmt.Sprintf("%d", c.ROISizePx), &a.roiSizeText)
@@ -405,7 +481,6 @@ func (a *app) applyConfigFromWidgets() {
 	parseI(a.strideText, &cfg.Stride)
 	parseF(a.stopOnScoreText, &cfg.StopOnScore)
 	parseB(a.refineText, &cfg.Refine)
-	parseB(a.useRGBText, &cfg.UseRGB)
 	parseB(a.returnBestText, &cfg.ReturnBestEven)
 	parseI(a.cooldownText, &cfg.CooldownSeconds)
 	parseI(a.maxCastDurationTxt, &cfg.MaxCastDurationSeconds)
@@ -449,7 +524,6 @@ func (a *app) setConfigEditable(enabled bool) {
 	set(a.strideText)
 	set(a.stopOnScoreText)
 	set(a.refineText)
-	set(a.useRGBText)
 	set(a.returnBestText)
 	set(a.roiSizeText)
 	set(a.cooldownText)
@@ -471,6 +545,10 @@ func (a *app) exitHandler() {
 	// Cancel scheduled after event if any.
 	if a.afterID != "" {
 		TclAfterCancel(a.afterID)
+	}
+	// Graceful FSM shutdown
+	if a.fsm != nil {
+		a.fsm.Close()
 	}
 	Destroy(App)
 }
@@ -494,11 +572,8 @@ func (a *app) openSelectionWindow() {
 	win := App.Toplevel(Borderwidth(2), Background("#008080"))
 	win.WmTitle("Selection Grid")
 	a.selectionWin = win
-	// Compute centered geometry: 2/3 of primary screen width & height.
-	user32 := windows.NewLazySystemDLL("user32.dll")
-	getSystemMetrics := user32.NewProc("GetSystemMetrics")
-	cx, _, _ := getSystemMetrics.Call(uintptr(0)) // SM_CXSCREEN
-	cy, _, _ := getSystemMetrics.Call(uintptr(1)) // SM_CYSCREEN
+
+	cx, cy := computeCenteredGeometry()
 	screenW := int(cx)
 	screenH := int(cy)
 	initW := screenW * 2 / 3
@@ -632,6 +707,7 @@ func (a *app) getSelectionRect() *image.Rectangle {
 func (a *app) toggleCapture() {
 	if a.captureEnabled.Load() {
 		a.captureEnabled.Store(false)
+
 		// Drain channel to free memory.
 		if a.frameCh != nil {
 			select {
@@ -654,11 +730,8 @@ func (a *app) toggleCapture() {
 		}
 		// Gracefully reset FSM & bite detector when capture stops.
 		if a.fsm != nil {
-			a.fsm.Reset()
+			a.fsm.EventHalt()
 		}
-		a.biteDetector = nil
-		// Clear last detection status
-		a.lastDetectOK.Store(false)
 
 		// Re-enable config editing
 		a.setConfigEditable(true)
@@ -669,20 +742,18 @@ func (a *app) toggleCapture() {
 		a.frameCh = make(chan *image.RGBA, 1)
 	}
 	a.captureEnabled.Store(true)
-	// Reflect current FSM state now that detection lifecycle begins.
-	if a.stateLabel != nil && a.fsm != nil {
-		cur := a.fsm.Current()
-		switch cur {
-		case StateSearching:
-			a.stateLabel.Configure(Txt("State: <searching>"))
-		case StateMonitoring:
-			a.stateLabel.Configure(Txt("State: monitoring"))
-		default:
-			a.stateLabel.Configure(Txt(fmt.Sprintf("State: %s", cur.String())))
-		}
-	}
 
-	go a.captureLoop()
+	// await switching window focus to target window
+
+	// Enter waiting-for-focus state before starting capture loop.
+	if a.fsm != nil {
+		a.fsm.EventAwaitFocus()
+	}
+	a.goWg.Add(1)
+	go a.safeGo(func() {
+		defer a.goWg.Done()
+		a.captureLoop()
+	})
 	// Disable config editing while running
 	a.setConfigEditable(false)
 }
@@ -690,6 +761,7 @@ func (a *app) toggleCapture() {
 // captureLoop runs in a goroutine and pushes latest frames.
 func (a *app) captureLoop() {
 	for a.captureEnabled.Load() {
+
 		var img *image.RGBA
 		if rect := a.getSelectionRect(); rect != nil {
 			// Use selected sub-rectangle
@@ -709,101 +781,27 @@ func (a *app) captureLoop() {
 			default:
 			}
 		}
-		time.Sleep(50 * time.Millisecond)
 	}
 }
 
-// moveCursor moves the OS mouse pointer (Windows only).
-func moveCursor(x, y int) {
-	// Windows SetCursorPos
-	user32 := windows.NewLazySystemDLL("user32.dll")
-	setCursorPos := user32.NewProc("SetCursorPos")
-	_, _, _ = setCursorPos.Call(uintptr(x), uintptr(y))
-}
-
-// pressKey issues a key down + key up for the given virtual-key code (Windows only).
-// This uses keybd_event for simplicity; for production consider SendInput.
-func pressKey(vk byte) {
-	user32 := windows.NewLazySystemDLL("user32.dll")
-	keybdEvent := user32.NewProc("keybd_event")
-	const KEYEVENTF_KEYUP = 0x0002
-	// key down
-	_, _, _ = keybdEvent.Call(uintptr(vk), 0, 0, 0)
-	// small sleep to emulate human press duration
-	time.Sleep(40 * time.Millisecond)
-	// key up
-	_, _, _ = keybdEvent.Call(uintptr(vk), 0, KEYEVENTF_KEYUP, 0)
-}
-
-// performCastAction issues the configured cast key (currently reusing ReelKey until a dedicated CastKey exists).
-// It is executed in its own goroutine to avoid blocking the Tk event loop.
-// performCastAction deprecated: logic inlined into FSM.
-
-// performReelAction executes the reel sequence asynchronously.
-// It repositions cursor, right-clicks, then sends the configured reel key.
-// Separation prevents blocking the UI update thread during sleeps or Windows API calls.
-func (a *app) performReelAction() {
-	if a.fsm == nil {
-		return
-	}
-	x, y, ok := a.fsm.TargetCoordinates()
-	if !ok {
-		if a.logger != nil {
-			a.logger.Info("reel action skipped - no target coords")
-		}
-		return
-	}
-	moveCursor(x, y)
-	clickRight()
-	vk := parseVK(a.config.ReelKey)
-	pressKey(vk)
-	if a.logger != nil {
-		a.logger.Info("reel action", "x", x, "y", y, "mouse", "right+key")
-	}
-	// Optional: briefly pause bite detector after trigger to avoid re-trigger spam.
-	a.biteDetector = nil
-}
-
-// clickRight performs a right mouse button click (down + up) using legacy mouse_event.
-// For production use, SendInput is preferred for synthesis reliability.
-func clickRight() {
-	user32 := windows.NewLazySystemDLL("user32.dll")
-	mouseEvent := user32.NewProc("mouse_event")
-	const MOUSEEVENTF_RIGHTDOWN = 0x0008
-	const MOUSEEVENTF_RIGHTUP = 0x0010
-	_, _, _ = mouseEvent.Call(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
-	time.Sleep(30 * time.Millisecond)
-	_, _, _ = mouseEvent.Call(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
-}
-
-// parseVK converts a user-provided key token (e.g. "F3", "R") into a Windows virtual key code.
-// Supports function keys F1-F12 and single alphabetic characters. Falls back to F3 if unknown.
-func parseVK(key string) byte {
-	k := strings.ToUpper(strings.TrimSpace(key))
-	if len(k) == 2 && k[0] == 'F' { // F1-F9
-		n := int(k[1] - '0')
-		if n >= 1 && n <= 9 {
-			return byte(0x70 + (n - 1)) // VK_F1=0x70
-		}
-	}
-	if len(k) == 3 && k[0] == 'F' { // F10-F12
-		switch k {
-		case "F10":
-			return 0x79
-		case "F11":
-			return 0x7A
-		case "F12":
-			return 0x7B
-		}
-	}
-	if len(k) == 2 && k[0] == 'F' { // F10-F19 (optional) -> ignore beyond F12 for now
-		// fallthrough
-	}
-	if len(k) == 1 && k[0] >= 'A' && k[0] <= 'Z' {
-		return k[0] // 'A'..'Z' match VK codes
-	}
-	// Default fallback F3
-	return 0x72
+// safeGo wraps a function with panic recovery and sends error to goErrCh.
+func (a *app) safeGo(fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				perr := fmt.Errorf("panic: %v\n%s", r, debug.Stack())
+				select {
+				case a.goErrCh <- perr:
+				default:
+					// channel full; drop but log directly
+					if a.logger != nil {
+						a.logger.Error("dropped panic error", "error", perr)
+					}
+				}
+			}
+		}()
+		fn()
+	}()
 }
 
 // updateCaptureFrame draws a downsampled preview of frame into the canvas.

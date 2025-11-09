@@ -29,7 +29,7 @@ go.work.sum
 
 # app config
 pixle_bot_config.json
-
+pixel_bot_logs.json
 # Editor/IDE
 # .idea/
 # .vscode/

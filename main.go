@@ -1,7 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
+	"os"
+	"runtime/debug"
 
 	"github.com/soocke/pixel-bot-go/app"
 	"github.com/soocke/pixel-bot-go/config"
@@ -28,5 +31,19 @@ func main() {
 	}
 
 	application := app.NewApp("Pixel Bot", 800, 600, cfg, logger)
-	application.Start()
+	if err := application.Run(); err != nil {
+		logger.Error("application terminated with error", "error", err)
+		os.Exit(1)
+	}
+}
+
+// Global panic fallback (should be unnecessary due to Run recovery but kept for safety)
+func init() {
+	defer func() {
+		if r := recover(); r != nil {
+			os.Stderr.WriteString("panic during init: ")
+			os.Stderr.WriteString(fmt.Sprintf("%v\n%s", r, debug.Stack()))
+			os.Exit(1)
+		}
+	}()
 }

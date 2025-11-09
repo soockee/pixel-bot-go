@@ -49,11 +49,8 @@ func MultiScaleMatchParallel(frame *image.RGBA, tmpl image.Image, opts MultiScal
 		return MultiScaleResult{}
 	}
 
-	// Precompute grayscale integrals if using grayscale path and template fully opaque.
-	var preGray *grayPrecomp
-	if !opts.NCC.UseRGB && isTemplateFullyOpaque(tmpl) {
-		preGray = buildGrayPrecomp(frame)
-	}
+	// Precompute grayscale integrals
+	preGray := buildGrayPrecomp(frame)
 	if len(opts.Scales) == 0 {
 		// Generate adaptive list if parameters look sane; else fallback to legacy defaults.
 		if opts.MinScale > 0 && opts.MaxScale > 0 && opts.ScaleStep > 0 && opts.MaxScale >= opts.MinScale {
@@ -67,9 +64,6 @@ func MultiScaleMatchParallel(frame *image.RGBA, tmpl image.Image, opts MultiScal
 				scales = append(scales, ScaleSpec{Factor: s})
 			}
 			opts.Scales = scales
-		} else {
-			// Legacy default set: moderate range around 1.0
-			opts.Scales = []ScaleSpec{{0.75}, {0.85}, {0.95}, {1.0}, {1.05}, {1.15}, {1.25}}
 		}
 	}
 
@@ -98,22 +92,12 @@ func MultiScaleMatchParallel(frame *image.RGBA, tmpl image.Image, opts MultiScal
 				return
 			}
 			var res NCCResult
-			if preGray != nil { // integral optimized grayscale path
-				if factor == 1.0 {
-					res = matchTemplateNCCGrayIntegral(frame, tmpl, opts.NCC, preGray)
-				} else {
-					scaled := image.NewRGBA(image.Rect(0, 0, w, h))
-					draw.CatmullRom.Scale(scaled, scaled.Bounds(), tmpl, origB, draw.Over, nil)
-					res = matchTemplateNCCGrayIntegral(frame, scaled, opts.NCC, preGray)
-				}
-			} else { // existing path
-				if factor == 1.0 {
-					res = MatchTemplateNCC(frame, tmpl, opts.NCC)
-				} else {
-					scaled := image.NewRGBA(image.Rect(0, 0, w, h))
-					draw.CatmullRom.Scale(scaled, scaled.Bounds(), tmpl, origB, draw.Over, nil)
-					res = MatchTemplateNCC(frame, scaled, opts.NCC)
-				}
+			if factor == 1.0 {
+				res = matchTemplateNCCGrayIntegral(frame, tmpl, opts.NCC, preGray)
+			} else {
+				scaled := image.NewRGBA(image.Rect(0, 0, w, h))
+				draw.CatmullRom.Scale(scaled, scaled.Bounds(), tmpl, origB, draw.Over, nil)
+				res = matchTemplateNCCGrayIntegral(frame, scaled, opts.NCC, preGray)
 			}
 			msr := MultiScaleResult{X: res.X, Y: res.Y, Score: res.Score, Scale: factor, Found: res.Found}
 			if opts.StopOnScore > 0 && res.Score >= opts.StopOnScore {
