@@ -48,8 +48,11 @@ The program writes simple JSON lines telling you what settings it started with a
 {"level":"INFO","msg":"config applied", ...}
 ```
 
-## Advanced / Curious?
-If you want to know how the matching works internally (the image comparisons, scaling, etc.) read `docs/DETECTION.md`. That file explains the technical details. You don't need it to use the app.
+## Curious About The Internals?
+Want to peek under the hood? See:
+* `docs/DETECTION.md` – how image matching works.
+* `docs/STATE_MACHINE.md` – the fishing steps and bite detection logic.
+Totally optional.
 
 ## Optional Command Line Flags
 You can still start the app with flags or a JSON file to pre-fill the settings (for advanced users). Most people can ignore this and just use the window.
@@ -65,14 +68,6 @@ Automating input in games can break their rules. Use at your own risk and only i
 Enjoy experimenting!
 
 
-## Selection Grid (Partial Capture)
-A new button labeled "Selection Grid" has been added (early prototype). Right now it toggles a mock rectangle (640x360 at the top-left of the primary monitor) instead of the full screen. When active the app uses `GrabSelection(rect)`; when cleared it falls back to `Grab()`.
-
-Current behavior:
-- First click: sets mock selection and status line notes the change.
-- Second click: clears selection; full-screen capture resumes.
-
-Planned upgrade (not yet implemented): a draggable, resizable overlay window you can position over any region to define the exact capture rectangle visually. The capture loop integration is already in place—only the interactive chooser window remains.
-
-If you want the full interactive selector next, ask and it can be prioritized.
+## Selection Area (Optional)
+You can define a rectangle so the app watches only part of the screen (helpful to reduce noise). Use the "Selection Grid" button to set or clear it. This improves speed and focus; leave it unset for full-screen watching.
 

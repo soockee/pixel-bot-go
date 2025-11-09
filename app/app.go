@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/png"
 	"log/slog"
 	"regexp"
@@ -15,6 +16,7 @@ import (
 
 	"golang.org/x/sys/windows"
 
+	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders.
 	. "modernc.org/tk9.0"
 
 	"github.com/soocke/pixel-bot-go/assets"
@@ -50,10 +52,15 @@ type app struct {
 	refineText      *TextWidget // true/false
 	useRGBText      *TextWidget // true/false
 	returnBestText  *TextWidget // true/false
-	applyBtn        *ButtonWidget
+	reelKeyText     *TextWidget // reel key (e.g. F3 or R)
+	// Bite detection config widgets (optional tuning)
+	roiSizeText        *TextWidget
+	cooldownText       *TextWidget // cooldown seconds
+	maxCastDurationTxt *TextWidget // max cast duration seconds
+	applyBtn           *ButtonWidget
 
 	// Debug widget for last target detection status
-	debugLabel *LabelWidget
+	stateLabel *LabelWidget
 
 	// Capture / detection state
 	captureEnabled atomic.Bool
@@ -62,8 +69,10 @@ type app struct {
 	lastDetectX    int
 	lastDetectY    int
 	lastDetectOK   atomic.Bool
+	detectionRect  image.Rectangle // global coordinates of current ROI used for monitoring
 
-	captureFrame *LabelWidget
+	captureFrame   *LabelWidget
+	detectionFrame *LabelWidget // shows current ROI (detection subimage)
 
 	selectionRect atomic.Value    // stores image.Rectangle (empty == none)
 	selectionWin  *ToplevelWidget // overlay window
@@ -73,6 +82,11 @@ type app struct {
 	accumulated         time.Duration // total active capture time across completed sessions
 	lastWasCapturing    bool          // previous state to detect OFF transitions
 	lastSessionDuration time.Duration // duration of most recently completed session
+
+	// Fishing automation state
+	fsm *FishingStateMachine
+	// Bite detection (monitoring phase)
+	biteDetector *BiteDetector
 }
 
 func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Logger) *app {
@@ -110,8 +124,9 @@ func (a *app) Start() {
 	a.totalSessionText = Text(Height(1), Width(14))
 	Grid(a.totalSessionText, Row(0), Column(1), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
 
-	a.debugLabel = Label(Txt("Target: <none>"), Borderwidth(1), Relief("ridge"))
-	Grid(a.debugLabel, Row(0), Column(2), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
+	// At startup capture isn't active yet; show <none> until user toggles capture.
+	a.stateLabel = Label(Txt("State: <none>"), Borderwidth(1), Relief("ridge"))
+	Grid(a.stateLabel, Row(0), Column(2), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
 
 	btnFrame := Frame()
 	Grid(btnFrame, Row(0), Column(4), Sticky("ne"), Padx("0.3m"), Pady("0.3m"))
@@ -127,17 +142,40 @@ func (a *app) Start() {
 	endRow := a.buildConfigPanelGrid(1) // returns next free row after config
 	a.captureRow = endRow
 
-	// Pre-allocate a stable placeholder capture preview spanning all columns so layout doesn't jump later.
+	// Pre-allocate stable placeholders so layout doesn't jump later.
 	placeholder := image.NewRGBA(image.Rect(0, 0, 200, 120))
 	pngBytes := encodePNG(placeholder)
 	a.captureFrame = Label(Image(NewPhoto(Data(pngBytes))), Borderwidth(1), Relief("sunken"))
+	a.detectionFrame = Label(Image(NewPhoto(Data(pngBytes))), Borderwidth(1), Relief("sunken"))
+	// Capture frame spans config columns 0-3; detection ROI preview sits at column 4.
 	Grid(a.captureFrame, Row(a.captureRow), Column(0), Columnspan(4), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
-	Grid(a.captureFrame, Row(a.captureRow), Column(0), Columnspan(5), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
+	Grid(a.detectionFrame, Row(a.captureRow), Column(4), Columnspan(1), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
 
 	a.setConfigEditable(true)
 
 	// Initialize timer and start update loop
 	a.start = time.Now()
+
+	// Initialize fishing state machine using configured cooldown.
+	a.fsm = NewFishingStateMachine(a.logger, a.config)
+
+	// Update state label synchronously on state changes.
+	a.fsm.AddListener(func(prev, next FishingState) {
+		if a.stateLabel == nil {
+			return
+		}
+		if next == StateSearching {
+			// Show target search info if currently searching.
+			a.stateLabel.Configure(Txt("State: <searching>"))
+			return
+		}
+		if next == StateMonitoring {
+			// Initialize bite detector on monitoring entry.
+			a.biteDetector = NewBiteDetector(a.config, a.logger)
+			a.biteDetector.Reset()
+		}
+		a.stateLabel.Configure(Txt(fmt.Sprintf("State: %s", next)))
+	})
 	a.scheduleUpdate()
 
 	App.Wait()
@@ -145,6 +183,9 @@ func (a *app) Start() {
 
 func (a *app) update() {
 	// Session and total capture time handling.
+	if a.fsm != nil { // advance FSM timers (cooldown -> casting)
+		a.fsm.Tick(time.Now())
+	}
 	capturing := a.captureEnabled.Load()
 	if capturing {
 		if !a.lastWasCapturing { // session start
@@ -178,47 +219,111 @@ func (a *app) update() {
 		a.totalSessionText.Insert("1.0", fmt.Sprintf("Total: %02d:%02d", totMin, totSec))
 	}
 
-	// Non-blocking receive of latest frame and attempt detection.
-	if a.captureEnabled.Load() && a.targetImg != nil && a.frameCh != nil {
+	// Frame processing depending on FSM state.
+	fsmState := StateSearching
+	if a.fsm != nil {
+		fsmState = a.fsm.Current()
+	}
+	if a.captureEnabled.Load() && a.frameCh != nil {
 		select {
 		case frame := <-a.frameCh:
-			x, y, ok := capture.DetectTemplate(frame, a.targetImg, a.config)
-			if ok {
-				// Translate coordinates if capturing a selection subset: detection returns
-				// coordinates relative to the selection frame (top-left at 0,0 of subset).
-				if sel := a.getSelectionRect(); sel != nil {
-					x += sel.Min.X
-					y += sel.Min.Y
-				}
-				a.lastDetectX, a.lastDetectY = x, y
-				a.lastDetectOK.Store(true)
-				// Move mouse to absolute position.
-				moveCursor(x, y)
-			} else {
-				a.lastDetectOK.Store(false)
-			}
-
-			// Update canvas preview (throttled).
+			// Always update preview regardless of state.
 			a.updateCaptureFrame(frame)
+			if fsmState == StateSearching && a.targetImg != nil {
+				// Template detection path.
+				x, y, ok := capture.DetectTemplate(frame, a.targetImg, a.config)
+				if ok {
+					if sel := a.getSelectionRect(); sel != nil {
+						x += sel.Min.X
+						y += sel.Min.Y
+					}
+					a.lastDetectX, a.lastDetectY = x, y
+					a.lastDetectOK.Store(true)
+					moveCursor(x, y)
+					if a.fsm != nil {
+						a.fsm.EventTargetAcquiredAt(x, y)
+					}
+				} else {
+					a.lastDetectOK.Store(false)
+				}
+			} else if fsmState == StateMonitoring && a.biteDetector != nil {
+				x, y, ok := a.fsm.TargetCoordinates()
+				if ok {
+					// Adjust for selection subset if active (coordinates stored absolute)
+					if sel := a.getSelectionRect(); sel != nil {
+						x -= sel.Min.X
+						y -= sel.Min.Y
+					}
+					// Desired ROI size
+					w := a.config.ROISizePx
+					h := a.config.ROISizePx
+					if w < 1 {
+						w = 1
+					}
+					if h < 1 {
+						h = 1
+					}
+					// Center ROI around (x,y)
+					dx := x - w/2
+					dy := y - h/2
+					fb := frame.Bounds()
+					// Clip to frame bounds
+					if dx < 0 {
+						dx = 0
+					}
+					if dy < 0 {
+						dy = 0
+					}
+					if dx+w > fb.Dx() {
+						w = fb.Dx() - dx
+					}
+					if dy+h > fb.Dy() {
+						h = fb.Dy() - dy
+					}
+					if w < 1 {
+						w = 1
+					}
+					if h < 1 {
+						h = 1
+					}
+					roiRect := image.Rect(dx, dy, dx+w, dy+h)
+					// Store global coordinates version for debugging/visualization
+					if sel := a.getSelectionRect(); sel != nil {
+						// selection frame already cropped; add selection offset
+						a.detectionRect = image.Rect(sel.Min.X+roiRect.Min.X, sel.Min.Y+roiRect.Min.Y, sel.Min.X+roiRect.Max.X, sel.Min.Y+roiRect.Max.Y)
+					} else {
+						a.detectionRect = roiRect
+					}
+					// Obtain subimage
+					sub := frame.SubImage(roiRect)
+					var roiImg *image.RGBA
+					if rgba, ok2 := sub.(*image.RGBA); ok2 {
+						roiImg = rgba
+					} else {
+						// Fallback copy if underlying type differs
+						roiImg = image.NewRGBA(image.Rect(0, 0, roiRect.Dx(), roiRect.Dy()))
+						draw.Draw(roiImg, roiImg.Bounds(), sub, roiRect.Min, draw.Src)
+					}
+					// Update detection preview widget
+					if a.detectionFrame != nil {
+						roiPNG := encodePNG(roiImg)
+						a.detectionFrame.Configure(Image(NewPhoto(Data(roiPNG))))
+					}
+					// Feed ROI frame to bite detector
+					if a.biteDetector.FeedFrame(roiImg, time.Now()) {
+						if a.fsm != nil {
+							a.fsm.EventFishBite()
+						}
+					} else if a.biteDetector.TargetLostHeuristic() {
+						if a.fsm != nil {
+							a.fsm.EventTargetLost()
+						}
+					}
+				}
+			}
 		default:
 		}
 	}
-
-	// Append detection info.
-	if a.sessionText != nil {
-		if a.lastDetectOK.Load() {
-			a.sessionText.Insert("end", fmt.Sprintf("\nDetected at (%d,%d)", a.lastDetectX, a.lastDetectY))
-			if a.debugLabel != nil {
-				a.debugLabel.Configure(Txt(fmt.Sprintf("Target: (%d,%d)", a.lastDetectX, a.lastDetectY)))
-			}
-		} else if a.captureEnabled.Load() {
-			a.sessionText.Insert("end", "\nNo detection")
-			if a.debugLabel != nil {
-				a.debugLabel.Configure(Txt("Target: <searching>"))
-			}
-		}
-	}
-
 	a.scheduleUpdate()
 }
 
@@ -247,6 +352,10 @@ func (a *app) buildConfigPanelGrid(startRow int) int {
 	makeRow("Refine (true/false)", fmt.Sprintf("%t", c.Refine), &a.refineText)
 	makeRow("Use RGB (true/false)", fmt.Sprintf("%t", c.UseRGB), &a.useRGBText)
 	makeRow("Return Best Even (true/false)", fmt.Sprintf("%t", c.ReturnBestEven), &a.returnBestText)
+	makeRow("Reel Key (e.g. F3 or R)", c.ReelKey, &a.reelKeyText)
+	makeRow("ROI Size Px", fmt.Sprintf("%d", c.ROISizePx), &a.roiSizeText)
+	makeRow("Cooldown Seconds", fmt.Sprintf("%d", c.CooldownSeconds), &a.cooldownText)
+	makeRow("Max Cast Duration Seconds", fmt.Sprintf("%d", c.MaxCastDurationSeconds), &a.maxCastDurationTxt)
 	a.applyBtn = Button(Txt("Apply Changes"), Command(func() { a.applyConfigFromWidgets() }))
 	Grid(a.applyBtn, Row(row), Column(0), Columnspan(2), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
 	row++
@@ -298,10 +407,27 @@ func (a *app) applyConfigFromWidgets() {
 	parseB(a.refineText, &cfg.Refine)
 	parseB(a.useRGBText, &cfg.UseRGB)
 	parseB(a.returnBestText, &cfg.ReturnBestEven)
+	parseI(a.cooldownText, &cfg.CooldownSeconds)
+	parseI(a.maxCastDurationTxt, &cfg.MaxCastDurationSeconds)
+	// Reel key string (allow raw token like F3 or single letter)
+	if a.reelKeyText != nil {
+		val := strings.TrimSpace(a.safeGetText(a.reelKeyText))
+		if val != "" {
+			cfg.ReelKey = val
+		}
+	}
 	_ = cfg.Validate()
 	*a.config = cfg
 	if a.logger != nil {
 		a.logger.Info("config applied", "config", cfg)
+	}
+	// Persist full config to JSON after application.
+	if err := a.config.Save(a.configPath); err != nil {
+		if a.logger != nil {
+			a.logger.Error("config save failed", "error", err)
+		}
+	} else if a.logger != nil {
+		a.logger.Info("config saved", "path", a.configPath)
 	}
 }
 
@@ -325,6 +451,9 @@ func (a *app) setConfigEditable(enabled bool) {
 	set(a.refineText)
 	set(a.useRGBText)
 	set(a.returnBestText)
+	set(a.roiSizeText)
+	set(a.cooldownText)
+	set(a.maxCastDurationTxt)
 	if a.applyBtn != nil {
 		a.applyBtn.Configure(State(state))
 	}
@@ -334,8 +463,7 @@ func (a *app) safeGetText(t *TextWidget) string {
 	if t == nil {
 		return ""
 	}
-	var out []string
-	out = t.Get("1.0", END)
+	out := t.Get("1.0", END)
 	return strings.Join(out, "")
 }
 
@@ -516,11 +644,19 @@ func (a *app) toggleCapture() {
 			placeholder := image.NewRGBA(image.Rect(0, 0, 200, 120))
 			pngBytes := encodePNG(placeholder)
 			a.captureFrame.Configure(Image(NewPhoto(Data(pngBytes))))
+			if a.detectionFrame != nil {
+				a.detectionFrame.Configure(Image(NewPhoto(Data(pngBytes))))
+			}
 		}
 		// Reset debug widget state
-		if a.debugLabel != nil {
-			a.debugLabel.Configure(Txt("Target: <none>"))
+		if a.stateLabel != nil {
+			a.stateLabel.Configure(Txt("State: <none>"))
 		}
+		// Gracefully reset FSM & bite detector when capture stops.
+		if a.fsm != nil {
+			a.fsm.Reset()
+		}
+		a.biteDetector = nil
 		// Clear last detection status
 		a.lastDetectOK.Store(false)
 
@@ -533,6 +669,18 @@ func (a *app) toggleCapture() {
 		a.frameCh = make(chan *image.RGBA, 1)
 	}
 	a.captureEnabled.Store(true)
+	// Reflect current FSM state now that detection lifecycle begins.
+	if a.stateLabel != nil && a.fsm != nil {
+		cur := a.fsm.Current()
+		switch cur {
+		case StateSearching:
+			a.stateLabel.Configure(Txt("State: <searching>"))
+		case StateMonitoring:
+			a.stateLabel.Configure(Txt("State: monitoring"))
+		default:
+			a.stateLabel.Configure(Txt(fmt.Sprintf("State: %s", cur.String())))
+		}
+	}
 
 	go a.captureLoop()
 	// Disable config editing while running
@@ -573,23 +721,106 @@ func moveCursor(x, y int) {
 	_, _, _ = setCursorPos.Call(uintptr(x), uintptr(y))
 }
 
+// pressKey issues a key down + key up for the given virtual-key code (Windows only).
+// This uses keybd_event for simplicity; for production consider SendInput.
+func pressKey(vk byte) {
+	user32 := windows.NewLazySystemDLL("user32.dll")
+	keybdEvent := user32.NewProc("keybd_event")
+	const KEYEVENTF_KEYUP = 0x0002
+	// key down
+	_, _, _ = keybdEvent.Call(uintptr(vk), 0, 0, 0)
+	// small sleep to emulate human press duration
+	time.Sleep(40 * time.Millisecond)
+	// key up
+	_, _, _ = keybdEvent.Call(uintptr(vk), 0, KEYEVENTF_KEYUP, 0)
+}
+
+// performCastAction issues the configured cast key (currently reusing ReelKey until a dedicated CastKey exists).
+// It is executed in its own goroutine to avoid blocking the Tk event loop.
+// performCastAction deprecated: logic inlined into FSM.
+
+// performReelAction executes the reel sequence asynchronously.
+// It repositions cursor, right-clicks, then sends the configured reel key.
+// Separation prevents blocking the UI update thread during sleeps or Windows API calls.
+func (a *app) performReelAction() {
+	if a.fsm == nil {
+		return
+	}
+	x, y, ok := a.fsm.TargetCoordinates()
+	if !ok {
+		if a.logger != nil {
+			a.logger.Info("reel action skipped - no target coords")
+		}
+		return
+	}
+	moveCursor(x, y)
+	clickRight()
+	vk := parseVK(a.config.ReelKey)
+	pressKey(vk)
+	if a.logger != nil {
+		a.logger.Info("reel action", "x", x, "y", y, "mouse", "right+key")
+	}
+	// Optional: briefly pause bite detector after trigger to avoid re-trigger spam.
+	a.biteDetector = nil
+}
+
+// clickRight performs a right mouse button click (down + up) using legacy mouse_event.
+// For production use, SendInput is preferred for synthesis reliability.
+func clickRight() {
+	user32 := windows.NewLazySystemDLL("user32.dll")
+	mouseEvent := user32.NewProc("mouse_event")
+	const MOUSEEVENTF_RIGHTDOWN = 0x0008
+	const MOUSEEVENTF_RIGHTUP = 0x0010
+	_, _, _ = mouseEvent.Call(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
+	time.Sleep(30 * time.Millisecond)
+	_, _, _ = mouseEvent.Call(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
+}
+
+// parseVK converts a user-provided key token (e.g. "F3", "R") into a Windows virtual key code.
+// Supports function keys F1-F12 and single alphabetic characters. Falls back to F3 if unknown.
+func parseVK(key string) byte {
+	k := strings.ToUpper(strings.TrimSpace(key))
+	if len(k) == 2 && k[0] == 'F' { // F1-F9
+		n := int(k[1] - '0')
+		if n >= 1 && n <= 9 {
+			return byte(0x70 + (n - 1)) // VK_F1=0x70
+		}
+	}
+	if len(k) == 3 && k[0] == 'F' { // F10-F12
+		switch k {
+		case "F10":
+			return 0x79
+		case "F11":
+			return 0x7A
+		case "F12":
+			return 0x7B
+		}
+	}
+	if len(k) == 2 && k[0] == 'F' { // F10-F19 (optional) -> ignore beyond F12 for now
+		// fallthrough
+	}
+	if len(k) == 1 && k[0] >= 'A' && k[0] <= 'Z' {
+		return k[0] // 'A'..'Z' match VK codes
+	}
+	// Default fallback F3
+	return 0x72
+}
+
 // updateCaptureFrame draws a downsampled preview of frame into the canvas.
 func (a *app) updateCaptureFrame(frame *image.RGBA) {
 	if frame == nil {
 		return
 	}
-	// Determine maximum preview size based on window dimensions, leave some margin for other widgets.
 	maxW := a.width - 40
 	if maxW < 100 {
 		maxW = 100
 	}
-	maxH := a.height - 140 // account for buttons/text; adjust as needed
+	maxH := a.height - 140
 	if maxH < 100 {
 		maxH = 100
 	}
 
 	scaled := scaleToFit(frame, maxW, maxH)
-	// Update the existing label's image (already allocated during Start).
 	pngBytes := encodePNG(scaled)
 	if a.captureFrame != nil {
 		a.captureFrame.Configure(Image(NewPhoto(Data(pngBytes))))
