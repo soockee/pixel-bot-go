@@ -33,7 +33,7 @@ jobs:
           git fetch --tags
           last_tag=$(git tag --list 'v*' --sort=-version:refname | head -n1)
           if [ -z "$last_tag" ]; then
-            next="v0.1.0"
+            next="v1.0.0"
           else
             ver=${last_tag#v}
             IFS='.' read -r major minor patch <<< "$ver"
