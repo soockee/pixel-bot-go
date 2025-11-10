@@ -16,7 +16,11 @@ Pixel Bot is a small Windows app that looks at a part of your screen, tries to s
 * Lets you pause, change settings, and resume without fuss.
 
 ## Demo
-![Demo of Pixel Bot fishing in action](https://i.imgur.com/T3xQ9Yh.gif)
+
+<p align="center">
+	<img src="https://i.imgur.com/T3xQ9Yh.gif" alt="Fishing demo of Pixel Bot in action" title="Fishing demo" />
+</p>
+
 ---
 
 ## 2. Quick Start (Fastest Path)
