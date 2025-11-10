@@ -1,44 +1,26 @@
 package capture
 
 import (
+	"errors"
 	"image"
 
 	"github.com/soocke/pixel-bot-go/config"
-	"github.com/vova616/screenshot"
 )
-
-// Grab returns a screen capture of the current active monitor.
-func Grab() (*image.RGBA, error) {
-	img, err := screenshot.CaptureScreen()
-
-	screenshot.ScreenRect()
-	if err != nil {
-		return nil, err
-	}
-	return img, nil
-}
-
-func GrabSelection(selecationArea image.Rectangle) (*image.RGBA, error) {
-	img, err := screenshot.CaptureRect(selecationArea)
-
-	if err != nil {
-		return nil, err
-	}
-	return img, nil
-}
 
 // DetectTemplate performs a multi-scale NCC template match using dynamic config.
 // Returns x,y,ok where (x,y) is the top-left of the best match whose NCC score
 // meets the configured threshold. Transparent template pixels are masked out.
-func DetectTemplate(frame *image.RGBA, tmpl image.Image, cfg *config.Config) (int, int, bool) {
+func DetectTemplate(frame *image.RGBA, tmpl image.Image, cfg *config.Config) (int, int, bool, error) {
 	if frame == nil || tmpl == nil {
-		return 0, 0, false
+		return 0, 0, false, errors.New("detect template error")
 	}
 	if cfg == nil {
 		cfg = config.DefaultConfig()
+	} else if err := cfg.Validate(); err != nil {
+		return 0, 0, false, err
 	}
 	ms := MultiScaleMatch(frame, tmpl, MultiScaleOptions{
-		Scales:    nil, // force adaptive generation path
+		Scales:    nil,
 		MinScale:  cfg.MinScale,
 		MaxScale:  cfg.MaxScale,
 		ScaleStep: cfg.ScaleStep,
@@ -50,5 +32,5 @@ func DetectTemplate(frame *image.RGBA, tmpl image.Image, cfg *config.Config) (in
 		},
 		StopOnScore: cfg.StopOnScore,
 	})
-	return ms.X, ms.Y, ms.Found
+	return ms.X, ms.Y, ms.Found, nil
 }
