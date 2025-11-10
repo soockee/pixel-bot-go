@@ -121,23 +121,31 @@ func TestFishingFSM_CooldownExpiration(t *testing.T) {
 	waitForState(t, m, StateMonitoring, 200*time.Millisecond)
 	m.EventFishBite()
 	waitForState(t, m, StateCooldown, 400*time.Millisecond)
-	cu := m.cooldownUntil
-	if cu.IsZero() {
-		t.Fatalf("cooldownUntil zero")
-	}
-	m.Tick(cu.Add(50 * time.Millisecond))
-	waitForState(t, m, StateSearching, 400*time.Millisecond)
+	// expect automatic cast after cooldown timer fires (~cooldownDuration+extra)
+	waitForState(t, m, StateSearching, 3*time.Second)
 }
 
 func TestFishingFSM_SearchTimeoutTriggersCast(t *testing.T) {
 	m := newTestFSM()
+	r := &transitionRecorder{}
+	m.AddListener(r.listener)
 	m.EventAwaitFocus()
 	waitForState(t, m, StateWaitingFocus, 200*time.Millisecond)
 	m.EventFocusAcquired()
 	waitForState(t, m, StateSearching, 200*time.Millisecond)
-	start := time.Now()
-	m.Tick(start.Add(6 * time.Second))
-	waitForState(t, m, StateSearching, 300*time.Millisecond)
+	deadline := time.Now().Add(6 * time.Second)
+	for time.Now().Before(deadline) {
+		r.mu.Lock()
+		for _, s := range r.seq {
+			if s == StateCasting {
+				r.mu.Unlock()
+				return
+			}
+		}
+		r.mu.Unlock()
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("expected casting transition within search timeout; got sequence %v", r.seq)
 }
 
 func TestFishingFSM_InvalidEventNoTransition(t *testing.T) {

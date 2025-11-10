@@ -6,13 +6,13 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/action"
 	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/ui/presenter"
+	"github.com/soocke/pixel-bot-go/ui/theme"
 	"github.com/soocke/pixel-bot-go/ui/view"
 
 	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders.
@@ -36,7 +36,6 @@ type app struct {
 	loop           *presenter.Loop
 	goWg           sync.WaitGroup
 	selectionView  view.SelectionOverlay
-	shutdown       atomic.Bool // indicates graceful shutdown initiated
 }
 
 // Inline convenience getters reduce surface area; presenters now depend directly on container services.
@@ -63,6 +62,8 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 	App.WmTitle(title)
 	WmProtocol(App, "WM_DELETE_WINDOW", a.exitHandler)
 	WmGeometry(App, fmt.Sprintf("%dx%d+100+100", width, height))
+	// Initialize styles early (root window background etc.).
+	theme.InitStyles()
 	a.selectionView = view.NewSelectionOverlay(cfg, a.configPath, logger)
 	return a
 }

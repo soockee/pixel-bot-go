@@ -65,7 +65,6 @@ type DetectorFactory func(*config.Config, *slog.Logger) BiteDetectorContract
 
 // Interface slices for consumers (presenters).
 type FishingStateSource interface{ Current() FishingState }
-type FishingTick interface{ Tick(time.Time) }
 type FishingMonitorFrame interface{ ProcessMonitoringFrame(*image.RGBA, time.Time) }
 type FishingTargetOps interface {
 	EventTargetAcquired()
@@ -89,7 +88,6 @@ type FishingCasting interface {
 // FishingFSMContract aggregate for DI.
 type FishingFSMContract interface {
 	FishingStateSource
-	FishingTick
 	FishingMonitorFrame
 	FishingTargetOps
 	FishingFocusControl

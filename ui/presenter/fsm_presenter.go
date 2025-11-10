@@ -8,7 +8,6 @@ import (
 
 // FSMSource exposes the domain fishing FSM methods presenter needs.
 type FSMSource interface {
-	Tick(time.Time)
 	Current() fishing.FishingState
 }
 
@@ -47,5 +46,4 @@ func (p *FSMPresenter) Tick(now time.Time) {
 			p.view.SetStateLabel("State: " + last.String())
 		}
 	}
-	p.eng.Tick(now)
 }
