@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/soocke/pixel-bot-go/config"
+	"github.com/soocke/pixel-bot-go/ui/theme"
 
 	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders.
 	. "modernc.org/tk9.0"
@@ -15,7 +16,7 @@ import (
 // ConfigPanel encapsulates the configuration form widgets and apply logic.
 // It owns its widgets and writes back into *config.Config on ApplyChanges.
 type ConfigPanel interface {
-	Build(startRow int) (endRow int) // constructs widgets starting at startRow, returns next free row
+	Build(startRow int, parent ...Widget) (endRow int) // optional parent to place the panel inside
 	SetEditable(enabled bool)
 	ApplyChanges() // parses widget text into underlying config and persists
 }
@@ -33,14 +34,23 @@ func NewConfigPanel(cfg *config.Config, cfgPath string, logger *slog.Logger) Con
 	return &configPanel{cfg: cfg, cfgPath: cfgPath, logger: logger, widgets: make(map[string]*TextWidget)}
 }
 
-func (v *configPanel) Build(startRow int) (row int) {
+func (v *configPanel) Build(startRow int, parent ...Widget) (row int) {
 	c := v.cfg
 	row = startRow
+	// choose grid target (parent frame or App root)
+	var target Widget = App
+	if len(parent) > 0 && parent[0] != nil {
+		target = parent[0]
+	}
+	pal := theme.CurrentPalette()
 	makeRow := func(id, label, value string) {
-		lbl := Label(Txt(label), Anchor("w"))
-		Grid(lbl, Row(row), Column(0), Sticky("w"), Padx("0.4m"), Pady("0.15m"))
-		w := Text(Height(1), Width(16))
-		Grid(w, Row(row), Column(1), Sticky("we"), Padx("0.4m"), Pady("0.15m"))
+		lbl := Label(Txt(label), Anchor("w"), Background(pal.Surface), Foreground(pal.Text))
+		Grid(lbl, In(target), Row(row), Column(0), Sticky("w"), Padx("0.4m"), Pady("0.15m"))
+		w := Text(Height(1), Width(16), Background("white"), Foreground("black"))
+		if theme.IsDark() {
+			w.Configure(Background("#334155"), Foreground(pal.Text))
+		}
+		Grid(w, In(target), Row(row), Column(1), Sticky("we"), Padx("0.4m"), Pady("0.15m"))
 		w.Delete("1.0", END)
 		w.Insert("1.0", value)
 		v.widgets[id] = w
@@ -59,8 +69,8 @@ func (v *configPanel) Build(startRow int) (row int) {
 	makeRow("cooldownSeconds", "Cooldown Seconds", fmt.Sprintf("%d", c.CooldownSeconds))
 	makeRow("maxCastDurationSeconds", "Max Cast Duration Seconds", fmt.Sprintf("%d", c.MaxCastDurationSeconds))
 	makeRow("analysisScale", "Analysis Scale (0.2-1.0)", fmt.Sprintf("%.2f", c.AnalysisScale))
-	v.applyBtn = Button(Txt("Apply Changes"), Command(func() { v.ApplyChanges() }))
-	Grid(v.applyBtn, Row(row), Column(0), Columnspan(2), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
+	v.applyBtn = Button(Txt("Apply Changes"), Background(pal.Primary), Foreground("white"), Relief("raised"), Borderwidth(1), Command(func() { v.ApplyChanges() }))
+	Grid(v.applyBtn, In(target), Row(row), Column(0), Columnspan(2), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
 	row++
 	return row
 }

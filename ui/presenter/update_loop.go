@@ -19,6 +19,7 @@ func (l *Loop) Tick() {
 		return
 	}
 	now := time.Now()
+	// Drive FSM presenter so it can flush pending state changes to the view.
 	if l.FSM != nil {
 		l.FSM.Tick(now)
 	}

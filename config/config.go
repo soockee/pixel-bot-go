@@ -39,6 +39,9 @@ type Config struct {
 	// AnalysisScale optionally downsizes frames before expensive template matching.
 	// Range (0.2 - 1.0]. 1.0 means disabled. Smaller values reduce CPU at the cost of precision.
 	AnalysisScale float64 `json:"analysis_scale"`
+
+	// DarkMode persists user preference for dark theme across sessions.
+	DarkMode bool `json:"dark_mode"`
 }
 
 // Accessor helpers to satisfy fishing.ConfigLite without exposing struct embedding.
@@ -47,23 +50,24 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Debug:                  false,
-		MinScale:               0.90,
-		MaxScale:               1.90,
-		ScaleStep:              0.1,
-		Threshold:              0.80,
-		Stride:                 4,
+		MinScale:               0.90, // from pixle_bot_config.json
+		MaxScale:               1.20, // from pixle_bot_config.json
+		ScaleStep:              0.05, // from pixle_bot_config.json
+		Threshold:              0.73, // from pixle_bot_config.json
+		Stride:                 6,    // from pixle_bot_config.json
 		Refine:                 true,
-		StopOnScore:            0.93,
+		StopOnScore:            0.80, // from pixle_bot_config.json
 		ReturnBestEven:         true,
-		SelectionX:             0,
+		SelectionX:             0, // persisted selection defaults
 		SelectionY:             0,
 		SelectionW:             0,
 		SelectionH:             0,
 		ReelKey:                "F3",
 		ROISizePx:              80,
 		MaxCastDurationSeconds: 16,
-		CooldownSeconds:        7,
+		CooldownSeconds:        8, // from pixle_bot_config.json
 		AnalysisScale:          1.0,
+		DarkMode:               true, // from pixle_bot_config.json
 	}
 }
 

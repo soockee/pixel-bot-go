@@ -1,77 +1,168 @@
-# Pixel Bot
+<a name="top"></a>
 
-Pixel Bot is a small Windows app that watches part of your screen and tries to spot a specific image (for example a fishing bobber in a game). When it finds the image it can move your mouse to that spot. You control everything from a simple window—no command line knowledge required.
+# Pixel Bot (Simple Guide)
 
-## What You See
-When you start the program a window appears with:
-- A timer and status text (top)
-- A panel of settings you can change
-- A preview area that shows the latest captured image
-- Buttons to start/stop capture and exit
+Pixel Bot is a small Windows app that looks at a part of your screen, tries to spot a little picture (for example a fishing bobber in World of Warcraft), and when it sees it, can move your mouse there and press a key for you. Think of it as an on‑screen helper that watches and reacts while you relax.
 
-## Getting Started
-1. Install Go (if you just want to run the pre-built binary you can skip building, but building is easy): https://go.dev/dl/
-2. Open PowerShell in the project folder.
-3. (Recommended) Run PowerShell as Administrator so mouse movement works reliably in games.
+> IMPORTANT: Using automation in online games can break their rules. Only use this where you are sure it is allowed. You take full responsibility.
 
-Build and run:
+---
+
+## 1. What It Can Do (Plain English)
+* Watch the screen (or just a chosen rectangle) for a tiny object/pattern.
+* Automatically aim the mouse at it when it appears.
+* Run a simple fishing loop: cast → watch bobber → detect bite → reel in → wait → cast again.
+* Optional dark mode so it is easy on your eyes.
+* Lets you pause, change settings, and resume without fuss.
+
+You do NOT need to know programming. Everything happens in one window.
+
+---
+
+## 2. Quick Start (Fastest Path)
+1. Download / build the app (see "Build Yourself" below if you want).
+2. Run `pixel-bot-go.exe` (preferably right‑click → Run as Administrator so mouse / key presses work in the game).
+3. In your game, get your character ready to fish (clear view of the bobber area).
+4. In Pixel Bot click the button to start capture / fishing.
+5. Watch the status text. It will say things like Searching, Monitoring, Cooldown.
+6. To stop, press the same button again.
+
+That’s it. If it “misses” or is too trigger‑happy, adjust a couple of settings (explained below) and try again.
+
+---
+
+## 3. The Window You’ll See
+Top area: current state (e.g. Searching, Monitoring, Cooldown) and maybe a timer.
+Middle left: settings panel (numbers, checkboxes, buttons to apply changes, selection area tool).
+Middle right: live preview image of what it is looking at.
+Bottom: buttons (Start / Stop, maybe Exit, maybe Selection Grid, etc.).
+
+You can resize the window. Changes only apply when capture is paused (to keep things stable).
+
+---
+
+## 4. Easy Configuration Guide (For Non‑Tech Users)
+You’ll see several fields. You can leave them as they are. If you want to tweak:
+
+Template Search (finding the bobber / object)
+* Min Scale & Max Scale: Smallest and largest size the bot will look for. If the object never really changes size, leave them alone.
+* Scale Step: How fine the size steps are between Min and Max. Smaller step = more tries = slower but thorough. Bigger step = faster.
+* Threshold: How “sure” the bot must feel before saying “Found it!”. If it falsely triggers, raise this number a little. If it never finds it, lower a bit.
+* Stride: How many pixels it skips while scanning. Bigger = faster, but can be a little less precise; smaller = slower but accurate.
+* Refine (checkbox): After a quick scan, do a tiny careful scan around the best spot. Usually keep ON.
+* Use RGB (checkbox): Use full color. ON is usually better in colorful games. Turn OFF only if you want a tiny speed boost.
+* Stop On Score: If the match score reaches this number, it stops early to save time. Leave the default.
+* Return Best Even: If ON, it still tells you where it “thinks” the object is even if below Threshold (mostly for advanced tweaking / curiosity).
+
+Fishing Loop Settings
+* reel_key: The key it will press to reel in (example: F3). Make sure this matches your in‑game keybinding for reeling / interact.
+* cooldown_seconds: Time to wait after reeling in before trying to cast again (lets loot animation finish).
+* max_cast_duration_seconds: Safety timer. If nothing happens for this many seconds after a cast, it gives up and casts again.
+* roi_size_px: Size of the little square it watches once it locks onto the bobber (bigger = a bit slower, smaller = might miss motion).
+
+Visual / Comfort
+* dark_mode: Switch the app’s look between light and dark styles.
+
+Selection Area (Optional)
+* selection_x / selection_y / selection_w / selection_h: These numbers define the rectangle of the screen to watch. You normally set / clear this using the Selection Grid button instead of typing numbers. Leaving it unset (or the tool cleared) means “watch entire screen”. Limiting the area can speed things up and reduce mistakes.
+
+Advanced / Internal
+* debug: When true, writes extra information to logs. Normal users keep this false.
+* analysis_scale: Internal scaling for some calculations. Leave at 1.
+
+If something looks scary: ignore it—defaults are sensible.
+
+---
+
+## 5. Files The App Creates (Don’t Panic)
+After running you may see a couple of new files in the same folder:
+
+* `pixle_bot_config.json` – Your saved settings so next time it remembers them. You can open it in Notepad and change values while the app is CLOSED. If you break the file (bad commas etc.) the app may reset or complain; if that happens just delete it and it will regenerate with defaults.
+* `pixel_bot_logs.json` – A log file. Each line is a tiny piece of text in JSON that says what happened (e.g. settings applied, dark mode changed, detection events). You can delete it; a new one will be created automatically. Useful if you ask for help and someone wants to see what happened.
+
+You can safely move or delete both; they’ll come back with default content next run.
+
+---
+
+## 6. Building It Yourself (Optional)
+If you prefer or need to build:
+
 ```powershell
 go mod tidy
 go build -o pixel-bot-go.exe
 ./pixel-bot-go.exe
 ```
 
-## Using The App
-1. Press the "Toggle Capture" button to start watching the screen.
-2. The preview will update and the status will say whether the target was found.
-3. If found, the mouse moves to the detected location automatically.
-4. To change how it searches, stop capture first (press the button again). Then edit the numbers/text in the settings panel and click "Apply Changes".
+Run PowerShell as Administrator if mouse movement or key presses do nothing in the game window.
 
-If you apply changes while capture is on, the app will ignore them and remind you to pause capture first.
+---
 
-## Settings for Dummies
-- Min / Max Scale: How small or large the target might appear. Leave default unless you know the object changes size a lot.
-- Scale Step: How finely it searches between min and max. Smaller = slower but can be a little more accurate.
-- Threshold: How sure it must be before saying "found" (higher means stricter).
-- Stride: How big a jump it makes when scanning. Lower = slower but more precise.
-- Refine: Extra fine check near the best spot (usually keep ON = true).
-- Use RGB: Use color for matching (usually keep ON = true for better results).
-- Stop On Score: If it gets at least this score it stops early to be faster.
-- Return Best Even: If true it still tells you the best spot even if it wasn't confident enough.
+## 7. Day‑To‑Day Use Tips
+* Start the bot only when the fishing bobber is visible area (no big UI windows covering it).
+* Keep the game window focused so the key press works.
+* If detection gets slower over time, pause, apply settings again, or narrow the Selection Area.
+* Don’t run other overlay tools that heavily flash or animate over the bobber region.
 
-You don't have to understand the math behind these—defaults are chosen to work reasonably well.
+---
 
-## Logs
-The program writes simple JSON lines telling you what settings it started with and every time you apply new ones. You can ignore them unless you're curious. They look like:
-```jsonc
-{"level":"INFO","msg":"initial config", ...}
-{"level":"INFO","msg":"config applied", ...}
-```
+## 8. Common Problems & Simple Fixes
+| Problem                             | Try This                                                                                  |
+| ----------------------------------- | ----------------------------------------------------------------------------------------- |
+| Mouse not moving / key not pressed  | Run as Administrator; confirm correct `reel_key`.                                         |
+| Never finds bobber                  | Lower Threshold a little; ensure Min/Max Scale bracket the actual size; enable Use RGB.   |
+| Triggers on wrong things            | Raise Threshold; set a Selection Area just around the water; keep Use RGB ON.             |
+| Too slow / laggy                    | Increase Stride a bit; make Scale Step larger; restrict Selection Area.                   |
+| Window text hard to read            | Toggle dark_mode or resize the window.                                                    |
+| Wants to fish forever after no bite | Check `max_cast_duration_seconds` isn’t too large; ensure the bobber is actually visible. |
 
-## Curious About The Internals?
-Want to peek under the hood? See:
-* `docs/DETECTION.md` – how image matching works.
-* `docs/STATE_MACHINE.md` – the fishing steps and bite detection logic.
-Totally optional.
+---
 
-## Optional Command Line Flags
-You can still start the app with flags or a JSON file to pre-fill the settings (for advanced users). Most people can ignore this and just use the window.
+## 9. Safety & Fair Play
+This tool simulates input. Some games forbid that. Use only where allowed (private realms, sandbox, personal experimentation). If unsure—don’t use it. Close the program before chatting with support staff of any game: better safe than sorry.
 
-## Safety Notice
-Automating input in games can break their rules. Use at your own risk and only in places where it's allowed.
+---
 
-## Troubleshooting
-- Mouse didn't move: Try running as Administrator.
-- Detection seems slow: Increase Stride or Threshold slightly; keep capture off when applying changes.
-- Too many false matches: Raise Threshold or turn on Use RGB.
+## 10. Want to Learn More (Optional Reading)
+If curiosity strikes:
+* `docs/DETECTION.md` – How it recognizes the bobber image.
+* `docs/STATE_MACHINE.md` – How the fishing loop logic flows inside.
 
-Enjoy experimenting!
+Not needed for normal use.
+
+---
+
+## 11. Frequently Asked Questions (FAQ)
+**Q: Do I have to change the settings?**  
+No. Try defaults first.
+
+**Q: Can I break my game account?**  
+If the game forbids automation, possibly. Use only where safe.
+
+**Q: Why doesn’t it always click instantly?**  
+It waits until it’s fairly sure. Lower Threshold or reduce Stride to speed up (may increase mistakes).
+
+**Q: Can I move the game window?**  
+Yes, but if the bobber moves outside the Selection Area you set, detection stops until it’s inside again.
+
+**Q: It created new JSON files—virus?**  
+No—those are just configuration and logs (see section 5).
+
+**Q: How do I reset everything?**  
+Close the app, delete `pixle_bot_config.json` and (optionally) `pixel_bot_logs.json`, then open the app again.
+
+---
+
+## 12. License / Credits
+Provided as‑is with no warranty. Use responsibly. (Add your license text here if needed.)
+
+---
+
+## 13. Short Technical Corner (Skip if you like)
+The program repeatedly takes screenshots, searches for a template at different sizes, and scores matches. When the match is good enough it moves the cursor. A small state machine handles the fishing cycle (search → watch → reel → wait). That’s all.
+
+---
+
+[Back to Top](#top)
 
 
-## Selection Area (Optional)
-You can define a rectangle so the app watches only part of the screen (helpful to reduce noise). Use the "Selection Grid" button to set or clear it. This improves speed and focus; leave it unset for full-screen watching.
-
-## Performance & Memory Notes
-High-resolution screen grabs allocate large RGBA buffers (≈8 MB for 1080p). To reduce steady-state heap growth the capture loop now copies each raw screenshot into a reusable buffer (pool). After the UI / detection logic is done with a frame it is recycled. This lowers retained heap size under slow consumers. Future improvement: capture directly into the reusable buffer using a Windows API (BitBlt + GetDIBits) to eliminate the temporary allocation from the screenshot library.
-If you profile (`go test -bench . -benchmem`) you should see fewer long-lived allocations, though per-frame allocation still occurs until the direct capture path is added.
 

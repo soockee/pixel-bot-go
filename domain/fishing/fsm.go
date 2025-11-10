@@ -16,7 +16,8 @@ type FishingFSM struct {
 	cfg              *config.Config
 	cooldownDuration time.Duration
 	cooldownUntil    time.Time
-	searchStarted    time.Time
+	searchTimer      *time.Timer
+	cooldownTimer    *time.Timer
 	coordX, coordY   int
 	coordSet         bool
 	biteDetector     BiteDetectorContract
@@ -33,7 +34,7 @@ func NewFSM(logger *slog.Logger, cfg *config.Config, actions ActionCallbacks, de
 	if cfg != nil && cfg.CooldownSeconds > 0 {
 		cooldown = time.Duration(cfg.CooldownSeconds) * time.Second
 	}
-	f := &FishingFSM{state: StateHalt, logger: logger, cfg: cfg, cooldownDuration: cooldown, searchStarted: time.Now(), events: make(chan interface{}, 64), actions: actions, detectorCtor: detectorCtor}
+	f := &FishingFSM{state: StateHalt, logger: logger, cfg: cfg, cooldownDuration: cooldown, events: make(chan interface{}, 64), actions: actions, detectorCtor: detectorCtor}
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -54,8 +55,6 @@ func (f *FishingFSM) loop() {
 		case FishingStateListener: // unlikely direct send, ignore
 		case evtAddListener:
 			f.listeners = append(f.listeners, e.l)
-		case evtTick:
-			f.handleTick(e.now)
 		case evtTargetAcquired:
 			if f.state == StateSearching {
 				f.transition(StateMonitoring)
@@ -109,7 +108,6 @@ func (f *FishingFSM) loop() {
 
 // events
 type (
-	evtTick             struct{ now time.Time }
 	evtTargetAcquired   struct{}
 	evtTargetAcquiredAt struct{ x, y int }
 	evtTargetLost       struct{}
@@ -131,6 +129,16 @@ func (f *FishingFSM) transition(next FishingState) {
 	if prev == next {
 		return
 	}
+	// cancel search timer if leaving searching state
+	if prev == StateSearching && next != StateSearching && f.searchTimer != nil {
+		f.searchTimer.Stop()
+		f.searchTimer = nil
+	}
+	// cancel cooldown timer if leaving cooldown state
+	if prev == StateCooldown && next != StateCooldown && f.cooldownTimer != nil {
+		f.cooldownTimer.Stop()
+		f.cooldownTimer = nil
+	}
 	switch next {
 	case StateCasting:
 		if f.cfg != nil && f.actions.PressKey != nil && f.actions.ParseVK != nil {
@@ -140,7 +148,6 @@ func (f *FishingFSM) transition(next FishingState) {
 				f.logger.Info("cast action executed", "key", f.cfg.ReelKey)
 			}
 		}
-		next = StateSearching
 	case StateReeling:
 		if f.coordSet {
 			cx, cy := f.coordX, f.coordY
@@ -162,10 +169,42 @@ func (f *FishingFSM) transition(next FishingState) {
 		}
 		f.cooldownUntil = time.Now().Add(f.cooldownDuration + 500*time.Millisecond)
 		next = StateCooldown
+		// schedule cooldown timer (transition will not hit StateCooldown case after modifying next)
+		if f.cooldownTimer != nil {
+			f.cooldownTimer.Stop()
+		}
+		until := f.cooldownUntil
+		f.cooldownTimer = time.AfterFunc(time.Until(until), func() {
+			if f.state == StateCooldown && !f.closed {
+				select {
+				case f.events <- evtForceCast{}:
+				default:
+					if f.logger != nil {
+						f.logger.Debug("force cast event (cooldown) dropped (channel full)")
+					}
+				}
+			}
+		})
 	case StateCooldown:
 		if f.cooldownUntil.IsZero() {
 			f.cooldownUntil = time.Now().Add(f.cooldownDuration)
 		}
+		// start / restart cooldown timer
+		if f.cooldownTimer != nil {
+			f.cooldownTimer.Stop()
+		}
+		until := f.cooldownUntil
+		f.cooldownTimer = time.AfterFunc(time.Until(until), func() {
+			if f.state == StateCooldown && !f.closed {
+				select {
+				case f.events <- evtForceCast{}:
+				default:
+					if f.logger != nil {
+						f.logger.Debug("force cast event (cooldown) dropped (channel full)")
+					}
+				}
+			}
+		})
 	case StateMonitoring:
 		if f.coordSet && f.actions.MoveCursor != nil {
 			cx, cy := f.coordX, f.coordY
@@ -190,7 +229,22 @@ func (f *FishingFSM) transition(next FishingState) {
 	}
 	f.state = next
 	if f.state == StateSearching {
-		f.searchStarted = time.Now()
+		// start / restart search timer (force cast after 5s)
+		if f.searchTimer != nil {
+			f.searchTimer.Stop()
+		}
+		f.searchTimer = time.AfterFunc(5*time.Second, func() {
+			// only emit if still searching and not closed
+			if f.state == StateSearching && !f.closed {
+				select {
+				case f.events <- evtForceCast{}:
+				default:
+					if f.logger != nil {
+						f.logger.Debug("force cast event dropped (channel full)")
+					}
+				}
+			}
+		})
 	}
 	if f.logger != nil {
 		f.logger.Debug("fishing state transition", "from", prev.String(), "to", next.String())
@@ -198,17 +252,13 @@ func (f *FishingFSM) transition(next FishingState) {
 	for _, l := range f.listeners {
 		l(prev, next)
 	}
+	// if casting, immediately transition to searching to resume scan cycle
+	if f.state == StateCasting {
+		f.transition(StateSearching)
+	}
 }
 
-func (f *FishingFSM) handleTick(now time.Time) {
-	if f.state == StateSearching && !f.searchStarted.IsZero() && now.Sub(f.searchStarted) > 5*time.Second {
-		f.transition(StateCasting)
-		return
-	}
-	if f.state == StateCooldown && !f.cooldownUntil.IsZero() && now.After(f.cooldownUntil) {
-		f.transition(StateCasting)
-	}
-}
+// handleTick was removed along with tick-based time simulation; timers now drive transitions.
 
 // Public API implements contracts
 func (f *FishingFSM) AddListener(l FishingStateListener) { f.events <- evtAddListener{l: l} }
@@ -222,7 +272,9 @@ func (f *FishingFSM) EventFocusAcquired()                { f.events <- evtFocusA
 func (f *FishingFSM) EventAwaitFocus()                   { f.events <- evtAwaitFocus{} }
 func (f *FishingFSM) ForceCast()                         { f.events <- evtForceCast{} }
 func (f *FishingFSM) Cancel()                            { f.events <- evtCancel{} }
-func (f *FishingFSM) Tick(now time.Time)                 { f.events <- evtTick{now: now} }
+
+// Tick is deprecated and now a no-op retained only for backward compatibility with presenters.
+func (f *FishingFSM) Tick(now time.Time) {}
 func (f *FishingFSM) ProcessMonitoringFrame(roi *image.RGBA, now time.Time) {
 	if roi != nil {
 		f.events <- evtMonitoringFrame{roi: roi, now: now}
@@ -237,6 +289,14 @@ func (f *FishingFSM) TargetCoordinates() (int, int, bool) {
 func (f *FishingFSM) Close() {
 	if f.closed {
 		return
+	}
+	if f.searchTimer != nil {
+		f.searchTimer.Stop()
+		f.searchTimer = nil
+	}
+	if f.cooldownTimer != nil {
+		f.cooldownTimer.Stop()
+		f.cooldownTimer = nil
 	}
 	close(f.events)
 }

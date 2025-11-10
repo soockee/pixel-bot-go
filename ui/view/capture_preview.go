@@ -20,6 +20,8 @@ type CapturePreview interface {
 type capturePreview struct {
 	captureLabel   *LabelWidget
 	detectionLabel *LabelWidget
+	targetW        int
+	targetH        int
 }
 
 // NewCapturePreview creates the preview labels, grids them and returns the view.
@@ -45,8 +47,13 @@ func (v *capturePreview) UpdateCapture(img image.Image) {
 	if v.captureLabel == nil || img == nil {
 		return
 	}
+	// Determine target size (fallback to legacy constants if unset)
+	w, h := v.targetW, v.targetH
+	if w <= 0 || h <= 0 {
+		w, h = maxPreviewW, maxPreviewH
+	}
 	// Scale for display only; original frame retained upstream for analysis.
-	scaled := images.ScaleToFit(img, maxPreviewW, maxPreviewH)
+	scaled := images.ScaleToFit(img, w, h)
 	v.captureLabel.Configure(Image(NewPhoto(Data(images.EncodePNG(scaled)))))
 }
 
@@ -69,4 +76,18 @@ func (v *capturePreview) Reset() {
 	if v.detectionLabel != nil {
 		v.detectionLabel.Configure(Image(NewPhoto(Data(pngBytes))))
 	}
+}
+
+// setTargetSize updates desired scaling dimensions used by UpdateCapture.
+func (v *capturePreview) setTargetSize(w, h int) {
+	if v == nil {
+		return
+	}
+	if w < 50 {
+		w = 50
+	}
+	if h < 50 {
+		h = 50
+	}
+	v.targetW, v.targetH = w, h
 }

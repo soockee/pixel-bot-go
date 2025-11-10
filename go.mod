@@ -3,14 +3,12 @@ module github.com/soocke/pixel-bot-go
 go 1.25.4
 
 require (
-	github.com/vova616/screenshot v0.0.0-20220801010501-56c10359473c
 	golang.org/x/image v0.26.0
 	golang.org/x/sys v0.36.0
 	modernc.org/tk9.0 v1.73.0
 )
 
 require (
-	github.com/BurntSushi/xgb v0.0.0-20210121224620-deaf085860bc // indirect
 	github.com/adrg/xdg v0.5.3 // indirect
 	github.com/disintegration/imaging v1.6.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
