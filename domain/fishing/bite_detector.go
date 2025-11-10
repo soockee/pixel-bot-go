@@ -9,8 +9,8 @@ import (
 	"github.com/soocke/pixel-bot-go/config"
 )
 
-// BiteDetector runs during Monitoring state; it ingests ~1s of ROI frames and fires once on a significant change.
-// Not concurrency-safe; call FeedFrame from a single goroutine.
+// BiteDetector detects bites from ROI frames.
+// Not safe for concurrent use; call FeedFrame from a single goroutine.
 type BiteDetector struct {
 	cfg                                                                  *config.Config
 	logger                                                               *slog.Logger
@@ -53,6 +53,8 @@ const (
 	frameDebounceNeeded = 1
 )
 
+// NewBiteDetector returns a configured BiteDetector. If cfg is nil the
+// default configuration is used.
 func NewBiteDetector(cfg *config.Config, logger *slog.Logger) *BiteDetector {
 	if cfg == nil {
 		cfg = config.DefaultConfig()
@@ -60,6 +62,7 @@ func NewBiteDetector(cfg *config.Config, logger *slog.Logger) *BiteDetector {
 	return &BiteDetector{cfg: cfg, logger: logger, window: make([]float64, windowSize)}
 }
 
+// Reset clears internal state and statistics.
 func (b *BiteDetector) Reset() {
 	b.monitoringStarted = time.Now()
 	b.prev, b.ema, b.cur = nil, nil, nil
@@ -84,6 +87,8 @@ func (b *BiteDetector) Reset() {
 	}
 }
 
+// FeedFrame processes one ROI frame sampled at time t and returns true when
+// a bite is detected. Call from a single goroutine.
 func (b *BiteDetector) FeedFrame(frame *image.RGBA, t time.Time) bool {
 	if frame == nil || b.triggered {
 		return false
@@ -231,6 +236,10 @@ func (b *BiteDetector) FeedFrame(frame *image.RGBA, t time.Time) bool {
 	return false
 }
 
+// FeedFrame processes a single ROI frame sampled at t and returns true when
+// a bite is detected. FeedFrame is not concurrency-safe and must be called
+// from a single goroutine.
+
 func (b *BiteDetector) TargetLostHeuristic() bool {
 	if b.cfg == nil || b.cfg.MaxCastDurationSeconds <= 0 {
 		return false
@@ -248,5 +257,5 @@ func (b *BiteDetector) TargetLostHeuristic() bool {
 	return false
 }
 
-// Ensure BiteDetector implements contract.
+// compile-time check that BiteDetector implements BiteDetectorContract.
 var _ BiteDetectorContract = (*BiteDetector)(nil)

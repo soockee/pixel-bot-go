@@ -3,6 +3,9 @@ package presenter
 import "time"
 
 // Loop aggregates feature presenters and drives periodic updates.
+//
+// It calls Tick/ProcessFrame on the sub-presenters and invokes a
+// scheduler callback. The zero value is usable (methods are nil-safe).
 type Loop struct {
 	Session  *SessionPresenter
 	FSM      *FSMPresenter

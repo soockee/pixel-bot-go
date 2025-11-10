@@ -18,22 +18,29 @@ type CapturePreview interface {
 }
 
 type capturePreview struct {
-	captureLabel   *LabelWidget
-	detectionLabel *LabelWidget
-	targetW        int
-	targetH        int
+	captureLabel       *LabelWidget
+	detectionLabel     *LabelWidget
+	targetW            int
+	targetH            int
+	prevCapturePhoto   *Img // last Tk photo image instance for capture
+	prevDetectionPhoto *Img // last Tk photo image instance for detection
 }
+
+// Internal state tracks current preview photos so we can dispose old images
+// before replacing them, preventing accumulation of off-screen image data.
 
 // NewCapturePreview creates the preview labels, grids them and returns the view.
 // Layout: capture spans columns 0-3; detection ROI sits at column 4 of the provided row.
 func NewCapturePreview(row int) CapturePreview {
 	placeholder := image.NewRGBA(image.Rect(0, 0, 200, 120))
 	pngBytes := images.EncodePNG(placeholder)
-	capture := Label(Image(NewPhoto(Data(pngBytes))), Borderwidth(1), Relief("sunken"))
-	detection := Label(Image(NewPhoto(Data(pngBytes))), Borderwidth(1), Relief("sunken"))
+	capPhoto := NewPhoto(Data(pngBytes))
+	detPhoto := NewPhoto(Data(pngBytes))
+	capture := Label(Image(capPhoto), Borderwidth(1), Relief("sunken"))
+	detection := Label(Image(detPhoto), Borderwidth(1), Relief("sunken"))
 	Grid(capture, Row(row), Column(0), Columnspan(4), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
 	Grid(detection, Row(row), Column(4), Columnspan(1), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
-	return &capturePreview{captureLabel: capture, detectionLabel: detection}
+	return &capturePreview{captureLabel: capture, detectionLabel: detection, prevCapturePhoto: capPhoto, prevDetectionPhoto: detPhoto}
 }
 
 const (
@@ -47,34 +54,52 @@ func (v *capturePreview) UpdateCapture(img image.Image) {
 	if v.captureLabel == nil || img == nil {
 		return
 	}
-	// Determine target size (fallback to legacy constants if unset)
+	// Determine target size (fallback to max constants if unset).
 	w, h := v.targetW, v.targetH
 	if w <= 0 || h <= 0 {
 		w, h = maxPreviewW, maxPreviewH
 	}
-	// Scale for display only; original frame retained upstream for analysis.
+	// Scale for display only; allocate a fresh scaled image each call.
 	scaled := images.ScaleToFit(img, w, h)
-	v.captureLabel.Configure(Image(NewPhoto(Data(images.EncodePNG(scaled)))))
+	pngBytes := images.EncodePNG(scaled)
+	// Replace previous photo to avoid retaining obsolete pixel buffers.
+	if v.prevCapturePhoto != nil {
+		v.prevCapturePhoto.Delete()
+	}
+	newPhoto := NewPhoto(Data(pngBytes))
+	v.prevCapturePhoto = newPhoto
+	v.captureLabel.Configure(Image(newPhoto))
 }
 
 func (v *capturePreview) UpdateDetection(img image.Image) {
-	if v.detectionLabel == nil {
+	if v.detectionLabel == nil || img == nil {
 		return
 	}
-	if img == nil {
-		return
+	pngBytes := images.EncodePNG(img)
+	if v.prevDetectionPhoto != nil {
+		v.prevDetectionPhoto.Delete()
 	}
-	v.detectionLabel.Configure(Image(NewPhoto(Data(images.EncodePNG(img)))))
+	newPhoto := NewPhoto(Data(pngBytes))
+	v.prevDetectionPhoto = newPhoto
+	v.detectionLabel.Configure(Image(newPhoto))
 }
 
 func (v *capturePreview) Reset() {
 	placeholder := image.NewRGBA(image.Rect(0, 0, 200, 120))
 	pngBytes := images.EncodePNG(placeholder)
 	if v.captureLabel != nil {
-		v.captureLabel.Configure(Image(NewPhoto(Data(pngBytes))))
+		if v.prevCapturePhoto != nil {
+			v.prevCapturePhoto.Delete()
+		}
+		v.prevCapturePhoto = NewPhoto(Data(pngBytes))
+		v.captureLabel.Configure(Image(v.prevCapturePhoto))
 	}
 	if v.detectionLabel != nil {
-		v.detectionLabel.Configure(Image(NewPhoto(Data(pngBytes))))
+		if v.prevDetectionPhoto != nil {
+			v.prevDetectionPhoto.Delete()
+		}
+		v.prevDetectionPhoto = NewPhoto(Data(pngBytes))
+		v.detectionLabel.Configure(Image(v.prevDetectionPhoto))
 	}
 }
 

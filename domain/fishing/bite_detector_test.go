@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// synthFrame builds a uniform RGBA frame then applies mutate.
+// synthFrame creates a uniform RGBA image and applies an optional mutate func.
 func synthFrame(w, h int, base byte, mutate func(px []byte, w, h int)) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	for y := 0; y < h; y++ {
@@ -21,6 +21,7 @@ func synthFrame(w, h int, base byte, mutate func(px []byte, w, h int)) *image.RG
 	return img
 }
 
+// applyRegion sets RGB values to 'lum' inside the given rectangle (clamped).
 func applyRegion(px []byte, w, h int, x0, y0, x1, y1 int, lum byte) {
 	if x0 < 0 {
 		x0 = 0
@@ -42,6 +43,8 @@ func applyRegion(px []byte, w, h int, x0, y0, x1, y1 int, lum byte) {
 	}
 }
 
+// feedFrames feeds frames to the BiteDetector at 50ms intervals and
+// returns the index of the frame that triggered detection, or -1.
 func feedFrames(bd *BiteDetector, frames []*image.RGBA) int {
 	start := time.Now()
 	for i, f := range frames {

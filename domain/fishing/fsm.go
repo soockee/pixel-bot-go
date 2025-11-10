@@ -9,7 +9,8 @@ import (
 	"github.com/soocke/pixel-bot-go/config"
 )
 
-// FishingFSM manages fishing state transitions and side-effect actions.
+// FishingFSM manages fishing state, timers, detectors and side-effect actions.
+// It runs an internal event loop on a goroutine and serializes state transitions.
 type FishingFSM struct {
 	state            FishingState
 	logger           *slog.Logger
@@ -28,7 +29,8 @@ type FishingFSM struct {
 	listeners        []FishingStateListener
 }
 
-// NewFSM constructs and starts the event loop.
+// NewFSM creates and starts a FishingFSM. The FSM starts in StateHalt.
+// If cfg is nil a default cooldown is used.
 func NewFSM(logger *slog.Logger, cfg *config.Config, actions ActionCallbacks, detectorCtor DetectorFactory) *FishingFSM {
 	cooldown := time.Second
 	if cfg != nil && cfg.CooldownSeconds > 0 {
@@ -106,7 +108,7 @@ func (f *FishingFSM) loop() {
 	f.closed = true
 }
 
-// events
+// internal event types sent to the FSM loop
 type (
 	evtTargetAcquired   struct{}
 	evtTargetAcquiredAt struct{ x, y int }
@@ -129,12 +131,12 @@ func (f *FishingFSM) transition(next FishingState) {
 	if prev == next {
 		return
 	}
-	// cancel search timer if leaving searching state
+	// stop search timer when leaving StateSearching
 	if prev == StateSearching && next != StateSearching && f.searchTimer != nil {
 		f.searchTimer.Stop()
 		f.searchTimer = nil
 	}
-	// cancel cooldown timer if leaving cooldown state
+	// stop cooldown timer when leaving StateCooldown
 	if prev == StateCooldown && next != StateCooldown && f.cooldownTimer != nil {
 		f.cooldownTimer.Stop()
 		f.cooldownTimer = nil
@@ -258,9 +260,9 @@ func (f *FishingFSM) transition(next FishingState) {
 	}
 }
 
-// handleTick was removed along with tick-based time simulation; timers now drive transitions.
+// Tick is retained for backward compatibility; timers drive transitions.
 
-// Public API implements contracts
+// Public API methods
 func (f *FishingFSM) AddListener(l FishingStateListener) { f.events <- evtAddListener{l: l} }
 func (f *FishingFSM) Current() FishingState              { return f.state }
 func (f *FishingFSM) EventTargetAcquired()               { f.events <- evtTargetAcquired{} }
@@ -273,7 +275,7 @@ func (f *FishingFSM) EventAwaitFocus()                   { f.events <- evtAwaitF
 func (f *FishingFSM) ForceCast()                         { f.events <- evtForceCast{} }
 func (f *FishingFSM) Cancel()                            { f.events <- evtCancel{} }
 
-// Tick is deprecated and now a no-op retained only for backward compatibility with presenters.
+// Tick is deprecated and is a no-op (retained for backward compatibility).
 func (f *FishingFSM) Tick(now time.Time) {}
 func (f *FishingFSM) ProcessMonitoringFrame(roi *image.RGBA, now time.Time) {
 	if roi != nil {
@@ -301,6 +303,7 @@ func (f *FishingFSM) Close() {
 	close(f.events)
 }
 
+// recoverLog recovers from a panic and logs the error if a logger is available.
 func recoverLog(logger *slog.Logger, msg string) {
 	if r := recover(); r != nil {
 		if logger != nil {

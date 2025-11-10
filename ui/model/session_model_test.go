@@ -9,30 +9,30 @@ func TestSessionModel_BasicLifecycle(t *testing.T) {
 	m := NewSessionModel()
 	base := time.Unix(0, 0)
 
-	// start at t0
+	// Start at t0 and run for 5s.
 	m.OnTick(true, base)
-	// advance 5s
+	// Advance 5s.
 	m.OnTick(true, base.Add(5*time.Second))
 	session, total := m.Values()
 	if session < 5*time.Second || total < 5*time.Second {
 		t.Fatalf("expected ~5s session & total; got session=%v total=%v", session, total)
 	}
 
-	// stop at 5s
+	// Stop at 5s.
 	m.OnTick(false, base.Add(5*time.Second))
 	session, total = m.Values()
 	if session < 5*time.Second || total < 5*time.Second {
 		t.Fatalf("after stop expected persisted 5s; got session=%v total=%v", session, total)
 	}
 
-	// idle 2s (no change)
+	// Idle 2s (no change expected).
 	m.OnTick(false, base.Add(7*time.Second))
 	session2, total2 := m.Values()
 	if session2 != session || total2 != total {
 		t.Fatalf("idle tick should not change durations: before session=%v total=%v after session=%v total=%v", session, total, session2, total2)
 	}
 
-	// second session at 10s lasts 3s
+	// Second session at 10s lasting 3s.
 	m.OnTick(true, base.Add(10*time.Second))
 	m.OnTick(true, base.Add(13*time.Second))
 	s3, t3 := m.Values()

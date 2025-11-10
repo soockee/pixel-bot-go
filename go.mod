@@ -3,7 +3,6 @@ module github.com/soocke/pixel-bot-go
 go 1.25.4
 
 require (
-	golang.org/x/image v0.26.0
 	golang.org/x/sys v0.36.0
 	modernc.org/tk9.0 v1.73.0
 )
@@ -20,6 +19,7 @@ require (
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
+	golang.org/x/image v0.26.0 // indirect
 	golang.org/x/net v0.39.0 // indirect
 	modernc.org/fileutil v1.3.40 // indirect
 	modernc.org/fsm v1.3.2 // indirect

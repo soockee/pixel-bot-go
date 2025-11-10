@@ -19,10 +19,10 @@ import (
 	. "modernc.org/tk9.0"
 )
 
-// Adapters removed; app now injects concrete services directly (CaptureSvc, SelectionOverlay, UI).
+// The app constructs and wires concrete services (capture, presenters, UI).
 
 const (
-	tick = 100 * time.Millisecond
+	tick = 33 * time.Millisecond
 )
 
 type app struct {
@@ -38,15 +38,9 @@ type app struct {
 	selectionView  view.SelectionOverlay
 }
 
-// Inline convenience getters reduce surface area; presenters now depend directly on container services.
+// Small getters used by presenters and UI wiring.
 func (a *app) captureRunning() bool {
 	return a.container.CaptureSvc != nil && a.container.CaptureSvc.Running()
-}
-func (a *app) captureFrames() <-chan *image.RGBA {
-	if a.container.CaptureSvc != nil {
-		return a.container.CaptureSvc.Frames()
-	}
-	return nil
 }
 func (a *app) selectionRect() *image.Rectangle {
 	if a.selectionView != nil {
@@ -62,15 +56,15 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 	App.WmTitle(title)
 	WmProtocol(App, "WM_DELETE_WINDOW", a.exitHandler)
 	WmGeometry(App, fmt.Sprintf("%dx%d+100+100", width, height))
-	// Initialize styles early (root window background etc.).
+	// Initialize UI styles and selection overlay.
 	theme.InitStyles()
 	a.selectionView = view.NewSelectionOverlay(cfg, a.configPath, logger)
 	return a
 }
 
-// detectViewAdapter removed; RootView (UI) already satisfies DetectionView interface.
+// RootView satisfies the detection view interface.
 
-// Run builds layout, wires presenters, starts update loop and blocks until exit.
+// Run sets up presenters, starts the update loop and blocks until the window is closed.
 func (a *app) Run() (err error) {
 	cfg := a.container.Config
 	a.layout()
@@ -87,10 +81,11 @@ func (a *app) Run() (err error) {
 		cfg,
 		a.container.TargetImg,
 		a.container.Detection,
+		a.logger,
 	)
 	a.container.CapturePresenter = presenter.NewCapturePresenter(a.container.Capture, a.container.CaptureSvc, a.container.FSM, a.container.RootView)
 
-	// Focus watcher starts only while FSM awaits focus; not part of main Loop ticks.
+	// Focus watcher runs separately while FSM awaits focus.
 	focusWatcher := presenter.NewFocusWatcher(a.container.FSM, a.logger, nil, func() string { return strings.TrimSpace(strings.ToLower(a.selectedWindow)) })
 	a.loop = presenter.NewLoop(a.container.SessionPresenter, a.container.FSMPresenter, a.container.DetectionPresenter, a.ScheduleUpdate)
 
@@ -104,6 +99,11 @@ func (a *app) Run() (err error) {
 		focusWatcher.OnState(prev, next)
 	})
 
+	// Start debug loggers when configured.
+	if cfg != nil && cfg.Debug {
+		// debug.StartGoroutineLogger(2*time.Second, a.logger)
+		// debug.StartMemLogger(1*time.Second, a.logger)
+	}
 	a.ScheduleUpdate()
 	App.Wait()
 
@@ -150,23 +150,19 @@ func (a *app) ScheduleUpdate() {
 }
 
 // getSelectionRect proxies to selectionView (may be nil).
-// toggleCapture delegates to presenter.
+// toggleCapture delegates to the capture presenter.
 func (a *app) toggleCapture() {
 	if cp := a.container.CapturePresenter; cp != nil {
 		cp.Toggle()
 	}
 }
 
-// safeGo removed; inline goroutines use explicit panic recovery where needed.
-
-// (legacy preview/state methods removed in favor of presenters)
+// Inline goroutines use explicit panic recovery where needed.
+// State and preview behavior is provided by presenters.
 func (a *app) Running() bool                   { return a.captureRunning() }
-func (a *app) Frames() <-chan *image.RGBA      { return a.captureFrames() }
 func (a *app) SelectionRect() *image.Rectangle { return a.selectionRect() }
 
-// DetectionView methods already via ui: UpdateCapture, UpdateDetection
-// DetectionFSM adapter methods
-// Current returns current fishing state (legacy adapter method retained for compatibility elsewhere).
+// Detection-related methods forward to the FSM.
 func (a *app) Current() fishing.FishingState {
 	if a.container.FSM != nil {
 		return a.container.FSM.Current()

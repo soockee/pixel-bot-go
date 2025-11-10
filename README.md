@@ -34,7 +34,10 @@ That’s it. If it “misses” or is too trigger‑happy, adjust a couple of se
 ---
 
 ## 3. The Window You’ll See
-Top area: current state (e.g. Searching, Monitoring, Cooldown) and maybe a timer.
+Top area: current state (e.g. Searching, Monitoring, Cooldown) plus two timers:
+* Session – elapsed time of the current active capture periods (sums across toggles until you exit or restart).
+* Total – cumulative time across all capture periods since launch (includes the ongoing session while active).
+They update live only while capture is enabled; when you pause they freeze until you resume.
 Middle left: settings panel (numbers, checkboxes, buttons to apply changes, selection area tool).
 Middle right: live preview image of what it is looking at.
 Bottom: buttons (Start / Stop, maybe Exit, maybe Selection Grid, etc.).
@@ -96,6 +99,8 @@ go build -o pixel-bot-go.exe
 ```
 
 Run PowerShell as Administrator if mouse movement or key presses do nothing in the game window.
+
+For profiling and deeper diagnostics (memory leak, CPU hotspots), see `docs/DEBUG.md`.
 
 ---
 

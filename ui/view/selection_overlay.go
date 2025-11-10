@@ -11,7 +11,7 @@ import (
 
 	"github.com/soocke/pixel-bot-go/config"
 
-	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders.
+	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders
 	. "modernc.org/tk9.0"
 )
 
@@ -20,14 +20,14 @@ import (
 type SelectionOverlay interface {
 	OpenOrFocus()
 	Clear()
-	ActiveRect() *image.Rectangle // method name used directly by presenter (SelectionRectProvider)
+	ActiveRect() *image.Rectangle
 }
 
 type selectionOverlay struct {
 	logger    *slog.Logger
 	cfg       *config.Config
 	cfgPath   string
-	selection atomic.Value // image.Rectangle
+	selection atomic.Value // stores image.Rectangle
 	win       *ToplevelWidget
 }
 
@@ -105,7 +105,6 @@ func (v *selectionOverlay) confirm() {
 			v.cfg.SelectionW, v.cfg.SelectionH = rect.Dx(), rect.Dy()
 			_ = v.cfg.Save(v.cfgPath)
 		}
-	} else {
 	}
 	v.destroy()
 }
@@ -131,16 +130,16 @@ func (v *selectionOverlay) ActiveRect() *image.Rectangle {
 	return &r
 }
 
-// computeCenteredGeometry returns the screen width/height using Tk winfo queries.
-// It falls back to nominal 1280x720 if queries fail.
+// computeCenteredGeometry returns the screen width and height.
+// Currently returns static values; should be replaced with proper Tk winfo queries.
 func computeCenteredGeometry() (float64, float64) {
-	// Fallback static screen size; replace with proper winfo queries if available.
 	return 1920, 1080
 }
 
-// geometry parsing
+// geomReSel matches window geometry strings in the format "WIDTHxHEIGHT+X+Y"
 var geomReSel = regexp.MustCompile(`^(\d+)x(\d+)\+(-?\d+)\+(-?\d+)$`)
 
+// parseGeometrySel parses a Tk geometry string and returns the corresponding rectangle.
 func parseGeometrySel(g string) (image.Rectangle, bool) {
 	g = strings.TrimSpace(g)
 	m := geomReSel.FindStringSubmatch(g)

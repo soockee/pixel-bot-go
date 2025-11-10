@@ -5,58 +5,60 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
-
-	"golang.org/x/image/draw"
+	"time"
 )
 
-// ScaleSpec defines one scale factor attempt.
+// ScaleSpec is a single template scale factor (e.g. 0.8, 1.0, 1.2).
 type ScaleSpec struct {
-	Factor float64 // e.g. 0.8, 1.0, 1.2
+	Factor float64
 }
 
 // MultiScaleOptions configures multi-scale template matching.
+// Scales: explicit factors to try. If empty, factors are generated from
+// MinScale..MaxScale using ScaleStep. StopOnScore disables when set to 0.
 type MultiScaleOptions struct {
-	Scales      []ScaleSpec // List of scale factors to try; if empty defaults around 1.0
-	NCC         NCCOptions  // NCC options reused per scale
-	StopOnScore float64     // Early stop if score >= StopOnScore (>0); 0 disables
-	// Adaptive scale generation (used if Scales is empty): generate factors from MinScale to MaxScale inclusive.
-	MinScale  float64 // e.g. 0.60
-	MaxScale  float64 // e.g. 1.40
-	ScaleStep float64 // e.g. 0.05 (must be >0)
+	Scales      []ScaleSpec
+	NCC         NCCOptions
+	StopOnScore float64
+	MinScale    float64
+	MaxScale    float64
+	ScaleStep   float64
 }
 
-// MultiScaleResult holds the best match among scales.
+// MultiScaleResult is the best match found across scales.
 type MultiScaleResult struct {
-	X, Y  int
-	Score float64
-	Scale float64
-	Found bool
+	X, Y            int
+	Score           float64
+	Scale           float64
+	Found           bool
+	Duration        time.Duration
+	ScalesEvaluated int
 }
 
-// MultiScaleMatch resizes the template to each scale and runs NCC, returning best result.
-// This mitigates dimensional differences when the target object appears larger/smaller.
-// Assumes uniform scaling without rotation.
+// MultiScaleMatch is the public, single-call API for multi-scale matching.
+// It forwards to the parallel implementation.
 func MultiScaleMatch(frame *image.RGBA, tmpl image.Image, opts MultiScaleOptions) MultiScaleResult {
-	// Delegate to parallel version for scalability; keeps existing API.
 	return MultiScaleMatchParallel(frame, tmpl, opts)
 }
 
-// MultiScaleMatchParallel performs the same operation as MultiScaleMatch but distributes
-// scale evaluations across goroutines for better performance when many scales are tested.
-// It respects StopOnScore via an atomic early-stop flag.
+// MultiScaleMatchParallel evaluates the template at multiple scales in
+// parallel and returns the best match. It supports an optional early-stop
+// threshold in MultiScaleOptions.StopOnScore.
 func MultiScaleMatchParallel(frame *image.RGBA, tmpl image.Image, opts MultiScaleOptions) MultiScaleResult {
 	if frame == nil || tmpl == nil {
 		return MultiScaleResult{}
 	}
 
-	// Precompute grayscale integrals
 	preGray := buildGrayPrecomp(frame)
+	baseTmpl := getTemplatePrecomp(tmpl)
+	if baseTmpl == nil {
+		return MultiScaleResult{}
+	}
+
 	if len(opts.Scales) == 0 {
-		// Generate adaptive list if parameters look sane; else fallback to legacy defaults.
 		if opts.MinScale > 0 && opts.MaxScale > 0 && opts.ScaleStep > 0 && opts.MaxScale >= opts.MinScale {
-			// Cap number of steps to prevent runaway.
 			maxSteps := 1 + int((opts.MaxScale-opts.MinScale)/opts.ScaleStep+0.5)
-			if maxSteps > 200 { // arbitrary safety cap
+			if maxSteps > 200 {
 				maxSteps = 200
 			}
 			scales := make([]ScaleSpec, 0, maxSteps)
@@ -67,10 +69,12 @@ func MultiScaleMatchParallel(frame *image.RGBA, tmpl image.Image, opts MultiScal
 		}
 	}
 
-	var earlyStop int32 // 0 = continue, 1 = stop requested
+	var earlyStop int32
 	results := make(chan MultiScaleResult, len(opts.Scales))
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, runtime.NumCPU()) // bound concurrency
+	sem := make(chan struct{}, runtime.NumCPU())
+	var totalDur int64
+	var scalesCount uint64
 
 	for _, s := range opts.Scales {
 		scale := s.Factor
@@ -85,21 +89,16 @@ func MultiScaleMatchParallel(frame *image.RGBA, tmpl image.Image, opts MultiScal
 			if atomic.LoadInt32(&earlyStop) == 1 {
 				return
 			}
-			origB := tmpl.Bounds()
-			w := int(float64(origB.Dx()) * factor)
-			h := int(float64(origB.Dy()) * factor)
-			if w < 2 || h < 2 {
+			scaledPc := getScaledTemplatePrecompFromBase(baseTmpl, factor)
+			if scaledPc == nil {
 				return
 			}
-			var res NCCResult
-			if factor == 1.0 {
-				res = matchTemplateNCCGrayIntegral(frame, tmpl, opts.NCC, preGray)
-			} else {
-				scaled := image.NewRGBA(image.Rect(0, 0, w, h))
-				draw.CatmullRom.Scale(scaled, scaled.Bounds(), tmpl, origB, draw.Over, nil)
-				res = matchTemplateNCCGrayIntegral(frame, scaled, opts.NCC, preGray)
-			}
+			res := matchTemplateNCCGrayIntegralPre(frame, scaledPc, opts.NCC, preGray)
 			msr := MultiScaleResult{X: res.X, Y: res.Y, Score: res.Score, Scale: factor, Found: res.Found}
+			if opts.NCC.DebugTiming && res.Dur > 0 {
+				atomic.AddInt64(&totalDur, res.Dur.Nanoseconds())
+			}
+			atomic.AddUint64(&scalesCount, 1)
 			if opts.StopOnScore > 0 && res.Score >= opts.StopOnScore {
 				if atomic.CompareAndSwapInt32(&earlyStop, 0, 1) {
 					results <- msr
@@ -120,10 +119,16 @@ func MultiScaleMatchParallel(frame *image.RGBA, tmpl image.Image, opts MultiScal
 		if r.Score > best.Score {
 			best = r
 		}
-		// If early stop triggered and we already processed that result, we can break.
 		if atomic.LoadInt32(&earlyStop) == 1 && r.Score >= opts.StopOnScore && opts.StopOnScore > 0 {
 			break
 		}
+	}
+	dur := atomic.LoadInt64(&totalDur)
+	if dur > 0 {
+		best.Duration = time.Duration(dur)
+	}
+	if count := atomic.LoadUint64(&scalesCount); count > 0 {
+		best.ScalesEvaluated = int(count)
 	}
 	return best
 }

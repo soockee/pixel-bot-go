@@ -17,9 +17,10 @@ type mockService struct{ started, stopped int }
 
 func (s *mockService) Start()                                       { s.started++ }
 func (s *mockService) Stop()                                        { s.stopped++ }
-func (s *mockService) Frames() <-chan *image.RGBA                   { return nil }
+func (s *mockService) LatestFrame() cap.FrameSnapshot               { return cap.FrameSnapshot{} }
 func (s *mockService) Running() bool                                { return s.started > s.stopped }
 func (s *mockService) SetSelectionProvider(func() *image.Rectangle) {}
+func (s *mockService) Stats() cap.CaptureStats                      { return cap.CaptureStats{} }
 
 var _ cap.CaptureService = (*mockService)(nil)
 

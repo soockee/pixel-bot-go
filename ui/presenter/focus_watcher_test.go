@@ -15,7 +15,9 @@ type mockFocusFSM struct {
 func (m *mockFocusFSM) Current() fishing.FishingState { return m.state }
 func (m *mockFocusFSM) EventFocusAcquired()           { m.fired++; m.state = fishing.StateSearching }
 
-// Test that watcher fires only when foreground title changes and matches selection while waiting.
+// TestFocusWatcher_FiresOnMatchChange verifies the watcher triggers the FSM
+// only when the foreground window title changes to a value that matches the
+// current selection while the FSM is in the waiting-for-focus state.
 func TestFocusWatcher_FiresOnMatchChange(t *testing.T) {
 	fsm := &mockFocusFSM{state: fishing.StateWaitingFocus}
 	titles := []string{"Other", "GameWindow"}
@@ -44,7 +46,9 @@ func TestFocusWatcher_FiresOnMatchChange(t *testing.T) {
 	}
 }
 
-// Test that leaving focus state resets and allows firing again.
+// TestFocusWatcher_ResetOnStateExit verifies the watcher resets when the FSM
+// leaves the waiting state and can fire again after re-entering with a matching
+// title.
 func TestFocusWatcher_ResetOnStateExit(t *testing.T) {
 	fsm := &mockFocusFSM{state: fishing.StateWaitingFocus}
 	title := "WinA"

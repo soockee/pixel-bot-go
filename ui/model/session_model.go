@@ -4,42 +4,41 @@ import (
 	"time"
 )
 
-// SessionModel tracks the current session duration and accumulated completed active time.
-// Decoupled from UI; presenters poll Values() and update views. Zero value is usable.
+// SessionModel tracks the current session duration and the accumulated active time.
+// It is decoupled from the UI; presenters should poll Values() and update views.
+// The zero value is ready to use.
 type SessionModel struct {
-	// active indicates whether capture is currently running.
-	active bool
-	// captureStart is the timestamp when the current session began.
-	captureStart time.Time
-	// lastSessionDuration is the duration of the ongoing (if active) or most recent session.
+	active              bool
+	captureStart        time.Time
 	lastSessionDuration time.Duration
-	// accumulated stores the sum of all completed (inactive) session durations.
-	accumulated time.Duration
+	accumulated         time.Duration
 }
 
-// NewSessionModel constructs a new model instance.
+// NewSessionModel returns a pointer to a ready-to-use SessionModel.
 func NewSessionModel() *SessionModel { return &SessionModel{} }
 
-// OnTick advances timing given current capturing state at time now. Call periodically (presenter tick).
+// OnTick updates the model using the current capture state and timestamp.
+// Call periodically (for example, from a presenter tick).
 func (m *SessionModel) OnTick(capturing bool, now time.Time) {
 	if m == nil {
 		return
 	}
 	if capturing {
-		if !m.active { // transition from off -> on
+		if !m.active { // transition off -> on
 			m.active = true
 			m.captureStart = now
 			m.lastSessionDuration = 0
 		}
 		m.lastSessionDuration = now.Sub(m.captureStart)
-	} else if m.active { // transition from on -> off
+	} else if m.active { // transition on -> off
 		m.lastSessionDuration = now.Sub(m.captureStart)
 		m.accumulated += m.lastSessionDuration
 		m.active = false
 	}
 }
 
-// Values returns the current session and total durations. Total includes the ongoing session while active.
+// Values returns the current session duration and the total accumulated duration.
+// The total includes the ongoing session when active.
 func (m *SessionModel) Values() (session, total time.Duration) {
 	if m == nil {
 		return 0, 0
