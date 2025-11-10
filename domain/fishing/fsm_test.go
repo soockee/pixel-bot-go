@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Functional transition tests; side-effect goroutines are no-ops.
+// Functional transition tests.
 
 var discardLogger = slog.New(slog.NewTextHandler(&discardWriter{}, nil))
 
@@ -15,9 +15,8 @@ type discardWriter struct{}
 
 func (d *discardWriter) Write(p []byte) (int, error) { return len(p), nil }
 
-// helper constructs FSM with no-op callbacks & nil detector
+// newTestFSM returns an FSM with no-op action callbacks for testing.
 func newTestFSM() *FishingFSM {
-	// we pass nil for detector factory; FSM guards nil detector usage in monitoring path
 	return NewFSM(discardLogger, nil, ActionCallbacks{
 		PressKey:   func(byte) {},
 		MoveCursor: func(int, int) {},
@@ -45,6 +44,7 @@ func TestFishingFSM_ReelingAdvancesToCooldown(t *testing.T) {
 	}
 }
 
+// waitForState waits up to timeout for the FSM to reach expected state.
 func waitForState(t *testing.T, m *FishingFSM, expected FishingState, timeout time.Duration) {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -61,6 +61,7 @@ type transitionRecorder struct {
 	seq []FishingState
 }
 
+// listener records transitions.
 func (r *transitionRecorder) listener(prev, next FishingState) {
 	r.mu.Lock()
 	r.seq = append(r.seq, next)
@@ -121,7 +122,7 @@ func TestFishingFSM_CooldownExpiration(t *testing.T) {
 	waitForState(t, m, StateMonitoring, 200*time.Millisecond)
 	m.EventFishBite()
 	waitForState(t, m, StateCooldown, 400*time.Millisecond)
-	// expect automatic cast after cooldown timer fires (~cooldownDuration+extra)
+	// Expect automatic cast after cooldown.
 	waitForState(t, m, StateSearching, 3*time.Second)
 }
 

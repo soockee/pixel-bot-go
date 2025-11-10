@@ -2,32 +2,29 @@ package capture
 
 import "image"
 
-// FrameSource exposes frame acquisition for presenters without start/stop control.
+// FrameSource provides read-only access to captured frames.
+// LatestFrame returns the freshest snapshot while Running reports activity.
 type FrameSource interface {
-	Frames() <-chan *image.RGBA
+	LatestFrame() FrameSnapshot
 	Running() bool
 }
 
-// SelectionRectProvider supplies an optional active selection rectangle.
+// SelectionRectProvider returns the current selection rectangle, if any.
 type SelectionRectProvider interface{ SelectionRect() *image.Rectangle }
 
-// ServiceContract narrows lifecycle control methods for capture.
+// ServiceContract exposes basic lifecycle control for capture services.
 type ServiceContract interface {
 	Start()
 	Stop()
 	Running() bool
 }
 
-// ServiceWithSelection augments ServiceContract with selection provider mutation.
-// Presenters typically do not need this; composition root uses it to wire selection overlay.
+// ServiceWithSelection extends ServiceContract with a setter for a selection provider.
 type ServiceWithSelection interface {
 	ServiceContract
 	SetSelectionProvider(func() *image.Rectangle)
 }
 
-// CaptureService is the full public-facing interface for the concrete service.
-// It intentionally embeds ServiceContract to clarify lifecycle subset.
-// NOTE: The legacy CaptureService interface is defined in capture_service.go.
-// To avoid redeclaration, we alias it here to satisfy patterns similar to
-// domain/fishing where types.go centralizes contracts.
+// Service is the capture service interface used by higher-level components.
+// It is an alias for the concrete capture service defined elsewhere.
 type Service interface{ CaptureService }

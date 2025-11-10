@@ -6,33 +6,28 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/ui/images"
 	"github.com/soocke/pixel-bot-go/ui/theme"
 
-	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders.
+	//lint:ignore ST1001 Dot import for concise Tk widget DSL.
 	. "modernc.org/tk9.0"
 )
 
 // RootView composes the top-level application layout and wires UI callbacks.
-// It owns high-level subviews but exposes minimal exported fields for presenters.
 type RootView struct {
 	cfg     *config.Config
 	cfgPath string
 	logger  *slog.Logger
 
-	// Subviews
-	Session     SessionStats
-	ConfigPanel ConfigPanel
-	CapturePrev CapturePreview
-
-	// Widgets
+	Session          SessionStats
+	ConfigPanel      ConfigPanel
+	CapturePrev      CapturePreview
 	StateLabel       *TLabelWidget
 	WindowSelect     *TComboboxWidget
 	StatusLabel      *LabelWidget
-	sessionLabel     *TLabelWidget
-	totalLabel       *TLabelWidget
 	windowExplainLbl *TLabelWidget
 	captureLabel     *LabelWidget
 	detectionLabel   *LabelWidget
@@ -40,96 +35,79 @@ type RootView struct {
 	selectionBtn     *ButtonWidget
 	exitBtn          *ButtonWidget
 	captureRow       int
-	// Layout containers we may rebuild
-	configFrame     *FrameWidget
-	mainFrame       *FrameWidget
-	headerFrame     *FrameWidget
-	leftInlineFrame *FrameWidget
-	actionsFrame    *FrameWidget
-	statusBarFrame  *FrameWidget
-	configVisible   bool
-	toggleConfigBtn *ButtonWidget
-	scaleBound      bool
-	darkMode        bool
-	darkToggleBtn   *ButtonWidget
+	configFrame      *FrameWidget
+	mainFrame        *FrameWidget
+	headerFrame      *FrameWidget
+	leftInlineFrame  *FrameWidget
+	actionsFrame     *FrameWidget
+	statusBarFrame   *FrameWidget
+	configVisible    bool
+	toggleConfigBtn  *ButtonWidget
+	scaleBound       bool
+	darkMode         bool
+	darkToggleBtn    *ButtonWidget
 }
 
-// UI abstracts the subset of view operations needed by presenters, enabling decoupling
-// from the concrete RootView implementation.
+// UI abstracts view operations needed by presenters.
 type UI interface {
 	SetStateLabel(text string)
 	SetConfigEditable(enabled bool)
 	UpdateCapture(img image.Image)
 	UpdateDetection(img image.Image)
-	SetSession(seconds int, totalSeconds int)
+	SetSession(session, total time.Duration)
 }
 
 func NewRootView(cfg *config.Config, cfgPath string, logger *slog.Logger) *RootView {
 	return &RootView{cfg: cfg, cfgPath: cfgPath, logger: logger}
 }
 
-// Build constructs the layout. titles: list of window titles for selection dropdown.
-// Handlers are invoked on user actions.
+// Build constructs the layout with window titles for selection dropdown.
 func (rv *RootView) Build(titles []string, onToggleCapture func(), onSelectionGrid func(), onExit func(), onWindowChanged func(title string)) {
 	if rv == nil {
 		return
 	}
-	// Initialize styles once (idempotent if called multiple times in current session).
 	theme.InitStyles()
-	// Apply persisted dark mode preference before constructing palette-dependent widgets.
 	if rv.cfg != nil && rv.cfg.DarkMode {
 		theme.SetDark(true)
 		rv.darkMode = true
 	}
 
-	// --- Modern Layout Structure ---
-	// Grid the App root: header (row0), body (row1), status (row2)
 	GridRowConfigure(App, 0, Weight(0))
 	GridRowConfigure(App, 1, Weight(1))
 	GridRowConfigure(App, 2, Weight(0))
-	GridColumnConfigure(App, 0, Weight(0)) // side panel
-	GridColumnConfigure(App, 1, Weight(1)) // main content
+	GridColumnConfigure(App, 0, Weight(0))
+	GridColumnConfigure(App, 1, Weight(1))
 
 	pal := theme.CurrentPalette()
 
-	// Header Frame (with sub-frame for toggle + timers stacked)
 	rv.headerFrame = Frame(Background(pal.Surface), Borderwidth(0))
 	Grid(rv.headerFrame, Row(0), Column(0), Columnspan(2), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
-	GridColumnConfigure(rv.headerFrame, 0, Weight(0)) // left stack
-	GridColumnConfigure(rv.headerFrame, 1, Weight(1)) // actions stretch
-	GridColumnConfigure(rv.headerFrame, 2, Weight(0)) // state label
+	GridColumnConfigure(rv.headerFrame, 0, Weight(0))
+	GridColumnConfigure(rv.headerFrame, 1, Weight(1))
+	GridColumnConfigure(rv.headerFrame, 2, Weight(0))
 
-	// Left inline frame: toggle + timers on same row
 	rv.leftInlineFrame = Frame(Background(pal.Surface), Borderwidth(0))
 	Grid(rv.leftInlineFrame, In(rv.headerFrame), Row(0), Column(0), Sticky("nw"))
-	GridColumnConfigure(rv.leftInlineFrame, 0, Weight(0)) // toggle
-	GridColumnConfigure(rv.leftInlineFrame, 1, Weight(0)) // session
-	GridColumnConfigure(rv.leftInlineFrame, 2, Weight(0)) // total
+	GridColumnConfigure(rv.leftInlineFrame, 0, Weight(0))
+	GridColumnConfigure(rv.leftInlineFrame, 1, Weight(0))
+	GridColumnConfigure(rv.leftInlineFrame, 2, Weight(0))
 
-	rv.Session = NewSessionStats(0)
-	rv.sessionLabel = TLabel(Txt("Session: 00:00"))
-	rv.totalLabel = TLabel(Txt("Total: 00:00"))
-	Grid(rv.sessionLabel, In(rv.leftInlineFrame), Row(0), Column(1), Sticky("w"), Padx("0.2m"))
-	Grid(rv.totalLabel, In(rv.leftInlineFrame), Row(0), Column(2), Sticky("w"), Padx("0.2m"))
+	rv.Session = NewSessionStats(rv.leftInlineFrame, 0, 1)
 
-	// Actions / window selection area
 	rv.actionsFrame = Frame(Background(pal.Surface))
 	Grid(rv.actionsFrame, In(rv.headerFrame), Row(0), Column(1), Sticky("we"))
-	// Columns: 0 explanation label, 1 combobox (stretch), 2 capture btn, 3 selection btn, 4 exit btn
 	GridColumnConfigure(rv.actionsFrame, 0, Weight(0))
 	GridColumnConfigure(rv.actionsFrame, 1, Weight(1))
 	GridColumnConfigure(rv.actionsFrame, 2, Weight(0))
 	GridColumnConfigure(rv.actionsFrame, 3, Weight(0))
 	GridColumnConfigure(rv.actionsFrame, 4, Weight(0))
 
-	// State label on right
 	rv.StateLabel = TLabel(Txt("State: <none>"))
 	Grid(rv.StateLabel, In(rv.headerFrame), Row(0), Column(2), Sticky("e"), Padx("0.3m"))
 
 	if len(titles) == 0 {
 		titles = []string{"<none>"}
 	}
-	// Explanation label for window selection purpose
 	rv.windowExplainLbl = TLabel(Txt("Target Window:"))
 	Grid(rv.windowExplainLbl, In(rv.actionsFrame), Row(0), Column(0), Sticky("w"), Padx("0.2m"), Pady("0.2m"))
 	rv.WindowSelect = TCombobox(Values(titles), Width(26))
@@ -153,7 +131,6 @@ func (rv *RootView) Build(titles []string, onToggleCapture func(), onSelectionGr
 	rv.exitBtn = Button(Txt("Exit"), Background(pal.Danger), Foreground("white"), Relief("raised"), Borderwidth(1), Command(onExit))
 	Grid(rv.exitBtn, In(rv.actionsFrame), Row(0), Column(4), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
 
-	// Body: config hidden by default; mainFrame spans both columns initially
 	rv.configVisible = false
 	rv.configFrame = nil
 	rv.mainFrame = Frame(Background(pal.Surface), Relief("flat"))
@@ -161,48 +138,37 @@ func (rv *RootView) Build(titles []string, onToggleCapture func(), onSelectionGr
 	GridRowConfigure(rv.mainFrame, 0, Weight(1))
 	GridColumnConfigure(rv.mainFrame, 0, Weight(1))
 
-	// Prepare ConfigPanel (UI built only when shown)
 	rv.ConfigPanel = NewConfigPanel(rv.cfg, rv.cfgPath, rv.logger)
 	rv.captureRow = 0
 
-	// Capture & Detection preview inside mainFrame
-	// Provide placeholder images so widgets reserve appropriate pixel dimensions.
-	// Capture placeholder (arbitrary 400x225 similar to previous constants)
 	capturePh := image.NewRGBA(image.Rect(0, 0, 400, 225))
 	capture := Label(Image(NewPhoto(Data(images.EncodePNG(capturePh)))), Relief("sunken"), Borderwidth(1))
 	Grid(capture, In(rv.mainFrame), Row(0), Column(0), Sticky("nsew"), Padx("0.3m"), Pady("0.3m"))
 
-	// Detection placeholder sized exactly to configured ROI (square)
 	roiSize := rv.cfg.ROISizePx
-	if roiSize <= 0 { // fallback safety
+	if roiSize <= 0 {
 		roiSize = 80
 	}
 	detectionPh := image.NewRGBA(image.Rect(0, 0, roiSize, roiSize))
 	detection := Label(Image(NewPhoto(Data(images.EncodePNG(detectionPh)))), Relief("sunken"), Borderwidth(1))
-	// Place detection to the right of capture; allow natural size (no Width/Height hints)
 	Grid(detection, In(rv.mainFrame), Row(0), Column(1), Sticky("n"), Padx("0.3m"), Pady("0.3m"))
 
-	// Replace old CapturePrev with new labels hooking into same interface expectations.
 	rv.CapturePrev = &capturePreview{captureLabel: capture, detectionLabel: detection}
 	rv.captureLabel = capture
 	rv.detectionLabel = detection
-	// Provide generous initial fallback size before geometry is realized.
 	if cp, ok := rv.CapturePrev.(*capturePreview); ok {
 		cp.setTargetSize(800, 450)
 	}
-	// Bind <Configure> once to recompute scaling when window size changes (first real layout pass).
 	if !rv.scaleBound {
 		Bind(App, "<Configure>", Command(func() { rv.updatePreviewScale() }))
 		rv.scaleBound = true
 	}
 
-	// Status bar
 	rv.statusBarFrame = Frame(Background(pal.Surface))
 	Grid(rv.statusBarFrame, Row(2), Column(0), Columnspan(2), Sticky("we"))
 	rv.StatusLabel = Label(Txt("Ready"), Anchor("w"))
 	Grid(rv.StatusLabel, In(rv.statusBarFrame), Row(0), Column(0), Sticky("w"), Padx("0.4m"), Pady("0.2m"))
 
-	// Add config toggle button (placed after initial build so frames exist)
 	rv.toggleConfigBtn = Button(Txt("Show Config"), Background(pal.Primary), Foreground("white"), Relief("raised"), Borderwidth(1),
 		Command(func() { rv.toggleConfig() }))
 	Grid(rv.toggleConfigBtn, In(rv.leftInlineFrame), Row(0), Column(0), Sticky("w"), Padx("0.2m"), Pady("0.1m"))
@@ -248,12 +214,12 @@ func (rv *RootView) UpdateDetection(img image.Image) {
 }
 
 // SetSession updates both session and total capture durations.
-func (rv *RootView) SetSession(seconds int, totalSeconds int) {
+func (rv *RootView) SetSession(session, total time.Duration) {
 	if rv == nil || rv.Session == nil {
 		return
 	}
-	rv.Session.SetSession(seconds)
-	rv.Session.SetTotal(totalSeconds)
+	rv.Session.SetSession(session)
+	rv.Session.SetTotal(total)
 }
 
 // --- CapturePresenter view contract methods ---
@@ -342,12 +308,7 @@ func (rv *RootView) applyPalette() {
 		rv.configFrame.Configure(Background(pal.Surface))
 	}
 	// Labels
-	if rv.sessionLabel != nil {
-		rv.sessionLabel.Configure(Background(pal.Surface), Foreground(pal.Text))
-	}
-	if rv.totalLabel != nil {
-		rv.totalLabel.Configure(Background(pal.Surface), Foreground(pal.Text))
-	}
+	// SessionStats component manages its own labels' palette; nothing additional here.
 	if rv.windowExplainLbl != nil {
 		rv.windowExplainLbl.Configure(Background(pal.Surface), Foreground(pal.TextMuted))
 	}

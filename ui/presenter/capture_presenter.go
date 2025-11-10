@@ -4,36 +4,37 @@ import (
 	"github.com/soocke/pixel-bot-go/domain/capture"
 )
 
-// CaptureModel provides enabled state access.
+// CaptureModel provides access to the capture enabled state.
 type CaptureModel interface {
 	Enabled() bool
 	SetEnabled(bool)
 }
 
-// LifecycleContract narrows what presenter needs from the capture layer.
+// LifecycleContract is the minimal lifecycle API used by the presenter.
 type LifecycleContract interface {
 	Start()
 	Stop()
 }
 
-// CaptureFSM exposes focus & halt events directly (align with FishingFSM names).
+// CaptureFSM provides the events the presenter needs to interact with the FSM.
 type CaptureFSM interface {
 	EventAwaitFocus()
 	EventHalt()
 }
 
 // CaptureView updates UI elements affected by capture toggling.
-// State label updates are now owned solely by FSMPresenter; this presenter
-// no longer mutates it directly to preserve single responsibility.
+// The presenter does not manage state-label updates; that responsibility
+// belongs to the FSMPresenter.
 type CaptureView interface {
 	PreviewReset()
 	ConfigEditable(bool)
 }
 
-// CapturePresenter owns presentation logic for toggling capture state.
+// CapturePresenter coordinates capture enable/disable actions between the
+// model, capture service, FSM and view.
 type CapturePresenter struct {
 	model   CaptureModel
-	service LifecycleContract // narrowed from full capture.CaptureService
+	service LifecycleContract
 	fsm     CaptureFSM
 	view    CaptureView
 }

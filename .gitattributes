@@ -29,3 +29,4 @@
 *.ogg binary
 # Prevent Git from altering these (already marked as binary)
 *.gif !text !filter !merge !diff
+*.gif filter=lfs diff=lfs merge=lfs -text

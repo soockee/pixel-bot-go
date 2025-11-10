@@ -6,7 +6,7 @@ import (
 )
 
 func TestExtractROI_CentersAndClamps(t *testing.T) {
-	// Create 100x100 frame
+	// frame: 100x100 image
 	frame := image.NewRGBA(image.Rect(0, 0, 100, 100))
 	roi, rect, err := ExtractROI(frame, 50, 50, 40)
 	if err != nil || roi == nil {
@@ -36,7 +36,8 @@ func TestExtractROI_ClampsNearEdge(t *testing.T) {
 
 func TestExtractROI_SizeAdjustedWhenTooLarge(t *testing.T) {
 	frame := image.NewRGBA(image.Rect(0, 0, 30, 30))
-	roi, rect, _ := ExtractROI(frame, 5, 5, 50) // size larger than frame
+	// requested size larger than frame
+	roi, rect, _ := ExtractROI(frame, 5, 5, 50)
 	if roi == nil {
 		t.Fatalf("nil roi")
 	}
@@ -47,6 +48,7 @@ func TestExtractROI_SizeAdjustedWhenTooLarge(t *testing.T) {
 
 func TestExtractROI_MinSize(t *testing.T) {
 	frame := image.NewRGBA(image.Rect(0, 0, 10, 10))
+	// requested size zero -> expect minimum 1x1 ROI
 	roi, rect, _ := ExtractROI(frame, 0, 0, 0)
 	if roi == nil {
 		t.Fatalf("nil roi")

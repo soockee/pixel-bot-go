@@ -1,45 +1,75 @@
 package presenter
 
 import (
+	"errors"
 	"image"
-	"log/slog"
+	"math"
+	"sync"
 	"time"
+
+	"log/slog"
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/capture"
-	"github.com/soocke/pixel-bot-go/domain/fishing" // Placeholder for alignment
+	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/ui/images"
 	"github.com/soocke/pixel-bot-go/ui/model"
 )
 
-// FrameSource supplies capture frames.
+// FrameSource supplies the most recent frame captured from the game window.
 type FrameSource interface {
 	Running() bool
-	Frames() <-chan *image.RGBA
+	LatestFrame() capture.FrameSnapshot
 }
 
-// DetectionFSM abstracts required FSM interactions.
+// DetectionFSM exposes the minimal fishing state operations used by the presenter.
 type DetectionFSM interface {
 	Current() fishing.FishingState
-	EventTargetAcquiredAt(int, int)
+	EventTargetAcquiredAt(x, y int)
 	TargetCoordinates() (int, int, bool)
-	ProcessMonitoringFrame(*image.RGBA, time.Time)
+	ProcessMonitoringFrame(img *image.RGBA, now time.Time)
 }
 
-// SelectionRectProvider supplies optional selection rectangle.
-// SelectionRectProvider supplies optional selection rectangle.
-// Method name aligned with view.SelectionOverlay.ActiveRect for direct injection (no adapter).
-type SelectionRectProvider interface{ ActiveRect() *image.Rectangle }
+// SelectionRectProvider returns the currently active capture selection.
+type SelectionRectProvider interface {
+	ActiveRect() *image.Rectangle
+}
 
-// DetectionView updates capture + ROI preview.
-// DetectionView updates capture + ROI preview. UpdateDetection now accepts image.Image
-// to avoid unnecessary adapter wrapping (*image.RGBA still satisfies image.Image).
+// DetectionView describes the UI surface updated by the presenter.
 type DetectionView interface {
-	UpdateCapture(image.Image)
-	UpdateDetection(image.Image)
+	UpdateCapture(img image.Image)
+	UpdateDetection(img image.Image)
 }
 
-// DetectionPresenter drives detection & ROI extraction, updating model & view.
+type detectionTaskKind int
+
+const (
+	detectionTaskSearch detectionTaskKind = iota + 1
+	detectionTaskMonitor
+)
+
+type detectionTask struct {
+	kind         detectionTaskKind
+	snapshot     capture.FrameSnapshot
+	selection    image.Rectangle
+	hasSelection bool
+	cfg          *config.Config
+	target       image.Image
+	targetPoint  image.Point
+}
+
+type detectionResult struct {
+	kind     detectionTaskKind
+	sequence uint64
+	err      error
+	found    bool
+	location image.Point
+	roi      *image.RGBA
+	roiRect  image.Rectangle
+	duration time.Duration
+}
+
+// DetectionPresenter coordinates capture preview and detection scheduling.
 type DetectionPresenter struct {
 	Enabled   func() bool
 	Source    FrameSource
@@ -50,89 +80,285 @@ type DetectionPresenter struct {
 	TargetImg image.Image
 	Model     *model.DetectionModel
 	logger    *slog.Logger
+
+	workerOnce sync.Once
+	workCh     chan detectionTask
+	resultCh   chan detectionResult
+
+	lastSearchSeq  uint64
+	lastMonitorSeq uint64
+	lastSearchTime time.Time
+	searchDelay    time.Duration
 }
 
-func NewDetectionPresenter(enabled func() bool, src FrameSource, fsm DetectionFSM, sel SelectionRectProvider, view DetectionView, cfg *config.Config, target image.Image, model *model.DetectionModel) *DetectionPresenter {
-	return &DetectionPresenter{Enabled: enabled, Source: src, FSM: fsm, Selection: sel, View: view, Config: cfg, TargetImg: target, Model: model}
+// NewDetectionPresenter constructs a detection presenter.
+func NewDetectionPresenter(enabled func() bool, source FrameSource, fsm DetectionFSM, selection SelectionRectProvider, view DetectionView, cfg *config.Config, target image.Image, model *model.DetectionModel, logger *slog.Logger) *DetectionPresenter {
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	return &DetectionPresenter{
+		Enabled:        enabled,
+		Source:         source,
+		FSM:            fsm,
+		Selection:      selection,
+		View:           view,
+		Config:         cfg,
+		TargetImg:      target,
+		Model:          model,
+		logger:         logger,
+		workCh:         make(chan detectionTask, 1),
+		resultCh:       make(chan detectionResult, 1),
+		searchDelay:    65 * time.Millisecond,
+		lastSearchSeq:  0,
+		lastMonitorSeq: 0,
+	}
 }
 
-// ProcessFrame reads a frame (non-blocking) and processes detection logic based on FSM state.
+// ProcessFrame pulls the latest frame, schedules detection work, and handles worker results.
 func (p *DetectionPresenter) ProcessFrame() {
-	if p == nil || p.Source == nil || p.FSM == nil || p.View == nil || p.Enabled == nil || p.Model == nil {
+	if p == nil || p.Enabled == nil || p.Source == nil || p.FSM == nil || p.View == nil {
 		return
 	}
+
+	p.ensureWorker()
+
+	for {
+		select {
+		case res := <-p.resultCh:
+			p.handleResult(res)
+		default:
+			goto drained
+		}
+	}
+
+drained:
 	if !p.Enabled() || !p.Source.Running() {
 		return
 	}
-	fsmState := p.FSM.Current()
-	if fsmState == fishing.StateWaitingFocus {
-		return
-	}
-	frame := <-p.Source.Frames()
+
+	snapshot := p.Source.LatestFrame()
+	frame := snapshot.Image
 	if frame == nil {
 		return
 	}
-	// Display scaled preview only; analysis may use original or downscaled copy.
-	p.View.UpdateCapture(frame) // preview scaling handled by view
-	// Optional analysis frame scaling for template matching (searching state only).
-	analysisFrame := frame
-	var scale float64 = 1.0
-	if p.Config != nil && p.Config.AnalysisScale > 0 && p.Config.AnalysisScale < 1.0 {
-		// Use ScaleToFit to approximate uniform scale reduction.
-		b := frame.Bounds()
-		w := int(float64(b.Dx()) * p.Config.AnalysisScale)
-		h := int(float64(b.Dy()) * p.Config.AnalysisScale)
-		if w < 1 {
-			w = 1
+
+	p.View.UpdateCapture(frame)
+
+	var selection image.Rectangle
+	hasSelection := false
+	if p.Selection != nil {
+		if rect := p.Selection.ActiveRect(); rect != nil {
+			selection = *rect
+			hasSelection = true
 		}
-		if h < 1 {
-			h = 1
+	}
+
+	switch p.FSM.Current() {
+	case fishing.StateSearching:
+		p.maybeDispatchSearch(snapshot, selection, hasSelection)
+	case fishing.StateMonitoring:
+		p.maybeDispatchMonitor(snapshot, selection, hasSelection)
+	}
+}
+
+func (p *DetectionPresenter) ensureWorker() {
+	p.workerOnce.Do(func() {
+		go p.runWorker()
+	})
+}
+
+func (p *DetectionPresenter) runWorker() {
+	for task := range p.workCh {
+		res := p.executeTask(task)
+		if res.kind == 0 {
+			continue
 		}
+		select {
+		case p.resultCh <- res:
+		default:
+			select {
+			case <-p.resultCh:
+			default:
+			}
+			select {
+			case p.resultCh <- res:
+			default:
+			}
+		}
+	}
+}
+
+func (p *DetectionPresenter) maybeDispatchSearch(snapshot capture.FrameSnapshot, selection image.Rectangle, hasSelection bool) {
+	if p.TargetImg == nil {
+		return
+	}
+	if snapshot.Sequence == 0 || snapshot.Sequence == p.lastSearchSeq {
+		return
+	}
+	if !p.lastSearchTime.IsZero() && time.Since(p.lastSearchTime) < p.searchDelay {
+		return
+	}
+	p.lastSearchSeq = snapshot.Sequence
+	p.lastSearchTime = time.Now()
+	task := detectionTask{
+		kind:         detectionTaskSearch,
+		snapshot:     snapshot,
+		selection:    selection,
+		hasSelection: hasSelection,
+		cfg:          p.copyConfig(),
+		target:       p.TargetImg,
+	}
+	p.dispatchTask(task)
+}
+
+func (p *DetectionPresenter) maybeDispatchMonitor(snapshot capture.FrameSnapshot, selection image.Rectangle, hasSelection bool) {
+	if snapshot.Sequence == 0 || snapshot.Sequence == p.lastMonitorSeq {
+		return
+	}
+	px, py, ok := p.FSM.TargetCoordinates()
+	if !ok {
+		return
+	}
+	p.lastMonitorSeq = snapshot.Sequence
+	task := detectionTask{
+		kind:         detectionTaskMonitor,
+		snapshot:     snapshot,
+		selection:    selection,
+		hasSelection: hasSelection,
+		cfg:          p.copyConfig(),
+		targetPoint:  image.Pt(px, py),
+	}
+	p.dispatchTask(task)
+}
+
+func (p *DetectionPresenter) dispatchTask(task detectionTask) {
+	select {
+	case p.workCh <- task:
+	default:
+		select {
+		case <-p.workCh:
+		default:
+		}
+		select {
+		case p.workCh <- task:
+		default:
+		}
+	}
+}
+
+func (p *DetectionPresenter) executeTask(task detectionTask) detectionResult {
+	res := detectionResult{kind: task.kind, sequence: task.snapshot.Sequence}
+	frame := task.snapshot.Image
+	if frame == nil {
+		res.err = errors.New("nil frame")
+		return res
+	}
+	cfg := task.cfg
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	switch task.kind {
+	case detectionTaskSearch:
+		return p.doSearch(task, frame, cfg)
+	case detectionTaskMonitor:
+		return p.doMonitor(task, frame, cfg)
+	default:
+		res.err = errors.New("unknown detection task kind")
+		return res
+	}
+}
+
+func (p *DetectionPresenter) doSearch(task detectionTask, frame *image.RGBA, cfg *config.Config) detectionResult {
+	res := detectionResult{kind: detectionTaskSearch, sequence: task.snapshot.Sequence}
+	analysis := frame
+	scaleX, scaleY := 1.0, 1.0
+	if cfg.AnalysisScale > 0 && cfg.AnalysisScale < 1.0 {
+		w := int(math.Max(1, math.Round(float64(frame.Bounds().Dx())*cfg.AnalysisScale)))
+		h := int(math.Max(1, math.Round(float64(frame.Bounds().Dy())*cfg.AnalysisScale)))
 		scaled := images.ScaleToFit(frame, w, h)
-		if rgba, ok := scaled.(*image.RGBA); ok {
-			analysisFrame = rgba
-			scale = p.Config.AnalysisScale
+		if scaled != nil && scaled.Bounds().Dx() > 0 && scaled.Bounds().Dy() > 0 {
+			analysis = scaled
+			scaleX = float64(frame.Bounds().Dx()) / float64(analysis.Bounds().Dx())
+			scaleY = float64(frame.Bounds().Dy()) / float64(analysis.Bounds().Dy())
 		}
 	}
-	if fsmState == fishing.StateSearching && p.TargetImg != nil {
-		x, y, ok, err := capture.DetectTemplate(analysisFrame, p.TargetImg, p.Config)
-		if err != nil {
-			p.logger.Error("detectTemplate", "error", err)
+	start := time.Now()
+	match, err := capture.DetectTemplateDetailed(analysis, task.target, cfg)
+	res.duration = time.Since(start)
+	if err != nil {
+		res.err = err
+		return res
+	}
+	if !match.Found {
+		return res
+	}
+	x := match.X
+	y := match.Y
+	if analysis != frame {
+		x = int(math.Round(float64(x) * scaleX))
+		y = int(math.Round(float64(y) * scaleY))
+	}
+	if task.hasSelection {
+		x += task.selection.Min.X
+		y += task.selection.Min.Y
+	}
+	res.found = true
+	res.location = image.Pt(x, y)
+	return res
+}
+
+func (p *DetectionPresenter) doMonitor(task detectionTask, frame *image.RGBA, cfg *config.Config) detectionResult {
+	res := detectionResult{kind: detectionTaskMonitor, sequence: task.snapshot.Sequence}
+	pt := task.targetPoint
+	localX := pt.X
+	localY := pt.Y
+	if task.hasSelection {
+		localX -= task.selection.Min.X
+		localY -= task.selection.Min.Y
+	}
+	roi, rect, err := images.ExtractROI(frame, localX, localY, cfg.ROISizePx)
+	if err != nil {
+		res.err = err
+		return res
+	}
+	globalRect := rect
+	if task.hasSelection {
+		globalRect = rect.Add(task.selection.Min)
+	}
+	res.found = true
+	res.location = pt
+	res.roi = roi
+	res.roiRect = globalRect
+	return res
+}
+
+func (p *DetectionPresenter) handleResult(res detectionResult) {
+	if res.err != nil {
+		if p.logger != nil {
+			p.logger.Error("detection", "error", res.err)
 		}
-		if ok {
-			// Translate coordinates back to original frame space if scaled.
-			if scale != 1.0 {
-				x = int(float64(x)/scale + 0.5)
-				y = int(float64(y)/scale + 0.5)
-			}
-			if sel := p.Selection.ActiveRect(); sel != nil {
-				x += sel.Min.X
-				y += sel.Min.Y
-			}
-			p.FSM.EventTargetAcquiredAt(x, y)
+		return
+	}
+	switch res.kind {
+	case detectionTaskSearch:
+		if res.found {
+			p.FSM.EventTargetAcquiredAt(res.location.X, res.location.Y)
 		}
-	} else if fsmState == fishing.StateMonitoring {
-		// Monitoring retains original frame for ROI extraction fidelity.
-		x, y, ok := p.FSM.TargetCoordinates()
-		if ok {
-			if sel := p.Selection.ActiveRect(); sel != nil { // convert global to frame-local
-				x -= sel.Min.X
-				y -= sel.Min.Y
+	case detectionTaskMonitor:
+		if res.roi != nil {
+			if p.Model != nil {
+				p.Model.SetROI(res.roiRect)
 			}
-			roiImg, roiRect, err := images.ExtractROI(frame, x, y, p.Config.ROISizePx)
-			if err != nil || roiImg == nil {
-				return
-			}
-			if sel := p.Selection.ActiveRect(); sel != nil { // store global rect
-				p.Model.SetROI(image.Rect(sel.Min.X+roiRect.Min.X, sel.Min.Y+roiRect.Min.Y, sel.Min.X+roiRect.Max.X, sel.Min.Y+roiRect.Max.Y))
-			} else {
-				p.Model.SetROI(roiRect)
-			}
-			p.View.UpdateDetection(roiImg)
-			p.FSM.ProcessMonitoringFrame(roiImg, time.Now())
+			p.View.UpdateDetection(res.roi)
+			p.FSM.ProcessMonitoringFrame(res.roi, time.Now())
 		}
 	}
-	// Recycle original frame after all processing to enable buffer reuse.
-	// Safe because we no longer access 'frame' after this point.
-	capture.RecycleFrame(frame)
+}
+
+func (p *DetectionPresenter) copyConfig() *config.Config {
+	if p.Config == nil {
+		return config.DefaultConfig()
+	}
+	clone := *p.Config
+	return &clone
 }

@@ -6,9 +6,10 @@ import (
 	"image/draw"
 )
 
-// ExtractROI produces an ROI image centered at (cx, cy) with desired square side 'size'.
-// It clamps the rectangle to frame bounds and guarantees at least 1x1.
-// Returns the ROI image (always *image.RGBA) and the rectangle relative to frame.
+// ExtractROI returns a square region-of-interest from the provided frame.
+// The ROI is centered at (cx, cy) with side length "size" (minimum 1).
+// The rectangle is clamped to the frame bounds and the returned image is
+// always an *image.RGBA. The returned rectangle is relative to the frame.
 func ExtractROI(frame *image.RGBA, cx, cy, size int) (*image.RGBA, image.Rectangle, error) {
 	if frame == nil {
 		return nil, image.Rectangle{}, errors.New("nil frame")

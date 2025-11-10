@@ -14,11 +14,10 @@ import (
 )
 
 // ConfigPanel encapsulates the configuration form widgets and apply logic.
-// It owns its widgets and writes back into *config.Config on ApplyChanges.
 type ConfigPanel interface {
-	Build(startRow int, parent ...Widget) (endRow int) // optional parent to place the panel inside
+	Build(startRow int, parent ...Widget) (endRow int)
 	SetEditable(enabled bool)
-	ApplyChanges() // parses widget text into underlying config and persists
+	ApplyChanges()
 }
 
 type configPanel struct {
@@ -26,10 +25,10 @@ type configPanel struct {
 	cfgPath  string
 	logger   *slog.Logger
 	applyBtn *ButtonWidget
-	widgets  map[string]*TextWidget // keyed by internal field id
+	widgets  map[string]*TextWidget
 }
 
-// NewConfigPanel creates the view bound to cfg.
+// NewConfigPanel creates a configuration panel bound to the provided config.
 func NewConfigPanel(cfg *config.Config, cfgPath string, logger *slog.Logger) ConfigPanel {
 	return &configPanel{cfg: cfg, cfgPath: cfgPath, logger: logger, widgets: make(map[string]*TextWidget)}
 }
@@ -37,7 +36,6 @@ func NewConfigPanel(cfg *config.Config, cfgPath string, logger *slog.Logger) Con
 func (v *configPanel) Build(startRow int, parent ...Widget) (row int) {
 	c := v.cfg
 	row = startRow
-	// choose grid target (parent frame or App root)
 	var target Widget = App
 	if len(parent) > 0 && parent[0] != nil {
 		target = parent[0]
@@ -162,7 +160,6 @@ func (v *configPanel) ApplyChanges() {
 	}
 }
 
-// parsing helpers (unexported)
 func parseFloatField(s string) (float64, bool) {
 	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
 	if err != nil {

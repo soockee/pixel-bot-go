@@ -11,8 +11,8 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// clickRight performs a right mouse button click (down + up) using legacy mouse_event.
-// For production use, SendInput is preferred for synthesis reliability.
+// ClickRight sends a right mouse button click (down then up).
+// Windows implementation using the Win32 API.
 func ClickRight() {
 	user32 := windows.NewLazySystemDLL("user32.dll")
 	mouseEvent := user32.NewProc("mouse_event")
@@ -23,16 +23,16 @@ func ClickRight() {
 	_, _, _ = mouseEvent.Call(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
 }
 
-// moveCursor moves the OS mouse pointer (Windows only).
+// MoveCursor moves the OS mouse pointer to (x, y).
+// Windows implementation using SetCursorPos.
 func MoveCursor(x, y int) {
-	// Windows SetCursorPos
 	user32 := windows.NewLazySystemDLL("user32.dll")
 	setCursorPos := user32.NewProc("SetCursorPos")
 	_, _, _ = setCursorPos.Call(uintptr(x), uintptr(y))
 }
 
-// pressKey issues a key down + key up for the given virtual-key code (Windows only).
-// This uses keybd_event for simplicity; for production consider SendInput.
+// PressKey sends a key down followed by a key up for the provided virtual-key code.
+// Uses keybd_event on Windows.
 func PressKey(vk byte) {
 	user32 := windows.NewLazySystemDLL("user32.dll")
 	keybdEvent := user32.NewProc("keybd_event")
@@ -45,10 +45,8 @@ func PressKey(vk byte) {
 	_, _, _ = keybdEvent.Call(uintptr(vk), 0, KEYEVENTF_KEYUP, 0)
 }
 
-// (computeCenteredGeometry moved to ui/view/selection_overlay.go; legacy removed)
-
-// parseVK converts a user-provided key token (e.g. "F3", "R") into a Windows virtual key code.
-// Supports function keys F1-F12 and single alphabetic characters. Falls back to F3 if unknown.
+// ParseVK converts a key token (e.g. "F3", "R") into a Windows virtual-key code.
+// Recognizes F1..F12 and single letters A..Z. Unknown tokens return VK_F3.
 func ParseVK(key string) byte {
 	k := strings.ToUpper(strings.TrimSpace(key))
 	if len(k) == 2 && k[0] == 'F' { // F1-F9
@@ -77,9 +75,8 @@ func ParseVK(key string) byte {
 	return 0x72
 }
 
-// ListWindows returns a slice of titles of top-level visible windows.
-// Empty or whitespace-only titles are skipped.
-// This is Windows-specific and uses EnumWindows + GetWindowTextW.
+// ListWindows returns titles of top-level visible windows.
+// Empty titles are skipped.
 func ListWindows() ([]string, error) {
 	user32 := windows.NewLazySystemDLL("user32.dll")
 	enumWindows := user32.NewProc("EnumWindows")
@@ -129,7 +126,8 @@ func ListWindows() ([]string, error) {
 	return titles, nil
 }
 
-// ForegroundWindowTitle returns the current foreground window's title or empty string.
+// ForegroundWindowTitle returns the title of the current foreground window.
+// If no foreground window is available an error is returned.
 func ForegroundWindowTitle() (string, error) {
 	user32 := windows.NewLazySystemDLL("user32.dll")
 	getForegroundWindow := user32.NewProc("GetForegroundWindow")

@@ -7,30 +7,46 @@ import (
 	"github.com/soocke/pixel-bot-go/config"
 )
 
-// DetectTemplate performs a multi-scale NCC template match using dynamic config.
-// Returns x,y,ok where (x,y) is the top-left of the best match whose NCC score
-// meets the configured threshold. Transparent template pixels are masked out.
-func DetectTemplate(frame *image.RGBA, tmpl image.Image, cfg *config.Config) (int, int, bool, error) {
+// DetectTemplateDetailed performs a multi-scale normalized cross-correlation
+// (NCC) template match and returns the full result, including timing and scale
+// counts when DebugTiming is enabled. Transparent template pixels are masked
+// during matching.
+func DetectTemplateDetailed(frame *image.RGBA, tmpl image.Image, cfg *config.Config) (MultiScaleResult, error) {
 	if frame == nil || tmpl == nil {
-		return 0, 0, false, errors.New("detect template error")
+		return MultiScaleResult{}, errors.New("detect template error")
 	}
+	var local config.Config
 	if cfg == nil {
-		cfg = config.DefaultConfig()
-	} else if err := cfg.Validate(); err != nil {
+		local = *config.DefaultConfig()
+	} else {
+		local = *cfg
+	}
+	if err := local.Validate(); err != nil {
+		return MultiScaleResult{}, err
+	}
+	res := MultiScaleMatch(frame, tmpl, MultiScaleOptions{
+		Scales:    nil,
+		MinScale:  local.MinScale,
+		MaxScale:  local.MaxScale,
+		ScaleStep: local.ScaleStep,
+		NCC: NCCOptions{
+			Threshold:      local.Threshold,
+			Stride:         local.Stride,
+			Refine:         local.Refine,
+			ReturnBestEven: local.ReturnBestEven,
+			DebugTiming:    true,
+		},
+		StopOnScore: local.StopOnScore,
+	})
+	return res, nil
+}
+
+// DetectTemplate is a compatibility helper that returns coordinates and a
+// boolean found flag.
+func DetectTemplate(frame *image.RGBA, tmpl image.Image, cfg *config.Config) (int, int, bool, error) {
+	res, err := DetectTemplateDetailed(frame, tmpl, cfg)
+	if err != nil {
 		return 0, 0, false, err
 	}
-	ms := MultiScaleMatch(frame, tmpl, MultiScaleOptions{
-		Scales:    nil,
-		MinScale:  cfg.MinScale,
-		MaxScale:  cfg.MaxScale,
-		ScaleStep: cfg.ScaleStep,
-		NCC: NCCOptions{
-			Threshold:      cfg.Threshold,
-			Stride:         cfg.Stride,
-			Refine:         cfg.Refine,
-			ReturnBestEven: cfg.ReturnBestEven,
-		},
-		StopOnScore: cfg.StopOnScore,
-	})
-	return ms.X, ms.Y, ms.Found, nil
+	return res.X, res.Y, res.Found, nil
 }

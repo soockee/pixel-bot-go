@@ -6,15 +6,15 @@ import (
 	"github.com/soocke/pixel-bot-go/domain/fishing"
 )
 
-// FSMSource exposes the domain fishing FSM methods presenter needs.
+// FSMSource provides the fishing FSM methods the presenter requires.
 type FSMSource interface {
 	Current() fishing.FishingState
 }
 
-// StateView updates state label.
+// StateView sets the state label in the view.
 type StateView interface{ SetStateLabel(string) }
 
-// FSMPresenter consumes FSM ticks & pending state changes and updates the view.
+// FSMPresenter receives FSM ticks and pending state changes, and updates the view.
 type FSMPresenter struct {
 	eng     FSMSource
 	view    StateView
@@ -26,7 +26,9 @@ func NewFSMPresenter(eng FSMSource, view StateView) *FSMPresenter {
 	return &FSMPresenter{eng: eng, view: view}
 }
 
-// OnState queues a state transitioned from FSM listener.
+// OnState queues a transitioned state from the FSM listener.
+//
+// The latest queued state will be reflected on the next Tick.
 func (p *FSMPresenter) OnState(s fishing.FishingState) {
 	if p == nil {
 		return
@@ -34,6 +36,8 @@ func (p *FSMPresenter) OnState(s fishing.FishingState) {
 	p.pending = append(p.pending, s)
 }
 
+// Tick processes queued states and updates the view with the most recent state.
+// It clears the pending queue after processing.
 func (p *FSMPresenter) Tick(now time.Time) {
 	if p == nil || p.eng == nil || p.view == nil {
 		return
