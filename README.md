@@ -17,9 +17,7 @@ Pixel Bot is a small Windows app that looks at a part of your screen, tries to s
 
 ## Demo
 
-<p align="center">
-	<img src="https://i.imgur.com/T3xQ9Yh.gif" alt="Fishing demo of Pixel Bot in action" title="Fishing demo" />
-</p>
+![Demo of Pixel Bot fishing in action](docs/img/fishing_demo_config.gif)
 
 ---
 
