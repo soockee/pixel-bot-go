@@ -1,107 +1,76 @@
-# Fishing State Machine & Bite Detection (Technical Details)
+# Fishing State Machine (Concise Guide)
 
-This document describes the internal finite state machine (FSM) used to automate the fishing workflow and the Phase 1 bite detection logic.
-
----
-## Overview
-The FSM cycles through phases. Two states (`casting`, `reeling`) are treated as **ephemeral**: their entry actions run immediately inside the state machine code (no external callbacks) and the machine advances to the next stable state without notifying listeners separately for the transient state.
-
-| State        | Type      | Purpose                                                                      | Next (automatic)                     |
-| ------------ | --------- | ---------------------------------------------------------------------------- | ------------------------------------ |
-| `searching`  | stable    | Scan screen / selection for the bobber template.                             | On template -> `monitoring`          |
-| `monitoring` | stable    | Watch locked coordinate for bite movement.                                   | Bite -> `reeling`; lost -> `casting` |
-| `reeling`    | ephemeral | Perform reel input (mouse/key).                                              | Immediately -> `cooldown`            |
-| `cooldown`   | stable    | Wait for loot/animation before recast (configurable via `cooldown_seconds`). | Timer expiry -> `casting`            |
-| `casting`    | ephemeral | Execute cast input.                                                          | Immediately -> `searching`           |
-
-Ephemeral entry actions:
-- `casting`: executes cast key then transitions to `searching`.
-- `reeling`: performs reel action, starts cooldown timer, transitions to `cooldown`.
-
-Cooldown duration is configurable via `cooldown_seconds` in the JSON config (`pixle_bot_config.json`).
-
-Listener callbacks now receive only `(prev, final)` where `final` is the resulting stable (or cooldown) state after any ephemeral hop. They do not see intermediate `casting` or `reeling` states directly. Input synthesis (mouse/key) is performed inline by the FSM using the configured key.
+This guide explains the finite state machine (FSM) that drives the fishing automation. It is aimed at beginner CS grads: basic familiarity with states/events is enough. Complex historical features (RGB matching, audio fusion) have been removed or deferred.
 
 ---
-| Transition Triggers
-| Event                        | Description                       | From -> To (listener receives)            |
-| ---------------------------- | --------------------------------- | ----------------------------------------- |
-| `EventTargetAcquiredAt(x,y)` | Template found; locks coordinate. | `searching` -> `monitoring`               |
-| `EventTargetLost()`          | Monitoring lost motion; recast.   | `monitoring` -> `searching` (via casting) |
-| `EventFishBite()`            | Bite confidence reached.          | `monitoring` -> `cooldown` (via reeling)  |
-| `Tick(now)`                  | Periodic timer advance.           | `cooldown` -> `searching` (via casting)   |
-| `ForceCast()`                | Manual cast command.              | any -> `searching` (via casting)          |
-| `Reset()`                    | Clears state machine.             | any -> `searching`                        |
+## 1. States at a Glance
+
+| State           | What It Means                                                                                     | How You Leave It                                                  |
+| --------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `halt`          | Bot is idle; no timers running.                                                                   | Enable capture → `waiting_focus`                                  |
+| `waiting_focus` | Waiting for the selected game window to gain focus.                                               | Focus acquired → `searching`                                      |
+| `searching`     | Looking for the bobber template (scanning scales). A 5s timer will auto‑cast if nothing is found. | Found template → `monitoring`; timeout or forced cast → `casting` |
+| `monitoring`    | Locked onto bobber coordinates; watching motion for a bite.                                       | Bite → `reeling`; bobber lost → `casting`                         |
+| `reeling`       | Performs reel action (cursor move + right click). Immediately sets cooldown timer.                | Transition completes → `cooldown`                                 |
+| `cooldown`      | Waiting before next cast (configured seconds). Timer expiry triggers a cast.                      | Cooldown timer → `casting`                                        |
+| `casting`       | Sends cast key. After showing this state briefly it returns to `searching`.                       | Immediate internal transition → `searching`                       |
+
+Notes:
+* `casting` and `reeling` are short but now visible (listeners see their transitions).
+* Timers, not external ticks, drive recast and search timeout.
 
 ---
-## Bite Detection (Visual Phase 1)
-Implemented in `app/bite_detector.go`.
+## 2. Core Events
 
-### ROI Formation
-- On entering `monitoring`, locked coordinate `(x,y)` is recorded.
-- Each frame a square ROI of side `roi_size_px` is clamped around `(x,y)` (accounting for selection offset if using partial capture).
+| Event                                                  | Typical Source                            | Effect                                         |
+| ------------------------------------------------------ | ----------------------------------------- | ---------------------------------------------- |
+| `EventAwaitFocus()`                                    | Capture enabled                           | `halt` → `waiting_focus`                       |
+| `EventFocusAcquired()`                                 | Focus watcher (window title match)        | `waiting_focus` → `searching`                  |
+| `EventTargetAcquired()` / `EventTargetAcquiredAt(x,y)` | Detection finds template                  | `searching` → `monitoring` (locks coordinates) |
+| `EventTargetLost()`                                    | Bite detector heuristic (motion vanished) | `monitoring` → `casting`                       |
+| `EventFishBite()`                                      | Bite detector motion pattern              | `monitoring` → `reeling` → `cooldown`          |
+| `ForceCast()`                                          | User command or internal timer            | current (except casting) → `casting`           |
+| `EventHalt()`                                          | User stops capture                        | any → `halt` (clears timers)                   |
+| Internal search timer (5s)                             | FSM                                       | If still `searching` → `ForceCast()`           |
+| Internal cooldown timer                                | FSM                                       | When time elapses → `ForceCast()`              |
 
-### Frame Processing
-1. Convert ROI to grayscale using integer luma approximation `(77R + 150G + 29B) >> 8`.
-2. Compute absolute per-pixel difference vs previous grayscale frame.
-3. Pixels with diff ≥ `diff_threshold` are motion pixels.
-4. Vertical center-of-mass (COM) `y_cm` of motion pixels is computed; if no motion, carry previous COM (or ROI center for first frame).
-
-### Bite Criteria
-A bite triggers when all hold for the latest frame pair:
-- Downward displacement `Δy = y_now - y_prev ≥ min_fall_pixels`.
-- Velocity `v = Δy / Δt ≥ min_velocity_px_per_sec`.
-- Time interval `Δt ≤ fall_window_ms`.
-- Motion pixel counts in both frames ≥ `minDiff` (heuristic `max(8, min_fall_pixels/2)`).
-- Optional smoothing: current `y_now` exceeds average of last `smoothing_frame_count` by at least `min_fall_pixels/2`.
-- Cooldown: elapsed since `lastTrigger` ≥ `post_trigger_silence_ms`.
-
-If satisfied: `EventFishBite()`.
-
-### Target Lost Heuristic
-Average diff pixel count over last 6 frames < 4 ⇒ invoke `EventTargetLost()` to resume searching.
-
-### Configuration Parameters
-Defined in `config.Config`:
-- `roi_size_px`
-- `diff_threshold`
-- `min_fall_pixels`
-- `fall_window_ms`
-- `min_velocity_px_per_sec`
-- `post_trigger_silence_ms`
-- `smoothing_frame_count`
-- `visual_standalone_factor` (reserved for future audio fusion)
-- Future audio placeholders: `audio_enabled`, `audio_band_low_hz`, `audio_band_high_hz`, `audio_spike_factor`.
-
-### Logging
-On detection: log info with `deltaY`, `velocity`, `diffPrev`, `diffCurr`.
-
-### Edge Cases & Guards
-- Negative or zero `Δy`: cancels candidate.
-- Excessively slow frame interval: may exceed `fall_window_ms` -> ignore.
-- Very high diff counts from global movement: still filtered by ROI; future improvement could include a max diff cap.
+Timers push a `ForceCast` event into the FSM’s channel; normal event handling then performs the cast key action.
 
 ---
-## Future Audio Fusion (Phase 2 Planned)
-Add secondary confirmation via WASAPI loopback capture:
-1. Short audio buffers (≈50ms) processed for band-limited energy (e.g. splash frequencies).
-2. Spike detection using rolling mean + σ multiple or absolute threshold.
-3. Maintain `audioSpikeUntil` window; visual + audio within window ⇒ lower visual thresholds or earlier trigger.
-4. Introduce confidence score `S = w1*Δy + w2*velocity + w3*audioSpikeMagnitude`.
+## 3. Typical Loop Sequence
+
+```
+waiting_focus → searching → monitoring → reeling → cooldown → casting → searching → ...
+```
+If the bobber is never found early, the search timeout fires: `searching → casting → searching`.
 
 ---
-## Possible Enhancements
-- Adaptive threshold tuning based on false positive / miss counts.
-- Persist performance metrics (avg detection latency, false triggers).
-- Multi-frame ROI drifting if bobber moves slowly.
-- GPU acceleration for diff computation.
+## 4. Design Choices (Why This Shape?)
+* Separate `searching` vs `monitoring` keeps detection cost low once position is known.
+* Timers remove dependence on irregular GUI ticks, making cast cadence predictable.
+* Showing `casting` / `reeling` helps the UI and logs reflect real actions for debugging.
+* A single event channel serializes state changes, avoiding race conditions with timers.
 
 ---
-## Testing Suggestions
-- Record screen segment with simulated bobber drop to replay frames through detector.
-- Unit test for `BiteDetector` using synthetic sequences: steady, small jiggle, valid drop.
-- Benchmark diff loop for varying ROI sizes.
+## 5. Bite Detection (Short Overview)
+While in `monitoring`, a small square ROI around the locked bobber coordinate is converted to grayscale each frame. Motion differences and vertical displacement heuristics decide if a “bite” occurred (downward drop + velocity + minimal noise). A valid bite triggers `EventFishBite()`.
+
+Lost target heuristic: too little motion over recent frames ⇒ `EventTargetLost()` (returns to casting sooner).
 
 ---
-## Summary
-The FSM separates search, monitoring, and cooldown as stable phases while treating casting and reeling as instantaneous entry actions implemented internally (no injected callbacks). Listeners observe only stable resulting states, simplifying UI and logging logic. The bite detector adds lightweight motion analysis constrained to a small ROI for performance.
+## 6. Extensibility Hooks
+Ideas you could add later:
+* Adaptive threshold based on recent misses.
+* Alternate casting strategies (e.g. variable cooldown).
+* Secondary confirmation (audio splash) integrated as another event source.
+
+---
+## 7. Mental Model Summary
+Think of the FSM as a cycle with two timer gates:
+* Search gate (5s) ensures progress even if detection fails.
+* Cooldown gate ensures reel animations finish before next cast.
+
+Everything else is event driven by detection or user input.
+
+If you understand states + events + timers here, you can trace any fishing cycle by reading the log of transitions.
+
