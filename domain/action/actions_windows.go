@@ -1,4 +1,4 @@
-package app
+package action
 
 import (
 	"errors"
@@ -13,7 +13,7 @@ import (
 
 // clickRight performs a right mouse button click (down + up) using legacy mouse_event.
 // For production use, SendInput is preferred for synthesis reliability.
-func clickRight() {
+func ClickRight() {
 	user32 := windows.NewLazySystemDLL("user32.dll")
 	mouseEvent := user32.NewProc("mouse_event")
 	const MOUSEEVENTF_RIGHTDOWN = 0x0008
@@ -24,7 +24,7 @@ func clickRight() {
 }
 
 // moveCursor moves the OS mouse pointer (Windows only).
-func moveCursor(x, y int) {
+func MoveCursor(x, y int) {
 	// Windows SetCursorPos
 	user32 := windows.NewLazySystemDLL("user32.dll")
 	setCursorPos := user32.NewProc("SetCursorPos")
@@ -33,7 +33,7 @@ func moveCursor(x, y int) {
 
 // pressKey issues a key down + key up for the given virtual-key code (Windows only).
 // This uses keybd_event for simplicity; for production consider SendInput.
-func pressKey(vk byte) {
+func PressKey(vk byte) {
 	user32 := windows.NewLazySystemDLL("user32.dll")
 	keybdEvent := user32.NewProc("keybd_event")
 	const KEYEVENTF_KEYUP = 0x0002
@@ -45,18 +45,11 @@ func pressKey(vk byte) {
 	_, _, _ = keybdEvent.Call(uintptr(vk), 0, KEYEVENTF_KEYUP, 0)
 }
 
-func computeCenteredGeometry() (cx, cy uintptr) {
-	// Compute centered geometry: 2/3 of primary screen width & height.
-	user32 := windows.NewLazySystemDLL("user32.dll")
-	getSystemMetrics := user32.NewProc("GetSystemMetrics")
-	cx, _, _ = getSystemMetrics.Call(uintptr(0)) // SM_CXSCREEN
-	cy, _, _ = getSystemMetrics.Call(uintptr(1)) // SM_CYSCREEN
-	return cx, cy
-}
+// (computeCenteredGeometry moved to ui/view/selection_overlay.go; legacy removed)
 
 // parseVK converts a user-provided key token (e.g. "F3", "R") into a Windows virtual key code.
 // Supports function keys F1-F12 and single alphabetic characters. Falls back to F3 if unknown.
-func parseVK(key string) byte {
+func ParseVK(key string) byte {
 	k := strings.ToUpper(strings.TrimSpace(key))
 	if len(k) == 2 && k[0] == 'F' { // F1-F9
 		n := int(k[1] - '0')
@@ -127,11 +120,11 @@ func ListWindows() ([]string, error) {
 	})
 
 	// Execute enumeration
-	if r, _, err := enumWindows.Call(cb, 0); r == 0 {
-		if err != nil && err != syscall.Errno(0) {
+	if r, _, callErr := enumWindows.Call(cb, 0); r == 0 {
+		if callErr != nil {
+			err := callErr
 			return nil, err
 		}
-		return nil, errors.New("EnumWindows failed")
 	}
 	return titles, nil
 }
@@ -143,7 +136,8 @@ func ForegroundWindowTitle() (string, error) {
 	getWindowTextW := user32.NewProc("GetWindowTextW")
 	hwnd, _, _ := getForegroundWindow.Call()
 	if hwnd == 0 {
-		return "", errors.New("no foreground window")
+		err := errors.New("no foreground window")
+		return "", err
 	}
 	const maxChars = 256
 	buf := make([]uint16, maxChars)

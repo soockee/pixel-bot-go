@@ -1,49 +1,29 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
-	"runtime/debug"
 
 	"github.com/soocke/pixel-bot-go/app"
 	"github.com/soocke/pixel-bot-go/config"
 )
 
 func main() {
-	// Attempt to load persistent config (including selection rectangle).
-	cfg, err := config.Load("pixle_bot_config.json")
-	if err != nil {
-		// Fallback to defaults on error; logging after logger init.
+	cfg, loadErr := config.Load("pixle_bot_config.json")
+	if loadErr != nil {
 		cfg = config.DefaultConfig()
 	}
-
-	// Set up logger
-	var loglevel slog.Level
+	level := slog.LevelInfo
 	if cfg.Debug {
-		loglevel = slog.LevelDebug
-	} else {
-		loglevel = slog.LevelInfo
+		level = slog.LevelDebug
 	}
-	logger := NewLogger(loglevel)
-	if err != nil {
-		logger.Warn("failed to load pixle_bot_config.json; using defaults", "error", err)
+	logger := NewLogger(level)
+	if loadErr != nil {
+		logger.Warn("config load failed; using defaults", "error", loadErr)
 	}
-
-	application := app.NewApp("Pixel Bot", 800, 600, cfg, logger)
-	if err := application.Run(); err != nil {
-		logger.Error("application terminated with error", "error", err)
+	appInstance := app.NewApp("Pixel Bot", 800, 600, cfg, logger)
+	if err := appInstance.Run(); err != nil {
+		logger.Error("app run failed", "error", err)
 		os.Exit(1)
 	}
-}
-
-// Global panic fallback (should be unnecessary due to Run recovery but kept for safety)
-func init() {
-	defer func() {
-		if r := recover(); r != nil {
-			os.Stderr.WriteString("panic during init: ")
-			os.Stderr.WriteString(fmt.Sprintf("%v\n%s", r, debug.Stack()))
-			os.Exit(1)
-		}
-	}()
 }

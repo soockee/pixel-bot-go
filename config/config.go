@@ -35,7 +35,13 @@ type Config struct {
 	MaxCastDurationSeconds int `json:"max_cast_duration_seconds"`
 	// CooldownSeconds defines how long to wait after reeling before attempting the next cast.
 	CooldownSeconds int `json:"cooldown_seconds"`
+
+	// AnalysisScale optionally downsizes frames before expensive template matching.
+	// Range (0.2 - 1.0]. 1.0 means disabled. Smaller values reduce CPU at the cost of precision.
+	AnalysisScale float64 `json:"analysis_scale"`
 }
+
+// Accessor helpers to satisfy fishing.ConfigLite without exposing struct embedding.
 
 // DefaultConfig returns a Config populated with standard defaults.
 func DefaultConfig() *Config {
@@ -57,6 +63,7 @@ func DefaultConfig() *Config {
 		ROISizePx:              80,
 		MaxCastDurationSeconds: 16,
 		CooldownSeconds:        7,
+		AnalysisScale:          1.0,
 	}
 }
 
@@ -107,6 +114,17 @@ func (c *Config) Validate() error {
 	}
 	if c.CooldownSeconds > 60 { // more than a minute likely unnecessary
 		c.CooldownSeconds = 60
+	}
+
+	// AnalysisScale validation
+	if c.AnalysisScale <= 0 {
+		c.AnalysisScale = 1.0
+	}
+	if c.AnalysisScale < 0.2 {
+		c.AnalysisScale = 0.2
+	}
+	if c.AnalysisScale > 1.0 {
+		c.AnalysisScale = 1.0
 	}
 
 	return nil

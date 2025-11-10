@@ -71,3 +71,7 @@ Enjoy experimenting!
 ## Selection Area (Optional)
 You can define a rectangle so the app watches only part of the screen (helpful to reduce noise). Use the "Selection Grid" button to set or clear it. This improves speed and focus; leave it unset for full-screen watching.
 
+## Performance & Memory Notes
+High-resolution screen grabs allocate large RGBA buffers (≈8 MB for 1080p). To reduce steady-state heap growth the capture loop now copies each raw screenshot into a reusable buffer (pool). After the UI / detection logic is done with a frame it is recycled. This lowers retained heap size under slow consumers. Future improvement: capture directly into the reusable buffer using a Windows API (BitBlt + GetDIBits) to eliminate the temporary allocation from the screenshot library.
+If you profile (`go test -bench . -benchmem`) you should see fewer long-lived allocations, though per-frame allocation still occurs until the direct capture path is added.
+

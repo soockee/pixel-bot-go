@@ -217,10 +217,6 @@ func matchTemplateNCCGrayIntegral(frame *image.RGBA, tmpl image.Image, opts NCCO
 	return res
 }
 
-// Dummy references to ensure package-level use (in case cross-file references are misdetected by linter).
-var _ = grayPrecomp{}
-var _ = integralSum
-
 // NCCOptions configures the normalized cross correlation matching.
 type NCCOptions struct {
 	Threshold      float64 // Minimum NCC score for a positive match (default 0.80)

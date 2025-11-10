@@ -1,870 +1,190 @@
 package app
 
 import (
-	"bytes"
 	"fmt"
 	"image"
-	"image/color"
-	"image/draw"
-	"image/png"
 	"log/slog"
-	"regexp"
-	"runtime/debug"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/soocke/pixel-bot-go/config"
+	"github.com/soocke/pixel-bot-go/domain/action"
+	"github.com/soocke/pixel-bot-go/domain/fishing"
+	"github.com/soocke/pixel-bot-go/ui/presenter"
+	"github.com/soocke/pixel-bot-go/ui/view"
+
 	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders.
 	. "modernc.org/tk9.0"
-
-	"github.com/soocke/pixel-bot-go/assets"
-	"github.com/soocke/pixel-bot-go/capture"
-	"github.com/soocke/pixel-bot-go/config"
 )
+
+// Adapters removed; app now injects concrete services directly (CaptureSvc, SelectionOverlay, UI).
 
 const (
 	tick = 100 * time.Millisecond
 )
 
 type app struct {
-	config           *config.Config
-	logger           *slog.Logger
-	configPath       string // path for persistence (pixle_bot_config.json)
-	width            int
-	height           int
-	start            time.Time // app start (still used for scheduling only)
-	afterID          string
-	sessionText      *TextWidget // session capture-active duration (MM:SS)
-	totalSessionText *TextWidget // total accumulated capture time (MM:SS)
+	container      *AppContainer
+	logger         *slog.Logger
+	configPath     string
+	width, height  int
+	start          time.Time
+	afterID        string
+	selectedWindow string
+	loop           *presenter.Loop
+	goWg           sync.WaitGroup
+	selectionView  view.SelectionOverlay
+	shutdown       atomic.Bool // indicates graceful shutdown initiated
+}
 
-	// Layout bookkeeping
-	captureRow int // dedicated row for capture preview (below config panel)
-
-	// Per-key config widgets
-	minScaleText    *TextWidget
-	maxScaleText    *TextWidget
-	scaleStepText   *TextWidget
-	thresholdText   *TextWidget
-	strideText      *TextWidget
-	stopOnScoreText *TextWidget
-	refineText      *TextWidget // true/false
-	returnBestText  *TextWidget // true/false
-	reelKeyText     *TextWidget // reel key (e.g. F3 or R)
-	// Window selection widgets/state (Windows only)
-	windowSelect   *TComboboxWidget // dropdown of active window titles
-	selectedWindow string           // currently selected target window title
-	// Bite detection config widgets (optional tuning)
-	roiSizeText        *TextWidget
-	cooldownText       *TextWidget // cooldown seconds
-	maxCastDurationTxt *TextWidget // max cast duration seconds
-	applyBtn           *ButtonWidget
-
-	// Debug widget for last target detection status
-	stateLabel *LabelWidget
-
-	// Capture / detection state
-	captureEnabled atomic.Bool
-	frameCh        chan *image.RGBA
-	targetImg      image.Image
-	detectionRect  image.Rectangle // global coordinates of current ROI used for monitoring
-
-	captureFrame   *LabelWidget
-	detectionFrame *LabelWidget // shows current ROI (detection subimage)
-
-	selectionRect atomic.Value    // stores image.Rectangle (empty == none)
-	selectionWin  *ToplevelWidget // overlay window
-
-	// Capture duration tracking
-	captureStart        time.Time     // time when capture last toggled ON (session start)
-	accumulated         time.Duration // total active capture time across completed sessions
-	lastWasCapturing    bool          // previous state to detect OFF transitions
-	lastSessionDuration time.Duration // duration of most recently completed session
-
-	// Fishing automation state
-	fsm *FishingStateMachine
-	// fatalErr stores first fatal error or panic recovered; returned by Run.
-	fatalErr atomic.Value // error
-	goErrCh  chan error   // unified goroutine error channel
-	goWg     sync.WaitGroup
-	stateCh  chan FishingState // FSM state updates for UI (Tk thread)
+// Inline convenience getters reduce surface area; presenters now depend directly on container services.
+func (a *app) captureRunning() bool {
+	return a.container.CaptureSvc != nil && a.container.CaptureSvc.Running()
+}
+func (a *app) captureFrames() <-chan *image.RGBA {
+	if a.container.CaptureSvc != nil {
+		return a.container.CaptureSvc.Frames()
+	}
+	return nil
+}
+func (a *app) selectionRect() *image.Rectangle {
+	if a.selectionView != nil {
+		return a.selectionView.ActiveRect()
+	}
+	return nil
 }
 
 func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Logger) *app {
-	a := &app{config: cfg, logger: logger, configPath: "pixle_bot_config.json", goErrCh: make(chan error, 8), stateCh: make(chan FishingState, 16)}
+	container := BuildContainer(cfg, logger, width, height, "pixle_bot_config.json")
+	a := &app{container: container, logger: logger, configPath: "pixle_bot_config.json", width: width, height: height}
 
-	App.WmTitle("")
-	if a.logger != nil {
-		a.logger.Info("initial config", "config", *cfg)
-	}
-	a.width = width
-	a.height = height
-
-	if img, err := assets.FishingTargetImage(); err == nil {
-		a.targetImg = img
-	}
-	// Restore persisted selection rectangle if present.
-	if cfg != nil && cfg.SelectionW > 0 && cfg.SelectionH > 0 {
-		rect := image.Rect(cfg.SelectionX, cfg.SelectionY, cfg.SelectionX+cfg.SelectionW, cfg.SelectionY+cfg.SelectionH)
-		a.selectionRect.Store(rect)
-	}
-
+	App.WmTitle(title)
 	WmProtocol(App, "WM_DELETE_WINDOW", a.exitHandler)
 	WmGeometry(App, fmt.Sprintf("%dx%d+100+100", width, height))
+	a.selectionView = view.NewSelectionOverlay(cfg, a.configPath, logger)
 	return a
 }
 
-// Run initializes UI and enters the main event loop. It returns on application shutdown.
-// Any recovered panic is converted to an error and returned.
+// detectViewAdapter removed; RootView (UI) already satisfies DetectionView interface.
+
+// Run builds layout, wires presenters, starts update loop and blocks until exit.
 func (a *app) Run() (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			perr := fmt.Errorf("panic: %v\n%s", r, debug.Stack())
-			a.fatalErr.Store(perr)
-			if a.logger != nil {
-				a.logger.Error("panic recovered", "error", r, "stack", string(debug.Stack()))
-			}
-			err = perr
-		}
-		// On normal exit propagate stored fatalErr if set.
-		if err == nil {
-			if v := a.fatalErr.Load(); v != nil {
-				if e, ok := v.(error); ok {
-					err = e
-				}
-			}
-		}
-	}()
-	if a.config == nil {
-		a.config = config.DefaultConfig()
-	}
-
+	cfg := a.container.Config
 	a.layout()
-	a.setConfigEditable(true)
+	a.container.RootView.SetConfigEditable(true)
+	// Wire presenters now that UI is ready.
+	a.container.SessionPresenter = presenter.NewSessionPresenter(a.container.Session, a.container.Capture, a.container.UI)
+	a.container.FSMPresenter = presenter.NewFSMPresenter(a.container.FSM, a.container.UI)
+	a.container.DetectionPresenter = presenter.NewDetectionPresenter(
+		func() bool { return a.container.Capture.Enabled() },
+		a.container.CaptureSvc,
+		a.container.FSM,
+		a.selectionView,
+		a.container.UI,
+		cfg,
+		a.container.TargetImg,
+		a.container.Detection,
+	)
+	a.container.CapturePresenter = presenter.NewCapturePresenter(a.container.Capture, a.container.CaptureSvc, a.container.FSM, a.container.RootView)
 
-	// Initialize timer and start update loop
+	// Focus watcher starts only while FSM awaits focus; not part of main Loop ticks.
+	focusWatcher := presenter.NewFocusWatcher(a.container.FSM, a.logger, nil, func() string { return strings.TrimSpace(strings.ToLower(a.selectedWindow)) })
+	a.loop = presenter.NewLoop(a.container.SessionPresenter, a.container.FSMPresenter, a.container.DetectionPresenter, a.ScheduleUpdate)
+
+	// Record start time and schedule first tick.
 	a.start = time.Now()
-
-	// Initialize fishing state machine using configured cooldown.
-	a.fsm = NewFishingStateMachine(a.logger, a.config)
-
-	// Forward state changes to channel for safe UI update.
-	a.fsm.AddListener(func(prev, next FishingState) {
-		select {
-		case a.stateCh <- next:
-		default: // drop if full
+	// Forward FSM state changes to presenter.
+	a.container.FSM.AddListener(func(prev, next fishing.FishingState) {
+		if a.container.FSMPresenter != nil {
+			a.container.FSMPresenter.OnState(next)
 		}
-	})
-	// Launch error aggregator watcher
-	a.goWg.Add(1)
-	go a.safeGo(func() {
-		defer a.goWg.Done()
-		for e := range a.goErrCh {
-			if e == nil {
-				continue
-			}
-			// store first fatal
-			if a.fatalErr.Load() == nil {
-				a.fatalErr.Store(e)
-			}
-			if a.logger != nil {
-				a.logger.Error("goroutine error", "error", e)
-			}
-		}
+		focusWatcher.OnState(prev, next)
 	})
 
-	a.scheduleUpdate()
+	a.ScheduleUpdate()
 	App.Wait()
-	// Close channel and wait on watcher
-	close(a.goErrCh)
+
 	a.goWg.Wait()
 	return nil
 }
 
 func (a *app) layout() {
-	// Row 0: session time, total time, debug label, buttons frame
-	a.sessionText = Text(Height(1), Width(14))
-	Grid(a.sessionText, Row(0), Column(0), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
-	a.totalSessionText = Text(Height(1), Width(14))
-	Grid(a.totalSessionText, Row(0), Column(1), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
-
-	// At startup capture isn't active yet; show <none> until user toggles capture.
-	a.stateLabel = Label(Txt("State: <none>"), Borderwidth(1), Relief("ridge"))
-	Grid(a.stateLabel, Row(0), Column(2), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
-
-	btnFrame := Frame()
-	Grid(btnFrame, Row(0), Column(4), Sticky("ne"), Padx("0.3m"), Pady("0.3m"))
-	// Button frame uses default column sizing.
-	captureBtn := Button(Txt("Toggle Capture"), Command(func() { a.toggleCapture() }))
-	Grid(captureBtn, In(btnFrame), Row(0), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
-
-	// Window selection dropdown (populated lazily at layout time)
-	// Only created on Windows; enumeration failures silently ignored.
 	var titles []string
-	if list, err := ListWindows(); err == nil {
+	if list, err := action.ListWindows(); err == nil {
 		titles = list
 	}
-	if len(titles) == 0 {
-		// Fallback option
-		titles = []string{"<none>"}
-	}
-	a.windowSelect = TCombobox(Values(titles), Width(26))
-	Grid(a.windowSelect, In(btnFrame), Row(1), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
-	// Set initial selection index 0.
-	a.windowSelect.Current(0)
-	a.selectedWindow = titles[0]
-	// Whenever selection changes, update stored selectedWindow.
-	Bind(a.windowSelect, "<<ComboboxSelected>>", Command(func() {
-		if a.windowSelect != nil {
-			idxStr := a.windowSelect.Current(nil)
-			idx, err := strconv.Atoi(idxStr)
-			if err != nil {
-				a.logger.Error("window selection error", slog.Any("err", err))
-			}
-			a.selectedWindow = titles[idx]
+	rv := a.container.RootView
+	rv.Build(titles, func() { a.toggleCapture() }, func() {
+		if a.selectionView != nil {
+			a.selectionView.OpenOrFocus()
 		}
-	}))
-	selectionBtn := Button(Txt("Selection Grid"), Command(func() { a.openSelectionWindow() }))
-	Grid(selectionBtn, In(btnFrame), Row(2), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
-	exitBtn := Button(Txt("Exit"), Command(a.exitHandler))
-	Grid(exitBtn, In(btnFrame), Row(3), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
-
-	// Row 1+: configuration panel (columns 0-1)
-	endRow := a.buildConfigPanelGrid(1) // returns next free row after config
-	a.captureRow = endRow
-
-	// Pre-allocate stable placeholders so layout doesn't jump later.
-	placeholder := image.NewRGBA(image.Rect(0, 0, 200, 120))
-	pngBytes := encodePNG(placeholder)
-	a.captureFrame = Label(Image(NewPhoto(Data(pngBytes))), Borderwidth(1), Relief("sunken"))
-	a.detectionFrame = Label(Image(NewPhoto(Data(pngBytes))), Borderwidth(1), Relief("sunken"))
-
-	// Capture frame spans config columns 0-3; detection ROI preview sits at column 4.
-	Grid(a.captureFrame, Row(a.captureRow), Column(0), Columnspan(4), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
-	Grid(a.detectionFrame, Row(a.captureRow), Column(4), Columnspan(1), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
-}
-
-func (a *app) update() {
-	// Drain FSM state updates and apply on Tk thread.
-	for {
-		select {
-		case s := <-a.stateCh:
-			if a.stateLabel != nil {
-				a.stateLabel.Configure(Txt(fmt.Sprintf("State: %s", s)))
-			}
-		default:
-			goto stateDone
+	}, a.exitHandler, func(title string) { a.selectedWindow = title })
+	a.container.UI = rv
+	// After view & selection overlay are ready, attach selection provider to capture service.
+	if a.container.CaptureSvc != nil {
+		if selView := a.selectionView; selView != nil {
+			a.container.CaptureSvc.SetSelectionProvider(func() *image.Rectangle { return selView.ActiveRect() })
 		}
 	}
-stateDone:
-	// Session and total capture time handling.
-	if a.fsm != nil { // advance FSM timers (cooldown -> casting)
-		a.fsm.Tick(time.Now())
-	}
-	capturing := a.captureEnabled.Load()
-	if capturing {
-		if !a.lastWasCapturing { // session start
-			a.captureStart = time.Now()
-			a.lastSessionDuration = 0
-		}
-		a.lastSessionDuration = time.Since(a.captureStart)
-	} else if a.lastWasCapturing { // session end
-		// finalize session
-		a.lastSessionDuration = time.Since(a.captureStart)
-		a.accumulated += a.lastSessionDuration
-	}
-	a.lastWasCapturing = capturing
-
-	session := a.lastSessionDuration
-	total := a.accumulated
-	if capturing { // include ongoing time in total display
-		total = a.accumulated + session
-	}
-
-	sessMin := int(session.Minutes())
-	sessSec := int(session.Seconds()) % 60
-	totMin := int(total.Minutes())
-	totSec := int(total.Seconds()) % 60
-	if a.sessionText != nil {
-		a.sessionText.Delete("1.0", END)
-		a.sessionText.Insert("1.0", fmt.Sprintf("Session: %02d:%02d", sessMin, sessSec))
-	}
-	if a.totalSessionText != nil {
-		a.totalSessionText.Delete("1.0", END)
-		a.totalSessionText.Insert("1.0", fmt.Sprintf("Total: %02d:%02d", totMin, totSec))
-	}
-
-	// Frame processing depending on FSM state.
-	fsmState := StateSearching
-	if a.fsm != nil {
-		fsmState = a.fsm.Current()
-	}
-	// If waiting for focus, check foreground window and fire event if matched.
-	if fsmState == StateWaitingFocus {
-		if a.selectedWindow != "" && a.selectedWindow != "<none>" {
-			if title, err := ForegroundWindowTitle(); err == nil && title == a.selectedWindow {
-				// Focus acquired -> advance FSM
-				if a.fsm != nil {
-					a.fsm.EventFocusAquired()
-					fsmState = a.fsm.Current()
-				}
-			}
-		}
-	}
-	if a.captureEnabled.Load() && a.frameCh != nil && fsmState != StateWaitingFocus {
-		select {
-		case frame := <-a.frameCh:
-			// Always update preview regardless of state.
-			a.updateCaptureFrame(frame)
-			if fsmState == StateSearching && a.targetImg != nil {
-				// Template detection path.
-				x, y, ok := capture.DetectTemplate(frame, a.targetImg, a.config)
-				if ok {
-					if sel := a.getSelectionRect(); sel != nil {
-						x += sel.Min.X
-						y += sel.Min.Y
-					}
-
-					a.fsm.EventTargetAcquiredAt(x, y)
-
-				}
-			} else if fsmState == StateMonitoring {
-				x, y, ok := a.fsm.TargetCoordinates()
-				if ok {
-					// Adjust for selection subset if active (coordinates stored absolute)
-					if sel := a.getSelectionRect(); sel != nil {
-						x -= sel.Min.X
-						y -= sel.Min.Y
-					}
-					// Desired ROI size
-					w := a.config.ROISizePx
-					h := a.config.ROISizePx
-					if w < 1 {
-						w = 1
-					}
-					if h < 1 {
-						h = 1
-					}
-					// Center ROI around (x,y)
-					dx := x - w/2
-					dy := y - h/2
-					fb := frame.Bounds()
-					// Clip to frame bounds
-					if dx < 0 {
-						dx = 0
-					}
-					if dy < 0 {
-						dy = 0
-					}
-					if dx+w > fb.Dx() {
-						w = fb.Dx() - dx
-					}
-					if dy+h > fb.Dy() {
-						h = fb.Dy() - dy
-					}
-					if w < 1 {
-						w = 1
-					}
-					if h < 1 {
-						h = 1
-					}
-					roiRect := image.Rect(dx, dy, dx+w, dy+h)
-					// Store global coordinates version for debugging/visualization
-					if sel := a.getSelectionRect(); sel != nil {
-						// selection frame already cropped; add selection offset
-						a.detectionRect = image.Rect(sel.Min.X+roiRect.Min.X, sel.Min.Y+roiRect.Min.Y, sel.Min.X+roiRect.Max.X, sel.Min.Y+roiRect.Max.Y)
-					} else {
-						a.detectionRect = roiRect
-					}
-					// Obtain subimage
-					sub := frame.SubImage(roiRect)
-					var roiImg *image.RGBA
-					if rgba, ok2 := sub.(*image.RGBA); ok2 {
-						roiImg = rgba
-					} else {
-						// Fallback copy if underlying type differs
-						roiImg = image.NewRGBA(image.Rect(0, 0, roiRect.Dx(), roiRect.Dy()))
-						draw.Draw(roiImg, roiImg.Bounds(), sub, roiRect.Min, draw.Src)
-					}
-					// Update detection preview widget
-					if a.detectionFrame != nil {
-						roiPNG := encodePNG(roiImg)
-						a.detectionFrame.Configure(Image(NewPhoto(Data(roiPNG))))
-					}
-					// Feed ROI frame via FSM event (actor processes bite/loss heuristics)
-					if a.fsm != nil {
-						a.fsm.ProcessMonitoringFrame(roiImg, time.Now())
-					}
-				}
-			}
-		default:
-		}
-	}
-	a.scheduleUpdate()
-}
-
-// populateConfigText writes current config values into cfgText.
-// buildConfigPanel creates per-parameter single-line Text widgets and Apply button.
-func (a *app) buildConfigPanelGrid(startRow int) int {
-	c := a.config
-	row := startRow
-	makeRow := func(label, value string, target **TextWidget) {
-		lbl := Label(Txt(label), Anchor("w"))
-		Grid(lbl, Row(row), Column(0), Sticky("w"), Padx("0.4m"), Pady("0.15m"))
-		w := Text(Height(1), Width(16))
-		Grid(w, Row(row), Column(1), Sticky("we"), Padx("0.4m"), Pady("0.15m"))
-		// Column weight omitted (API may differ); relying on natural expansion.
-		w.Delete("1.0", END)
-		w.Insert("1.0", value)
-		*target = w
-		row++
-	}
-	makeRow("Min Scale", fmt.Sprintf("%.2f", c.MinScale), &a.minScaleText)
-	makeRow("Max Scale", fmt.Sprintf("%.2f", c.MaxScale), &a.maxScaleText)
-	makeRow("Scale Step", fmt.Sprintf("%.3f", c.ScaleStep), &a.scaleStepText)
-	makeRow("Threshold", fmt.Sprintf("%.3f", c.Threshold), &a.thresholdText)
-	makeRow("Stride", fmt.Sprintf("%d", c.Stride), &a.strideText)
-	makeRow("Stop On Score", fmt.Sprintf("%.3f", c.StopOnScore), &a.stopOnScoreText)
-	makeRow("Refine (true/false)", fmt.Sprintf("%t", c.Refine), &a.refineText)
-	makeRow("Return Best Even (true/false)", fmt.Sprintf("%t", c.ReturnBestEven), &a.returnBestText)
-	makeRow("Reel Key (e.g. F3 or R)", c.ReelKey, &a.reelKeyText)
-	makeRow("ROI Size Px", fmt.Sprintf("%d", c.ROISizePx), &a.roiSizeText)
-	makeRow("Cooldown Seconds", fmt.Sprintf("%d", c.CooldownSeconds), &a.cooldownText)
-	makeRow("Max Cast Duration Seconds", fmt.Sprintf("%d", c.MaxCastDurationSeconds), &a.maxCastDurationTxt)
-	a.applyBtn = Button(Txt("Apply Changes"), Command(func() { a.applyConfigFromWidgets() }))
-	Grid(a.applyBtn, Row(row), Column(0), Columnspan(2), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
-	row++
-	return row
-}
-
-// applyConfigFromWidgets updates config from individual widgets (only if capture OFF).
-func (a *app) applyConfigFromWidgets() {
-	if a.captureEnabled.Load() {
-		return
-	}
-	cfg := *a.config
-	parseF := func(w *TextWidget, dst *float64) {
-		if w == nil {
-			return
-		}
-		v := strings.TrimSpace(a.safeGetText(w))
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			*dst = f
-		}
-	}
-	parseI := func(w *TextWidget, dst *int) {
-		if w == nil {
-			return
-		}
-		v := strings.TrimSpace(a.safeGetText(w))
-		if i, err := strconv.Atoi(v); err == nil {
-			*dst = i
-		}
-	}
-	parseB := func(w *TextWidget, dst *bool) {
-		if w == nil {
-			return
-		}
-		v := strings.ToLower(strings.TrimSpace(a.safeGetText(w)))
-		switch v {
-		case "true", "1":
-			*dst = true
-		case "false", "0":
-			*dst = false
-		}
-	}
-	parseF(a.minScaleText, &cfg.MinScale)
-	parseF(a.maxScaleText, &cfg.MaxScale)
-	parseF(a.scaleStepText, &cfg.ScaleStep)
-	parseF(a.thresholdText, &cfg.Threshold)
-	parseI(a.strideText, &cfg.Stride)
-	parseF(a.stopOnScoreText, &cfg.StopOnScore)
-	parseB(a.refineText, &cfg.Refine)
-	parseB(a.returnBestText, &cfg.ReturnBestEven)
-	parseI(a.cooldownText, &cfg.CooldownSeconds)
-	parseI(a.maxCastDurationTxt, &cfg.MaxCastDurationSeconds)
-	// Reel key string (allow raw token like F3 or single letter)
-	if a.reelKeyText != nil {
-		val := strings.TrimSpace(a.safeGetText(a.reelKeyText))
-		if val != "" {
-			cfg.ReelKey = val
-		}
-	}
-	_ = cfg.Validate()
-	*a.config = cfg
-	if a.logger != nil {
-		a.logger.Info("config applied", "config", cfg)
-	}
-	// Persist full config to JSON after application.
-	if err := a.config.Save(a.configPath); err != nil {
-		if a.logger != nil {
-			a.logger.Error("config save failed", "error", err)
-		}
-	} else if a.logger != nil {
-		a.logger.Info("config saved", "path", a.configPath)
-	}
-}
-
-// setConfigEditable enables/disables all config widgets.
-func (a *app) setConfigEditable(enabled bool) {
-	state := "disabled"
-	if enabled {
-		state = "normal"
-	}
-	set := func(w *TextWidget) {
-		if w != nil {
-			w.Configure(State(state))
-		}
-	}
-	set(a.minScaleText)
-	set(a.maxScaleText)
-	set(a.scaleStepText)
-	set(a.thresholdText)
-	set(a.strideText)
-	set(a.stopOnScoreText)
-	set(a.refineText)
-	set(a.returnBestText)
-	set(a.roiSizeText)
-	set(a.cooldownText)
-	set(a.maxCastDurationTxt)
-	if a.applyBtn != nil {
-		a.applyBtn.Configure(State(state))
-	}
-}
-
-func (a *app) safeGetText(t *TextWidget) string {
-	if t == nil {
-		return ""
-	}
-	out := t.Get("1.0", END)
-	return strings.Join(out, "")
 }
 
 func (a *app) exitHandler() {
-	// Cancel scheduled after event if any.
 	if a.afterID != "" {
 		TclAfterCancel(a.afterID)
 	}
-	// Graceful FSM shutdown
-	if a.fsm != nil {
-		a.fsm.Close()
+	if a.container.FSM != nil {
+		a.container.FSM.Close()
 	}
 	Destroy(App)
 }
 
-func (a *app) scheduleUpdate() {
-	// Schedule the next update using TclAfter to stay on Tk's event loop thread.
-	a.afterID = TclAfter(tick, func() { a.update() })
-}
-
-// openSelectionWindow opens a resizable/movable top-level window the user can position
-// and resize. Pressing Confirm stores the selected rectangle; Cancel dismisses it.
-// If a selection rectangle is already active, clicking the button clears it and
-// reverts to full-screen capture.
-func (a *app) openSelectionWindow() {
-	// If already open bring to front.
-	if a.selectionWin != nil {
-		WmGeometry(a.selectionWin.Window)
-		return
-	}
-
-	win := App.Toplevel(Borderwidth(2), Background("#008080"))
-	win.WmTitle("Selection Grid")
-	a.selectionWin = win
-
-	cx, cy := computeCenteredGeometry()
-	screenW := int(cx)
-	screenH := int(cy)
-	initW := screenW * 2 / 3
-	initH := screenH * 5 / 9
-	if initW < 1 {
-		initW = 1
-	}
-	if initH < 1 {
-		initH = 1
-	}
-	x := (screenW - initW) / 2
-	y := (screenH - initH) / 2
-	WmGeometry(win.Window, fmt.Sprintf("%dx%d+%d+%d", initW, initH, x, y))
-
-	WmAttributes(win.Window, "-topmost", 1)
-	WmAttributes(win.Window, "-toolwindow", true)
-	// Keyed transparency: any pixel painted exactly in this hex teal becomes transparent (Win2000/XP+).
-	WmAttributes(win.Window, "-transparentcolor", "#008080")
-
-	a.logger.Debug("wm attributes", slog.String("event", "open selection window"), slog.Any("details", WmAttributes(win.Window)))
-
-	// Layout with left/right border frames for clearer visual bounds.
-	// Row 0: three columns -> left border | center (selection area) | right border.
-	GridRowConfigure(win.Window, 0, Weight(1))
-	GridColumnConfigure(win.Window, 0, Weight(0)) // left border fixed
-	GridColumnConfigure(win.Window, 1, Weight(1)) // center expands
-	GridColumnConfigure(win.Window, 2, Weight(0)) // right border fixed
-
-	leftBorder := win.Frame(Width(4), Background("#FFFFFF")) // vivid red
-	Grid(leftBorder, Row(0), Column(0), Sticky("ns"))
-	centerArea := win.Frame(Background("#008080")) // same teal; becomes transparent
-	Grid(centerArea, Row(0), Column(1), Sticky("nsew"))
-	rightBorder := win.Frame(Width(4), Background("#FFFFFF"))
-	Grid(rightBorder, Row(0), Column(2), Sticky("ns"))
-
-	controls := win.Frame()
-	Grid(controls, Row(1), Column(0), Columnspan(3), Sticky("we"))
-	confirm := win.Button(Txt("Confirm [Enter]"), Command(a.confirmSelection))
-	Grid(confirm, In(controls), Row(0), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
-	cancel := win.Button(Txt("Cancel [Esc]"), Command(a.cancelSelectionWindow))
-	Grid(cancel, In(controls), Row(0), Column(1), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
-	clear := win.Button(Txt("Clear"), Command(a.clearSelection))
-	Grid(clear, In(controls), Row(0), Column(2), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
-
-	// Bind keys to the toplevel widget itself (not its underlying Window field) to avoid invalid command references.
-	Bind(win, "<Return>", Command(a.confirmSelection))
-	Bind(win, "<Escape>", Command(a.cancelSelectionWindow))
-}
-
-// clearSelection resets selection (in-memory + persisted) without opening window.
-func (a *app) clearSelection() {
-	a.selectionRect.Store(image.Rectangle{})
-	if a.config != nil {
-		a.config.SelectionW = 0
-		a.config.SelectionH = 0
-		_ = a.config.Save(a.configPath)
-	}
-}
-
-// redrawOverlay repaints translucent rectangle filling entire window client area.
-// redrawOverlay removed: entire window now serves as the tinted selection area.
-
-// confirmSelection reads geometry of selectionWin, stores rectangle, destroys window.
-func (a *app) confirmSelection() {
-	if a.selectionWin == nil {
-		return
-	}
-	geom := WmGeometry(a.selectionWin.Window)
-	if rect, ok := parseGeometry(geom); ok {
-		a.selectionRect.Store(rect)
-		// Persist selection to config
-		if a.config != nil {
-			a.config.SelectionX = rect.Min.X
-			a.config.SelectionY = rect.Min.Y
-			a.config.SelectionW = rect.Dx()
-			a.config.SelectionH = rect.Dy()
-			_ = a.config.Save(a.configPath)
+func (a *app) ScheduleUpdate() {
+	a.afterID = TclAfter(tick, func() {
+		if a.loop != nil {
+			a.loop.Tick()
 		}
-	}
-	a.destroySelectionWindow()
-}
-
-// cancelSelectionWindow discards window without changing selection.
-func (a *app) cancelSelectionWindow() {
-	a.destroySelectionWindow()
-}
-
-func (a *app) destroySelectionWindow() {
-	if a.selectionWin != nil {
-		Destroy(a.selectionWin)
-		a.selectionWin = nil
-	}
-}
-
-// parseGeometry parses Tk WM geometry strings: WxH+X+Y
-var geomRe = regexp.MustCompile(`^(\d+)x(\d+)\+(-?\d+)\+(-?\d+)$`)
-
-func parseGeometry(g string) (image.Rectangle, bool) {
-	g = strings.TrimSpace(g)
-	m := geomRe.FindStringSubmatch(g)
-	if len(m) != 5 {
-		return image.Rectangle{}, false
-	}
-	w, _ := strconv.Atoi(m[1])
-	h, _ := strconv.Atoi(m[2])
-	x, _ := strconv.Atoi(m[3])
-	y, _ := strconv.Atoi(m[4])
-	if w <= 0 || h <= 0 {
-		return image.Rectangle{}, false
-	}
-	return image.Rect(x, y, x+w, y+h), true
-}
-
-// getSelectionRect returns the stored rectangle or nil if none.
-func (a *app) getSelectionRect() *image.Rectangle {
-	v := a.selectionRect.Load()
-	if v == nil {
-		return nil
-	}
-	r, ok := v.(image.Rectangle)
-	if !ok {
-		return nil
-	}
-	if r == (image.Rectangle{}) { // sentinel for cleared selection
-		return nil
-	}
-	return &r
-}
-
-// toggleCapture enables or disables the capture goroutine.
-func (a *app) toggleCapture() {
-	if a.captureEnabled.Load() {
-		a.captureEnabled.Store(false)
-
-		// Drain channel to free memory.
-		if a.frameCh != nil {
-			select {
-			case <-a.frameCh:
-			default:
-			}
-		}
-		// Reset preview to placeholder instead of destroying to keep layout stable.
-		if a.captureFrame != nil {
-			placeholder := image.NewRGBA(image.Rect(0, 0, 200, 120))
-			pngBytes := encodePNG(placeholder)
-			a.captureFrame.Configure(Image(NewPhoto(Data(pngBytes))))
-			if a.detectionFrame != nil {
-				a.detectionFrame.Configure(Image(NewPhoto(Data(pngBytes))))
-			}
-		}
-		// Reset debug widget state
-		if a.stateLabel != nil {
-			a.stateLabel.Configure(Txt("State: <none>"))
-		}
-		// Gracefully reset FSM & bite detector when capture stops.
-		if a.fsm != nil {
-			a.fsm.EventHalt()
-		}
-
-		// Re-enable config editing
-		a.setConfigEditable(true)
-		return
-	}
-	// Enable capture
-	if a.frameCh == nil {
-		a.frameCh = make(chan *image.RGBA, 1)
-	}
-	a.captureEnabled.Store(true)
-
-	// await switching window focus to target window
-
-	// Enter waiting-for-focus state before starting capture loop.
-	if a.fsm != nil {
-		a.fsm.EventAwaitFocus()
-	}
-	a.goWg.Add(1)
-	go a.safeGo(func() {
-		defer a.goWg.Done()
-		a.captureLoop()
 	})
-	// Disable config editing while running
-	a.setConfigEditable(false)
 }
 
-// captureLoop runs in a goroutine and pushes latest frames.
-func (a *app) captureLoop() {
-	for a.captureEnabled.Load() {
-
-		var img *image.RGBA
-		if rect := a.getSelectionRect(); rect != nil {
-			// Use selected sub-rectangle
-			partial, err := capture.GrabSelection(*rect)
-			if err == nil && partial != nil {
-				img = partial
-			}
-		} else {
-			full, err := capture.Grab()
-			if err == nil && full != nil {
-				img = full
-			}
-		}
-		if img != nil {
-			select {
-			case a.frameCh <- img:
-			default:
-			}
-		}
+// getSelectionRect proxies to selectionView (may be nil).
+// toggleCapture delegates to presenter.
+func (a *app) toggleCapture() {
+	if cp := a.container.CapturePresenter; cp != nil {
+		cp.Toggle()
 	}
 }
 
-// safeGo wraps a function with panic recovery and sends error to goErrCh.
-func (a *app) safeGo(fn func()) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				perr := fmt.Errorf("panic: %v\n%s", r, debug.Stack())
-				select {
-				case a.goErrCh <- perr:
-				default:
-					// channel full; drop but log directly
-					if a.logger != nil {
-						a.logger.Error("dropped panic error", "error", perr)
-					}
-				}
-			}
-		}()
-		fn()
-	}()
+// safeGo removed; inline goroutines use explicit panic recovery where needed.
+
+// (legacy preview/state methods removed in favor of presenters)
+func (a *app) Running() bool                   { return a.captureRunning() }
+func (a *app) Frames() <-chan *image.RGBA      { return a.captureFrames() }
+func (a *app) SelectionRect() *image.Rectangle { return a.selectionRect() }
+
+// DetectionView methods already via ui: UpdateCapture, UpdateDetection
+// DetectionFSM adapter methods
+// Current returns current fishing state (legacy adapter method retained for compatibility elsewhere).
+func (a *app) Current() fishing.FishingState {
+	if a.container.FSM != nil {
+		return a.container.FSM.Current()
+	}
+	return fishing.StateHalt
 }
-
-// updateCaptureFrame draws a downsampled preview of frame into the canvas.
-func (a *app) updateCaptureFrame(frame *image.RGBA) {
-	if frame == nil {
-		return
-	}
-	maxW := a.width - 40
-	if maxW < 100 {
-		maxW = 100
-	}
-	maxH := a.height - 140
-	if maxH < 100 {
-		maxH = 100
-	}
-
-	scaled := scaleToFit(frame, maxW, maxH)
-	pngBytes := encodePNG(scaled)
-	if a.captureFrame != nil {
-		a.captureFrame.Configure(Image(NewPhoto(Data(pngBytes))))
+func (a *app) EventTargetAcquiredAt(x, y int) {
+	if a.container.FSM != nil {
+		a.container.FSM.EventTargetAcquiredAt(x, y)
 	}
 }
-
-// encodePNG converts an image.Image to PNG bytes. On error it returns an empty slice.
-func encodePNG(img image.Image) []byte {
-	var buf bytes.Buffer
-	_ = png.Encode(&buf, img) // ignore error; result may be empty
-	return buf.Bytes()
+func (a *app) TargetCoordinates() (int, int, bool) {
+	if a.container.FSM != nil {
+		return a.container.FSM.TargetCoordinates()
+	}
+	return 0, 0, false
 }
-
-// scaleToFit returns a new image scaled with nearest-neighbor so that both width and height
-// fit within maxW/maxH (maintaining aspect ratio). If already within bounds it returns original.
-func scaleToFit(src image.Image, maxW, maxH int) image.Image {
-	b := src.Bounds()
-	w := b.Dx()
-	h := b.Dy()
-	if w <= maxW && h <= maxH {
-		return src // no scaling needed
+func (a *app) ProcessMonitoringFrame(img *image.RGBA, now time.Time) {
+	if a.container.FSM != nil {
+		a.container.FSM.ProcessMonitoringFrame(img, now)
 	}
-	ratioW := float64(maxW) / float64(w)
-	ratioH := float64(maxH) / float64(h)
-	ratio := ratioW
-	if ratioH < ratio {
-		ratio = ratioH
-	}
-	newW := int(float64(w)*ratio + 0.5)
-	newH := int(float64(h)*ratio + 0.5)
-	if newW < 1 {
-		newW = 1
-	}
-	if newH < 1 {
-		newH = 1
-	}
-	dst := image.NewRGBA(image.Rect(0, 0, newW, newH))
-	for y := 0; y < newH; y++ {
-		sy := int(float64(y) * float64(h) / float64(newH))
-		for x := 0; x < newW; x++ {
-			sx := int(float64(x) * float64(w) / float64(newW))
-			c := src.At(b.Min.X+sx, b.Min.Y+sy)
-			// Preserve alpha if present
-			r, g, bl, a := c.RGBA()
-			dst.SetRGBA(x, y, color.RGBA{uint8(r >> 8), uint8(g >> 8), uint8(bl >> 8), uint8(a >> 8)})
-		}
-	}
-	return dst
 }
