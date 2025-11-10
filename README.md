@@ -14,9 +14,11 @@ https://github.com/user-attachments/assets/002c679b-130e-422f-99b9-4503c648b8f3
 1. Download or build.
 2. Run `pixel-bot-go.exe` as Administrator (required for input injection).
 3. In-game: ensure bobber area visible.
-4. Press Start.
-5. States cycle: Searching → Monitoring → Reeling → Cooldown.
-6. Press Stop to end. Tweak threshold/stride later if needed.
+4. Select the game/window from the dropdown.
+5. Press Start.
+6. Focus the game window (keep it active).
+7. Automated fishing loop: Searching → Monitoring → Reeling → Repeat.
+8. Press Stop to end. Tweak threshold/stride later if needed.
 
 Docs (Diataxis):
 * [Tutorials](docs/TUTORIALS.md) – first fishing cycle & guided optimizations.
