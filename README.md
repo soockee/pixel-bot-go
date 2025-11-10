@@ -155,7 +155,14 @@ Close the app, delete `pixle_bot_config.json` and (optionally) `pixel_bot_logs.j
 ---
 
 ## 12. License / Credits
-Provided as‑is with no warranty. Use responsibly. (Add your license text here if needed.)
+Licensed under the MIT License. See [`LICENSE`](LICENSE) for full text.
+
+Copyright (c) 2025 Simon Stockhause.
+
+If you use or fork this project, please keep a visible credit such as:
+"Pixel Bot by Simon Stockhause" in your README or about dialog where feasible.
+
+Provided as‑is with no warranty. Use responsibly.
 
 ---
 
