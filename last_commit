@@ -1,0 +1,3543 @@
+diff --git a/README.md b/README.md
+index 4c09161..7790279 100644
+--- a/README.md
++++ b/README.md
+@@ -34,7 +34,10 @@ That’s it. If it “misses” or is too trigger‑happy, adjust a couple of se
+ ---
+ 
+ ## 3. The Window You’ll See
+-Top area: current state (e.g. Searching, Monitoring, Cooldown) and maybe a timer.
++Top area: current state (e.g. Searching, Monitoring, Cooldown) plus two timers:
++* Session – elapsed time of the current active capture periods (sums across toggles until you exit or restart).
++* Total – cumulative time across all capture periods since launch (includes the ongoing session while active).
++They update live only while capture is enabled; when you pause they freeze until you resume.
+ Middle left: settings panel (numbers, checkboxes, buttons to apply changes, selection area tool).
+ Middle right: live preview image of what it is looking at.
+ Bottom: buttons (Start / Stop, maybe Exit, maybe Selection Grid, etc.).
+@@ -97,6 +100,8 @@ go build -o pixel-bot-go.exe
+ 
+ Run PowerShell as Administrator if mouse movement or key presses do nothing in the game window.
+ 
++For profiling and deeper diagnostics (memory leak, CPU hotspots), see `docs/DEBUG.md`.
++
+ ---
+ 
+ ## 7. Day‑To‑Day Use Tips
+diff --git a/app/app.go b/app/app.go
+index 314e99c..02c60b9 100644
+--- a/app/app.go
++++ b/app/app.go
+@@ -19,10 +19,10 @@ import (
+ 	. "modernc.org/tk9.0"
+ )
+ 
+-// Adapters removed; app now injects concrete services directly (CaptureSvc, SelectionOverlay, UI).
++// The app constructs and wires concrete services (capture, presenters, UI).
+ 
+ const (
+-	tick = 100 * time.Millisecond
++	tick = 33 * time.Millisecond
+ )
+ 
+ type app struct {
+@@ -38,16 +38,10 @@ type app struct {
+ 	selectionView  view.SelectionOverlay
+ }
+ 
+-// Inline convenience getters reduce surface area; presenters now depend directly on container services.
++// Small getters used by presenters and UI wiring.
+ func (a *app) captureRunning() bool {
+ 	return a.container.CaptureSvc != nil && a.container.CaptureSvc.Running()
+ }
+-func (a *app) captureFrames() <-chan *image.RGBA {
+-	if a.container.CaptureSvc != nil {
+-		return a.container.CaptureSvc.Frames()
+-	}
+-	return nil
+-}
+ func (a *app) selectionRect() *image.Rectangle {
+ 	if a.selectionView != nil {
+ 		return a.selectionView.ActiveRect()
+@@ -62,15 +56,15 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
+ 	App.WmTitle(title)
+ 	WmProtocol(App, "WM_DELETE_WINDOW", a.exitHandler)
+ 	WmGeometry(App, fmt.Sprintf("%dx%d+100+100", width, height))
+-	// Initialize styles early (root window background etc.).
++	// Initialize UI styles and selection overlay.
+ 	theme.InitStyles()
+ 	a.selectionView = view.NewSelectionOverlay(cfg, a.configPath, logger)
+ 	return a
+ }
+ 
+-// detectViewAdapter removed; RootView (UI) already satisfies DetectionView interface.
++// RootView satisfies the detection view interface.
+ 
+-// Run builds layout, wires presenters, starts update loop and blocks until exit.
++// Run sets up presenters, starts the update loop and blocks until the window is closed.
+ func (a *app) Run() (err error) {
+ 	cfg := a.container.Config
+ 	a.layout()
+@@ -87,10 +81,11 @@ func (a *app) Run() (err error) {
+ 		cfg,
+ 		a.container.TargetImg,
+ 		a.container.Detection,
++		a.logger,
+ 	)
+ 	a.container.CapturePresenter = presenter.NewCapturePresenter(a.container.Capture, a.container.CaptureSvc, a.container.FSM, a.container.RootView)
+ 
+-	// Focus watcher starts only while FSM awaits focus; not part of main Loop ticks.
++	// Focus watcher runs separately while FSM awaits focus.
+ 	focusWatcher := presenter.NewFocusWatcher(a.container.FSM, a.logger, nil, func() string { return strings.TrimSpace(strings.ToLower(a.selectedWindow)) })
+ 	a.loop = presenter.NewLoop(a.container.SessionPresenter, a.container.FSMPresenter, a.container.DetectionPresenter, a.ScheduleUpdate)
+ 
+@@ -104,6 +99,11 @@ func (a *app) Run() (err error) {
+ 		focusWatcher.OnState(prev, next)
+ 	})
+ 
++	// Start debug loggers when configured.
++	if cfg != nil && cfg.Debug {
++		// debug.StartGoroutineLogger(2*time.Second, a.logger)
++		// debug.StartMemLogger(1*time.Second, a.logger)
++	}
+ 	a.ScheduleUpdate()
+ 	App.Wait()
+ 
+@@ -150,23 +150,19 @@ func (a *app) ScheduleUpdate() {
+ }
+ 
+ // getSelectionRect proxies to selectionView (may be nil).
+-// toggleCapture delegates to presenter.
++// toggleCapture delegates to the capture presenter.
+ func (a *app) toggleCapture() {
+ 	if cp := a.container.CapturePresenter; cp != nil {
+ 		cp.Toggle()
+ 	}
+ }
+ 
+-// safeGo removed; inline goroutines use explicit panic recovery where needed.
+-
+-// (legacy preview/state methods removed in favor of presenters)
++// Inline goroutines use explicit panic recovery where needed.
++// State and preview behavior is provided by presenters.
+ func (a *app) Running() bool                   { return a.captureRunning() }
+-func (a *app) Frames() <-chan *image.RGBA      { return a.captureFrames() }
+ func (a *app) SelectionRect() *image.Rectangle { return a.selectionRect() }
+ 
+-// DetectionView methods already via ui: UpdateCapture, UpdateDetection
+-// DetectionFSM adapter methods
+-// Current returns current fishing state (legacy adapter method retained for compatibility elsewhere).
++// Detection-related methods forward to the FSM.
+ func (a *app) Current() fishing.FishingState {
+ 	if a.container.FSM != nil {
+ 		return a.container.FSM.Current()
+diff --git a/debug/goroutines.go b/debug/goroutines.go
+new file mode 100644
+index 0000000..d8a407f
+--- /dev/null
++++ b/debug/goroutines.go
+@@ -0,0 +1,38 @@
++package debug
++
++// Debug goroutine metrics logger. Started only when config.Debug is true.
++// Emits goroutine count (runtime metrics) and stack usage at a fixed interval.
++// Intentionally minimal: focuses solely on ruling out goroutine / stack driven RSS growth.
++
++import (
++	"log/slog"
++	"runtime"
++	"runtime/metrics"
++	"time"
++)
++
++// startGoroutineLogger launches a ticker that logs goroutine count and stack memory.
++// It is lightweight; disable by running without the debug flag.
++func StartGoroutineLogger(interval time.Duration, logger *slog.Logger) {
++	if interval <= 0 {
++		interval = time.Second
++	}
++
++	go func() {
++		t := time.NewTicker(interval)
++		defer t.Stop()
++		samples := []metrics.Sample{{Name: "/sched/goroutines:goroutines"}}
++		for range t.C {
++			metrics.Read(samples)
++			goroutines := samples[0].Value.Uint64()
++			var ms runtime.MemStats
++			runtime.ReadMemStats(&ms)
++			logger.Info("goroutine-stacks",
++				slog.Uint64("goroutines", goroutines),
++				slog.Uint64("stack_inuse", uint64(ms.StackInuse)),
++				slog.Uint64("stack_sys", uint64(ms.StackSys)),
++				slog.Uint64("heap_alloc", uint64(ms.HeapAlloc)),
++			)
++		}
++	}()
++}
+diff --git a/debug/memstats.go b/debug/memstats.go
+new file mode 100644
+index 0000000..d496e87
+--- /dev/null
++++ b/debug/memstats.go
+@@ -0,0 +1,71 @@
++//go:build windows
++
++package debug
++
++// Memory/RSS periodic logger enabled when config.Debug is true.
++// Logs working set (RSS) along with Go heap stats to correlate native vs heap growth.
++
++import (
++	"log/slog"
++	"runtime"
++	"time"
++	"unsafe"
++
++	"golang.org/x/sys/windows"
++)
++
++// processMemoryCounters matches PROCESS_MEMORY_COUNTERS from psapi.
++type processMemoryCounters struct {
++	cb                         uint32
++	PageFaultCount             uint32
++	PeakWorkingSetSize         uintptr
++	WorkingSetSize             uintptr
++	QuotaPeakPagedPoolUsage    uintptr
++	QuotaPagedPoolUsage        uintptr
++	QuotaPeakNonPagedPoolUsage uintptr
++	QuotaNonPagedPoolUsage     uintptr
++	PagefileUsage              uintptr
++	PeakPagefileUsage          uintptr
++}
++
++var (
++	modPsapi                 = windows.NewLazySystemDLL("psapi.dll")
++	procGetProcessMemoryInfo = modPsapi.NewProc("GetProcessMemoryInfo")
++)
++
++// startMemLogger launches a goroutine that logs memory stats every interval.
++// It is best-effort; failures to query RSS are logged once and suppressed.
++func StartMemLogger(interval time.Duration, logger *slog.Logger) {
++	if interval <= 0 {
++		interval = 2 * time.Second
++	}
++	go func() {
++		ticker := time.NewTicker(interval)
++		defer ticker.Stop()
++		var rssErrLogged bool
++		for range ticker.C {
++			var ms runtime.MemStats
++			runtime.ReadMemStats(&ms)
++			gcount := runtime.NumGoroutine()
++			rss := uint64(0)
++			pmc := processMemoryCounters{cb: uint32(unsafe.Sizeof(processMemoryCounters{}))}
++			r1, _, err := procGetProcessMemoryInfo.Call(uintptr(windows.CurrentProcess()), uintptr(unsafe.Pointer(&pmc)), uintptr(pmc.cb))
++			if r1 != 0 {
++				rss = uint64(pmc.WorkingSetSize)
++			} else if !rssErrLogged {
++				logger.Warn("memlog: GetProcessMemoryInfo call failed", slog.String("err", err.Error()))
++				rssErrLogged = true
++			}
++			logger.Info("memstats",
++				slog.Int("goroutines", gcount),
++				slog.Uint64("heap_alloc", ms.HeapAlloc),
++				slog.Uint64("heap_inuse", ms.HeapInuse),
++				slog.Uint64("heap_idle", ms.HeapIdle),
++				slog.Uint64("heap_sys", ms.HeapSys),
++				slog.Uint64("next_gc", ms.NextGC),
++				slog.Uint64("rss", rss),
++				slog.Uint64("num_gc", uint64(ms.NumGC)),
++			)
++		}
++	}()
++}
+diff --git a/docs/DEBUG.md b/docs/DEBUG.md
+new file mode 100644
+index 0000000..f7306c5
+--- /dev/null
++++ b/docs/DEBUG.md
+@@ -0,0 +1,126 @@
++# Debug & Profiling Guide
++
++This document explains how to enable runtime profiling to investigate memory leaks, CPU hotspots, and goroutine growth in Pixel Bot.
++
++## Enabling Profiling
++Set `"debug": true` in `pixle_bot_config.json` **before** starting the application. When enabled, an internal HTTP server exposes the standard Go `pprof` endpoints at:
++
++```
++http://localhost:6060/debug/pprof/
++```
++Disable by reverting `"debug": false`.
++
++## Key Endpoints
++| Endpoint                          | Purpose                                                  |
++| --------------------------------- | -------------------------------------------------------- |
++| `/debug/pprof/`                   | Index page listing available profiles                    |
++| `/debug/pprof/profile?seconds=30` | CPU profile over interval (default 30s if not specified) |
++| `/debug/pprof/heap`               | Heap allocations (live objects)                          |
++| `/debug/pprof/goroutine`          | Goroutine dump (use `?debug=2` for human readable)       |
++| `/debug/pprof/block`              | Blocking profile (contention)                            |
++| `/debug/pprof/mutex`              | Mutex hold/wait times                                    |
++
++## Common Commands (PowerShell)
++```powershell
++# CPU profile for 30 seconds (opens web UI)
++go tool pprof -http=: http://localhost:6060/debug/pprof/profile?seconds=30
++
++# Heap snapshot (in-use space)
++go tool pprof -http=: http://localhost:6060/debug/pprof/heap
++
++# Goroutine dump to file
++curl http://localhost:6060/debug/pprof/goroutine?debug=2 > goroutines.txt
++
++# Mutex profile (samples must accumulate; let app run under load)
++curl http://localhost:6060/debug/pprof/mutex > mutex.pb
++
++# Block profile (contention)
++curl http://localhost:6060/debug/pprof/block > block.pb
++```
++
++## Interpreting Results
++### Heap Profile
++Look for large retained byte counts associated with:
++- Frame buffers or image slices continually appended but never released
++- Channels or slices growing unbounded
++- Maps keyed by timestamps or IDs without eviction
++
++Switch between views inside the pprof UI:
++- `inuse_space` (currently retained)
++- `alloc_space` (cumulative allocations; helps spot churn)
++
++Comparing two heap snapshots:
++```powershell
++go tool pprof -diff_base pooled1.pb.gz pooled2.pb.gz
++```
++
++### Goroutine & Stack (Minimal)
++Heap profiles exclude goroutine stacks. To rule out goroutine / stack-driven RSS growth, log just goroutine count and stack usage via runtime metrics + `MemStats`.
++
++Add a short-lived debug loop:
++```go
++func DebugGoroutineStacks(interval time.Duration) {
++    t := time.NewTicker(interval)
++    defer t.Stop()
++    samples := []metrics.Sample{{Name: "/sched/goroutines:goroutines"}}
++    for range t.C {
++        metrics.Read(samples)
++        goroutines := samples[0].Value.Uint64()
++        var ms runtime.MemStats
++        runtime.ReadMemStats(&ms)
++        log.Printf("goroutines=%d stackInuse=%dKB stackSys=%dKB heapAlloc=%dKB", goroutines, ms.StackInuse/1024, ms.StackSys/1024, ms.HeapAlloc/1024)
++    }
++}
++```
++Invoke when debugging:
++```go
++go DebugGoroutineStacks(1 * time.Second)
++```
++Interpretation (after warm-up):
++- Stable `goroutines` + stable `stackInuse` ⇒ stacks not cause.
++- Growing `goroutines` or `stackInuse` ⇒ investigate leaked goroutines or deep stack usage.
++If RSS keeps rising with both stable, focus on native allocations (image/GDI/mmap) or unreleased arenas.
++
++### CPU Profile
++High percentages in functions like detection loops or scaling routines may indicate optimization opportunities: preallocation, reduced conversions, or avoiding redundant image processing.
++
++### Goroutines
++If goroutine count increases steadily without returning to a baseline, you may have leaked workers or unbounded background tasks. Inspect stack traces for repeatedly waiting on receive/send that never completes.
++
++## Monitoring Process RSS (Working Set)
++Heap profiles show only Go-managed heap objects. The process Working Set (RSS) can grow due to:
++- Native allocations (GDI / DIB sections, Tk toolkit, cgo)
++- Go heap arenas not yet returned to the OS (even if objects freed)
++- Goroutine stacks and runtime structures
++- Temporary large buffers causing high-water marks
++
++Track RSS alongside heap to distinguish a true leak from allocator reuse.
++
++### Quick Live Console Loop
++```powershell
++$botPid = (Get-Process -Name pixel-bot-go).Id
++while ($true) {
++	$p = Get-Process -Id $botPid -ErrorAction Stop
++	$wsMB    = [math]::Round($p.WorkingSet64 / 1MB, 1)
++	$privMB  = [math]::Round($p.PrivateMemorySize64 / 1MB, 1)
++	$threads = $p.Threads.Count
++	$handles = $p.HandleCount
++	'{0:HH:mm:ss} WS={1}MB Private={2}MB Thr={3} Hnd={4}' -f (Get-Date), $wsMB, $privMB, $threads, $handles
++	Start-Sleep 1
++}
++```
++
++### Interpreting RSS vs Heap
++- If `WS` keeps climbing but heap `inuse_space` snapshots stay roughly flat → native memory or unreleased arenas.
++- If both climb together steadily past warm-up → real retention / leak path.
++- Spikes with partial drops → transient large allocations (e.g. scaling buffers) and GC reclaim.
++
++Combine with heap snapshots:
++```powershell
++Invoke-WebRequest http://localhost:6060/debug/pprof/heap -OutFile heap.pb.gz
++go tool pprof heap.pb.gz
++```
++
++Look at difference between Working Set and `HeapAlloc` (from runtime stats) to gauge non-heap usage.
++
++
+diff --git a/domain/action/actions_windows.go b/domain/action/actions_windows.go
+index c815832..0adeb5f 100644
+--- a/domain/action/actions_windows.go
++++ b/domain/action/actions_windows.go
+@@ -11,8 +11,8 @@ import (
+ 	"golang.org/x/sys/windows"
+ )
+ 
+-// clickRight performs a right mouse button click (down + up) using legacy mouse_event.
+-// For production use, SendInput is preferred for synthesis reliability.
++// ClickRight sends a right mouse button click (down then up).
++// Windows implementation using the Win32 API.
+ func ClickRight() {
+ 	user32 := windows.NewLazySystemDLL("user32.dll")
+ 	mouseEvent := user32.NewProc("mouse_event")
+@@ -23,16 +23,16 @@ func ClickRight() {
+ 	_, _, _ = mouseEvent.Call(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
+ }
+ 
+-// moveCursor moves the OS mouse pointer (Windows only).
++// MoveCursor moves the OS mouse pointer to (x, y).
++// Windows implementation using SetCursorPos.
+ func MoveCursor(x, y int) {
+-	// Windows SetCursorPos
+ 	user32 := windows.NewLazySystemDLL("user32.dll")
+ 	setCursorPos := user32.NewProc("SetCursorPos")
+ 	_, _, _ = setCursorPos.Call(uintptr(x), uintptr(y))
+ }
+ 
+-// pressKey issues a key down + key up for the given virtual-key code (Windows only).
+-// This uses keybd_event for simplicity; for production consider SendInput.
++// PressKey sends a key down followed by a key up for the provided virtual-key code.
++// Uses keybd_event on Windows.
+ func PressKey(vk byte) {
+ 	user32 := windows.NewLazySystemDLL("user32.dll")
+ 	keybdEvent := user32.NewProc("keybd_event")
+@@ -45,10 +45,8 @@ func PressKey(vk byte) {
+ 	_, _, _ = keybdEvent.Call(uintptr(vk), 0, KEYEVENTF_KEYUP, 0)
+ }
+ 
+-// (computeCenteredGeometry moved to ui/view/selection_overlay.go; legacy removed)
+-
+-// parseVK converts a user-provided key token (e.g. "F3", "R") into a Windows virtual key code.
+-// Supports function keys F1-F12 and single alphabetic characters. Falls back to F3 if unknown.
++// ParseVK converts a key token (e.g. "F3", "R") into a Windows virtual-key code.
++// Recognizes F1..F12 and single letters A..Z. Unknown tokens return VK_F3.
+ func ParseVK(key string) byte {
+ 	k := strings.ToUpper(strings.TrimSpace(key))
+ 	if len(k) == 2 && k[0] == 'F' { // F1-F9
+@@ -77,9 +75,8 @@ func ParseVK(key string) byte {
+ 	return 0x72
+ }
+ 
+-// ListWindows returns a slice of titles of top-level visible windows.
+-// Empty or whitespace-only titles are skipped.
+-// This is Windows-specific and uses EnumWindows + GetWindowTextW.
++// ListWindows returns titles of top-level visible windows.
++// Empty titles are skipped.
+ func ListWindows() ([]string, error) {
+ 	user32 := windows.NewLazySystemDLL("user32.dll")
+ 	enumWindows := user32.NewProc("EnumWindows")
+@@ -129,7 +126,8 @@ func ListWindows() ([]string, error) {
+ 	return titles, nil
+ }
+ 
+-// ForegroundWindowTitle returns the current foreground window's title or empty string.
++// ForegroundWindowTitle returns the title of the current foreground window.
++// If no foreground window is available an error is returned.
+ func ForegroundWindowTitle() (string, error) {
+ 	user32 := windows.NewLazySystemDLL("user32.dll")
+ 	getForegroundWindow := user32.NewProc("GetForegroundWindow")
+diff --git a/domain/capture/capture_service.go b/domain/capture/capture_service.go
+index 96e4804..aab38da 100644
+--- a/domain/capture/capture_service.go
++++ b/domain/capture/capture_service.go
+@@ -7,49 +7,78 @@ import (
+ 	"time"
+ )
+ 
+-// CaptureService acquires frames (either full screen or a selection rectangle) and publishes them.
+-// Start launches a goroutine; frames can be read from Frames(). Stop signals termination.
+-// Zero value is not usable; construct with newCaptureService.
++const captureStatsLogInterval = 5 * time.Second
++
++// CaptureService acquires image frames (selection or full screen) and exposes the
++// latest capture alongside instrumentation data. Use NewCaptureService to
++// construct an instance.
+ type CaptureService interface {
+ 	Start()
+ 	Stop()
+-	Frames() <-chan *image.RGBA
++	LatestFrame() FrameSnapshot
+ 	Running() bool
+ 	SetSelectionProvider(func() *image.Rectangle)
++	Stats() CaptureStats
+ }
+ 
+ type captureService struct {
+-	running atomic.Bool
+-	frameCh chan *image.RGBA
+-	selFn   func() *image.Rectangle
+-	logger  *slog.Logger
+-	// instrumentation counters (unexported)
+-	captures     atomic.Uint64 // successful captures delivered
+-	skipped      atomic.Uint64 // iterations skipped due to full buffer
+-	errors       atomic.Uint64 // capture attempts that returned an error or nil image
+-	captureNanos atomic.Uint64 // total nanoseconds spent capturing (successful only)
+-	// error logging control
++	running      atomic.Bool
++	latest       atomic.Pointer[FrameSnapshot]
++	selFn        func() *image.Rectangle // user selection rectangle (optional)
++	logger       *slog.Logger
++	captures     atomic.Uint64
++	skipped      atomic.Uint64
++	captureNanos atomic.Uint64
++	sequence     atomic.Uint64
+ }
+ 
+ func newCaptureService(logger *slog.Logger, selectionFn func() *image.Rectangle) *captureService {
+-	cs := &captureService{frameCh: make(chan *image.RGBA, 1), selFn: selectionFn, logger: logger}
+-	return cs
++	return &captureService{selFn: selectionFn, logger: logger}
+ }
+ 
+-// NewCaptureService exports a constructor returning the public interface, allowing
+-// composition roots (container) to depend only on the interface without touching
+-// the concrete struct.
++// NewCaptureService constructs a capture service that provides frames via Frames().
+ func NewCaptureService(logger *slog.Logger, selectionFn func() *image.Rectangle) CaptureService {
+-	// Legacy bus parameter ignored; global bus used for all events.
+ 	return newCaptureService(logger, selectionFn)
+ }
+ 
+ func (s *captureService) SetSelectionProvider(fn func() *image.Rectangle) { s.selFn = fn }
+ 
+-func (s *captureService) Frames() <-chan *image.RGBA { return s.frameCh }
++func (s *captureService) LatestFrame() FrameSnapshot {
++	snap := s.latest.Load()
++	if snap == nil {
++		return FrameSnapshot{}
++	}
++	return *snap
++}
+ 
+ func (s *captureService) Running() bool { return s.running.Load() }
+ 
++func (s *captureService) Stats() CaptureStats {
++	captures := s.captures.Load()
++	skipped := s.skipped.Load()
++	total := s.captureNanos.Load()
++	var avg time.Duration
++	avgMicros := 0.0
++	if captures > 0 && total > 0 {
++		avg = time.Duration(total / captures)
++		avgMicros = float64(avg) / float64(time.Microsecond)
++	}
++	snapshot := s.LatestFrame()
++	age := time.Duration(0)
++	if !snapshot.CapturedAt.IsZero() {
++		age = time.Since(snapshot.CapturedAt)
++	}
++	return CaptureStats{
++		Captures:         captures,
++		Skipped:          skipped,
++		AvgCapture:       avg,
++		AvgCaptureMicros: avgMicros,
++		LastCapture:      snapshot.CapturedAt,
++		LatestFrameAge:   age,
++		Sequence:         snapshot.Sequence,
++	}
++}
++
+ func (s *captureService) Start() {
+ 	if s.running.Load() {
+ 		return
+@@ -63,51 +92,66 @@ func (s *captureService) Stop() {
+ 		return
+ 	}
+ 	s.running.Store(false)
+-	// Drain one frame to avoid stale reference retention.
+-	select {
+-	case <-s.frameCh:
+-	default:
+-	}
+ }
+ 
+ func (s *captureService) loop() {
+-	// We only capture when the channel is empty to avoid doing work for frames that would be dropped.
+-	// Yield or microsleep when full to reduce CPU pressure under slow consumers.
++	logTicker := time.NewTicker(captureStatsLogInterval)
++	defer logTicker.Stop()
+ 	for s.running.Load() {
+-		if len(s.frameCh) == cap(s.frameCh) {
+-			// Buffer full; skip capture to avoid wasted allocations; micro-sleep reduces CPU without large latency penalty.
+-			s.skipped.Add(1)
+-			time.Sleep(200 * time.Microsecond)
+-			continue
+-		}
+ 		start := time.Now()
+ 		var img *image.RGBA
+-		var err error
+-		// Try selection first if provided.
+-		if sel := s.selFn; sel != nil {
+-			if r := sel(); r != nil {
+-				img, err = GrabSelection(*r)
+-				if err != nil {
+-					s.logger.Error("capture loop", "error", err)
++
++		if s.selFn != nil {
++			if r := s.selFn(); r != nil && !r.Empty() {
++				if out, err := GrabSelection(*r); err == nil {
++					img = out
++				} else if s.logger != nil {
++					s.logger.Error("capture selection", "error", err)
+ 				}
+ 			}
+ 		}
+-		// Fallback to full screen if selection failed or not set.
++
+ 		if img == nil {
+-			full, err := Grab()
+-			if err != nil {
+-				s.logger.Error("capture loop", "error", err)
++			if full, err := Grab(); err != nil {
++				if s.logger != nil {
++					s.logger.Error("capture full", "error", err)
++				}
+ 			} else if full != nil {
+ 				img = full
+ 			}
+ 		}
++
+ 		if img == nil {
+-			panic(1)
++			s.skipped.Add(1)
++			time.Sleep(1 * time.Millisecond)
++			continue
+ 		}
++
+ 		elapsed := time.Since(start)
+ 		s.captureNanos.Add(uint64(elapsed.Nanoseconds()))
+ 		s.captures.Add(1)
+-		// Blocking send is safe: we checked channel was empty.
+-		s.frameCh <- img
++		seq := s.sequence.Add(1)
++		s.latest.Store(&FrameSnapshot{Image: img, CapturedAt: time.Now(), Sequence: seq})
++
++		select {
++		case <-logTicker.C:
++			s.logStats()
++		default:
++		}
++
++		time.Sleep(200 * time.Microsecond)
++	}
++}
++
++func (s *captureService) logStats() {
++	if s.logger == nil {
++		return
+ 	}
++	stats := s.Stats()
++	s.logger.Debug("capture.stats",
++		"captures", stats.Captures,
++		"skipped", stats.Skipped,
++		"avg_capture", stats.AvgCapture,
++		"age", stats.LatestFrameAge,
++	)
+ }
+diff --git a/domain/capture/capture_windows.go b/domain/capture/capture_windows.go
+index 92b2e48..e963962 100644
+--- a/domain/capture/capture_windows.go
++++ b/domain/capture/capture_windows.go
+@@ -2,17 +2,15 @@
+ 
+ package capture
+ 
+-// Windows screen capture using a single persistent DIB section backing buffer.
+-// This eliminates per-frame Go heap allocations: the same *image.RGBA instance
+-// is mutated in place for every capture. Consumers that need to retain pixel
+-// data across frames must copy it themselves. The implementation recreates
+-// GDI resources only when the requested capture rectangle dimensions change.
++// Windows screen capture using per-frame GDI allocations.
++// Each Grab/GrabSelection creates a temporary DIB, BitBlt's the screen
++// into it, converts BGRA->RGBA into a heap-owned *image.RGBA, and frees
++// GDI resources.
+ 
+ import (
+ 	"errors"
+ 	"fmt"
+ 	"image"
+-	"sync"
+ 	"syscall"
+ 	"unsafe"
+ )
+@@ -43,14 +41,7 @@ var (
+ 	procGetLastError       = kernel32.NewProc("GetLastError")
+ )
+ 
+-// Minimal type aliases for clarity.
+-type (
+-	handle  uintptr
+-	hdc     handle
+-	hbitmap handle
+-)
+-
+-// BITMAPINFO structures (matching Win32 layout).
++// BITMAPINFO structures (Win32 layout).
+ type bitmapInfoHeader struct {
+ 	BiSize          uint32
+ 	BiWidth         int32
+@@ -70,17 +61,9 @@ type bitmapInfo struct {
+ 	_      [4]byte // one RGBQUAD placeholder (unused for 32-bit)
+ }
+ 
+-// persistent resources guarded by a mutex.
+-var captureState struct {
+-	mu      sync.Mutex
+-	w, h    int
+-	memDC   hdc
+-	bmp     hbitmap
+-	bitsPtr unsafe.Pointer
+-	img     *image.RGBA // reused frame (BGRA converted to RGBA each capture)
+-}
++// Per-frame allocation; no persistent globals.
+ 
+-// Grab returns a full-screen frame using the persistent buffer.
++// Grab captures the full screen and returns a newly allocated RGBA image.
+ func Grab() (*image.RGBA, error) {
+ 	w := int(getSystemMetric(smCxScreen))
+ 	h := int(getSystemMetric(smCyScreen))
+@@ -90,7 +73,7 @@ func Grab() (*image.RGBA, error) {
+ 	return captureRect(image.Rect(0, 0, w, h))
+ }
+ 
+-// GrabSelection captures the provided rectangle (clipped to screen bounds).
++// GrabSelection captures sel (clipped to screen bounds) and returns an RGBA image.
+ func GrabSelection(sel image.Rectangle) (*image.RGBA, error) {
+ 	if sel.Empty() {
+ 		return nil, errors.New("capture: empty selection")
+@@ -105,81 +88,29 @@ func GrabSelection(sel image.Rectangle) (*image.RGBA, error) {
+ 	return captureRect(r)
+ }
+ 
+-// captureRect performs the BitBlt into a persistent top-down DIB section and
+-// returns the single reused RGBA image. Pixels are updated in place.
++// captureRect performs BitBlt into a top-down DIB section and returns a
++// newly allocated *image.RGBA containing the captured pixels.
+ func captureRect(r image.Rectangle) (*image.RGBA, error) {
+ 	w, h := r.Dx(), r.Dy()
+ 	if w <= 0 || h <= 0 {
+ 		return nil, fmt.Errorf("capture: invalid rect %v", r)
+ 	}
+ 
+-	captureState.mu.Lock()
+-	defer captureState.mu.Unlock()
+-
+-	// (Re)initialize resources if size changed or first use.
+-	if captureState.bmp == 0 || w != captureState.w || h != captureState.h {
+-		releaseResourcesLocked()
+-		if err := allocateResourcesLocked(w, h); err != nil {
+-			releaseResourcesLocked()
+-			return nil, err
+-		}
+-	}
+-
+-	// Acquire screen DC for source each frame (cheap, avoids leaking if caller stops).
+-	srcDC, _, _ := procGetDC.Call(0)
+-	if srcDC == 0 {
+-		return nil, fmt.Errorf("capture: GetDC failed winerr=%d", getLastError())
+-	}
+-	defer procReleaseDC.Call(0, srcDC)
+-
+-	// Select bitmap into memDC (already selected after allocation, so skip unless changed).
+-	// Perform BitBlt at requested offset.
+-	ok, _, _ := procBitBlt.Call(uintptr(captureState.memDC), 0, 0, uintptr(w), uintptr(h), srcDC, uintptr(r.Min.X), uintptr(r.Min.Y), srccopy)
+-	if ok == 0 {
+-		return nil, fmt.Errorf("capture: BitBlt failed x=%d y=%d w=%d h=%d winerr=%d", r.Min.X, r.Min.Y, w, h, getLastError())
+-	}
+-
+-	// Map DIB memory into slice (no allocation; slice header updated only when resized).
+-	pixLen := w * h * 4
+-	header := (*[1 << 30]byte)(captureState.bitsPtr)[:pixLen:pixLen] // limits capacity to pixLen
+-	if captureState.img == nil || cap(captureState.img.Pix) < pixLen {
+-		captureState.img = &image.RGBA{Pix: make([]byte, pixLen), Stride: w * 4, Rect: image.Rect(0, 0, w, h)}
+-	} else {
+-		captureState.img.Pix = captureState.img.Pix[:pixLen]
+-		captureState.img.Stride = w * 4
+-		captureState.img.Rect = image.Rect(0, 0, w, h)
+-	}
+-
+-	// Copy & convert BGRA -> RGBA (alpha forced to 0xFF). NOTE: Could remove copy and swap
+-	// in place if we exposed the raw DIB memory directly, but we keep a separate Go-managed
+-	// slice to avoid accidental use-after-free should we recreate the DIB.
+-	dst := captureState.img.Pix
+-	for i := 0; i < pixLen; i += 4 {
+-		b := header[i]
+-		g := header[i+1]
+-		r8 := header[i+2]
+-		dst[i] = r8
+-		dst[i+1] = g
+-		dst[i+2] = b
+-		dst[i+3] = 0xFF
+-	}
+-	return captureState.img, nil
+-}
+-
+-// allocateResourcesLocked creates a memory DC and a top-down DIB section sized w*h.
+-func allocateResourcesLocked(w, h int) error {
+-	// Create a compatible memory DC using the desktop DC as template.
++	// Acquire screen DC.
+ 	screenDC, _, _ := procGetDC.Call(0)
+ 	if screenDC == 0 {
+-		return fmt.Errorf("capture: GetDC failed winerr=%d", getLastError())
++		return nil, fmt.Errorf("capture: GetDC failed winerr=%d", getLastError())
+ 	}
+ 	defer procReleaseDC.Call(0, screenDC)
+ 
++	// Create compatible memory DC.
+ 	memDC, _, _ := procCreateCompatibleDC.Call(screenDC)
+ 	if memDC == 0 {
+-		return fmt.Errorf("capture: CreateCompatibleDC failed winerr=%d", getLastError())
++		return nil, fmt.Errorf("capture: CreateCompatibleDC failed winerr=%d", getLastError())
+ 	}
++	defer procDeleteDC.Call(memDC)
+ 
++	// Set up BITMAPINFO for top-down 32-bit DIB.
+ 	var bi bitmapInfo
+ 	bi.Header.BiSize = uint32(unsafe.Sizeof(bi.Header))
+ 	bi.Header.BiWidth = int32(w)
+@@ -192,39 +123,38 @@ func allocateResourcesLocked(w, h int) error {
+ 	var bitsPtr unsafe.Pointer
+ 	bmp, _, _ := procCreateDIBSection.Call(memDC, uintptr(unsafe.Pointer(&bi)), dibRGBColors, uintptr(unsafe.Pointer(&bitsPtr)), 0, 0)
+ 	if bmp == 0 {
+-		procDeleteDC.Call(memDC)
+-		return fmt.Errorf("capture: CreateDIBSection failed winerr=%d", getLastError())
++		return nil, fmt.Errorf("capture: CreateDIBSection failed winerr=%d", getLastError())
+ 	}
++	defer procDeleteObject.Call(bmp)
+ 
+ 	// Select bitmap into DC.
+ 	prev, _, _ := procSelectObject.Call(memDC, bmp)
+ 	if prev == 0 || prev == ^uintptr(0) { // failure or GDI_ERROR
+-		procDeleteObject.Call(bmp)
+-		procDeleteDC.Call(memDC)
+-		return fmt.Errorf("capture: SelectObject failed winerr=%d", getLastError())
++		return nil, fmt.Errorf("capture: SelectObject failed winerr=%d", getLastError())
+ 	}
+-	// We don't need the previous object handle; leave it selected out.
+-
+-	captureState.memDC = hdc(memDC)
+-	captureState.bmp = hbitmap(bmp)
+-	captureState.bitsPtr = bitsPtr
+-	captureState.w = w
+-	captureState.h = h
+-	return nil
+-}
+ 
+-// releaseResourcesLocked frees GDI objects; caller must hold captureState.mu.
+-func releaseResourcesLocked() {
+-	if captureState.bmp != 0 {
+-		procDeleteObject.Call(uintptr(captureState.bmp))
++	// BitBlt into memory DC at requested offset.
++	ok, _, _ := procBitBlt.Call(memDC, 0, 0, uintptr(w), uintptr(h), screenDC, uintptr(r.Min.X), uintptr(r.Min.Y), srccopy)
++	if ok == 0 {
++		return nil, fmt.Errorf("capture: BitBlt failed x=%d y=%d w=%d h=%d winerr=%d", r.Min.X, r.Min.Y, w, h, getLastError())
+ 	}
+-	if captureState.memDC != 0 {
+-		procDeleteDC.Call(uintptr(captureState.memDC))
++
++	// Copy & convert BGRA in DIB to RGBA in Go heap slice.
++	pixLen := w * h * 4
++	src := (*[1 << 30]byte)(bitsPtr)[:pixLen:pixLen]
++	dst := image.NewRGBA(image.Rect(0, 0, w, h))
++	// dst.Pix layout already contiguous stride = w*4
++	for i := 0; i < pixLen; i += 4 {
++		b := src[i+0]
++		g := src[i+1]
++		r8 := src[i+2]
++		// src[i+3] alpha (undefined); force opaque
++		dst.Pix[i+0] = r8
++		dst.Pix[i+1] = g
++		dst.Pix[i+2] = b
++		dst.Pix[i+3] = 0xFF
+ 	}
+-	captureState.bmp = 0
+-	captureState.memDC = 0
+-	captureState.bitsPtr = nil
+-	// captureState.img retained; will be resized or reused.
++	return dst, nil
+ }
+ 
+ func getSystemMetric(idx int) int32 {
+diff --git a/domain/capture/detect.go b/domain/capture/detect.go
+index 5db956e..2b0b1c9 100644
+--- a/domain/capture/detect.go
++++ b/domain/capture/detect.go
+@@ -7,30 +7,46 @@ import (
+ 	"github.com/soocke/pixel-bot-go/config"
+ )
+ 
+-// DetectTemplate performs a multi-scale NCC template match using dynamic config.
+-// Returns x,y,ok where (x,y) is the top-left of the best match whose NCC score
+-// meets the configured threshold. Transparent template pixels are masked out.
+-func DetectTemplate(frame *image.RGBA, tmpl image.Image, cfg *config.Config) (int, int, bool, error) {
++// DetectTemplateDetailed performs a multi-scale normalized cross-correlation
++// (NCC) template match and returns the full result, including timing and scale
++// counts when DebugTiming is enabled. Transparent template pixels are masked
++// during matching.
++func DetectTemplateDetailed(frame *image.RGBA, tmpl image.Image, cfg *config.Config) (MultiScaleResult, error) {
+ 	if frame == nil || tmpl == nil {
+-		return 0, 0, false, errors.New("detect template error")
++		return MultiScaleResult{}, errors.New("detect template error")
+ 	}
++	var local config.Config
+ 	if cfg == nil {
+-		cfg = config.DefaultConfig()
+-	} else if err := cfg.Validate(); err != nil {
+-		return 0, 0, false, err
++		local = *config.DefaultConfig()
++	} else {
++		local = *cfg
+ 	}
+-	ms := MultiScaleMatch(frame, tmpl, MultiScaleOptions{
++	if err := local.Validate(); err != nil {
++		return MultiScaleResult{}, err
++	}
++	res := MultiScaleMatch(frame, tmpl, MultiScaleOptions{
+ 		Scales:    nil,
+-		MinScale:  cfg.MinScale,
+-		MaxScale:  cfg.MaxScale,
+-		ScaleStep: cfg.ScaleStep,
++		MinScale:  local.MinScale,
++		MaxScale:  local.MaxScale,
++		ScaleStep: local.ScaleStep,
+ 		NCC: NCCOptions{
+-			Threshold:      cfg.Threshold,
+-			Stride:         cfg.Stride,
+-			Refine:         cfg.Refine,
+-			ReturnBestEven: cfg.ReturnBestEven,
++			Threshold:      local.Threshold,
++			Stride:         local.Stride,
++			Refine:         local.Refine,
++			ReturnBestEven: local.ReturnBestEven,
++			DebugTiming:    true,
+ 		},
+-		StopOnScore: cfg.StopOnScore,
++		StopOnScore: local.StopOnScore,
+ 	})
+-	return ms.X, ms.Y, ms.Found, nil
++	return res, nil
++}
++
++// DetectTemplate is a compatibility helper that returns coordinates and a
++// boolean found flag.
++func DetectTemplate(frame *image.RGBA, tmpl image.Image, cfg *config.Config) (int, int, bool, error) {
++	res, err := DetectTemplateDetailed(frame, tmpl, cfg)
++	if err != nil {
++		return 0, 0, false, err
++	}
++	return res.X, res.Y, res.Found, nil
+ }
+diff --git a/domain/capture/frame_pool.go b/domain/capture/frame_pool.go
+deleted file mode 100644
+index e80cd6a..0000000
+--- a/domain/capture/frame_pool.go
++++ /dev/null
+@@ -1,58 +0,0 @@
+-package capture
+-
+-import (
+-	"image"
+-	"sync"
+-)
+-
+-// Lightweight reusable frame pool to reduce long-lived heap churn caused by
+-// repeated allocation of large RGBA backing slices. This does NOT eliminate
+-// the allocations performed by the underlying screenshot library (it still
+-// returns a freshly allocated *image.RGBA); we copy those pixels into a pooled
+-// buffer. For large resolutions this saves the persistent retention of many
+-// distinct backing slices when consumers process frames slowly, but to fully
+-// remove per-frame allocations an in-place OS capture (e.g. GDI BitBlt into a
+-// caller-provided buffer on Windows) would be required.
+-//
+-// Usage: acquireFrame(rect) returns a *image.RGBA whose Pix slice capacity is
+-// at least rect area * 4. After consumers finish using the frame they should
+-// call recycleFrame(frame) to allow its reuse. If consumers never recycle, the
+-// behavior degrades gracefully to the previous allocation pattern.
+-
+-var framePool sync.Pool // stores *image.RGBA
+-
+-// acquireFrame returns a reusable RGBA image sized to rect. The returned Pix
+-// length exactly matches rect area * 4, and Stride is width*4.
+-func acquireFrame(rect image.Rectangle) *image.RGBA {
+-	w, h := rect.Dx(), rect.Dy()
+-	if w <= 0 || h <= 0 {
+-		return &image.RGBA{Rect: rect}
+-	}
+-	needed := w * h * 4
+-	var img *image.RGBA
+-	if v := framePool.Get(); v != nil {
+-		img = v.(*image.RGBA)
+-	}
+-	if img == nil || cap(img.Pix) < needed {
+-		img = &image.RGBA{Pix: make([]byte, needed), Stride: w * 4, Rect: rect}
+-	} else {
+-		img.Stride = w * 4
+-		img.Rect = rect
+-		img.Pix = img.Pix[:needed]
+-	}
+-	return img
+-}
+-
+-// recycleFrame returns the frame to the pool for potential reuse. The frame
+-// must no longer be accessed by the caller after invoking recycleFrame.
+-// RecycleFrame returns the frame to the pool for potential reuse. The frame
+-// must no longer be accessed by the caller after invoking RecycleFrame.
+-func RecycleFrame(img *image.RGBA) {
+-	if img == nil {
+-		return
+-	}
+-	if img.Pix == nil {
+-		return
+-	}
+-	framePool.Put(img)
+-}
+diff --git a/domain/capture/metrics.go b/domain/capture/metrics.go
+new file mode 100644
+index 0000000..42351e5
+--- /dev/null
++++ b/domain/capture/metrics.go
+@@ -0,0 +1,24 @@
++package capture
++
++import (
++	"image"
++	"time"
++)
++
++// FrameSnapshot carries the latest captured frame and metadata.
++type FrameSnapshot struct {
++	Image      *image.RGBA
++	CapturedAt time.Time
++	Sequence   uint64
++}
++
++// CaptureStats summarises capture loop behaviour for instrumentation.
++type CaptureStats struct {
++	Captures         uint64
++	Skipped          uint64
++	AvgCapture       time.Duration
++	AvgCaptureMicros float64
++	LastCapture      time.Time
++	LatestFrameAge   time.Duration
++	Sequence         uint64
++}
+diff --git a/domain/capture/multi_scale.go b/domain/capture/multi_scale.go
+index f6e19dd..d58ea60 100644
+--- a/domain/capture/multi_scale.go
++++ b/domain/capture/multi_scale.go
+@@ -5,58 +5,60 @@ import (
+ 	"runtime"
+ 	"sync"
+ 	"sync/atomic"
+-
+-	"golang.org/x/image/draw"
++	"time"
+ )
+ 
+-// ScaleSpec defines one scale factor attempt.
++// ScaleSpec is a single template scale factor (e.g. 0.8, 1.0, 1.2).
+ type ScaleSpec struct {
+-	Factor float64 // e.g. 0.8, 1.0, 1.2
++	Factor float64
+ }
+ 
+ // MultiScaleOptions configures multi-scale template matching.
++// Scales: explicit factors to try. If empty, factors are generated from
++// MinScale..MaxScale using ScaleStep. StopOnScore disables when set to 0.
+ type MultiScaleOptions struct {
+-	Scales      []ScaleSpec // List of scale factors to try; if empty defaults around 1.0
+-	NCC         NCCOptions  // NCC options reused per scale
+-	StopOnScore float64     // Early stop if score >= StopOnScore (>0); 0 disables
+-	// Adaptive scale generation (used if Scales is empty): generate factors from MinScale to MaxScale inclusive.
+-	MinScale  float64 // e.g. 0.60
+-	MaxScale  float64 // e.g. 1.40
+-	ScaleStep float64 // e.g. 0.05 (must be >0)
++	Scales      []ScaleSpec
++	NCC         NCCOptions
++	StopOnScore float64
++	MinScale    float64
++	MaxScale    float64
++	ScaleStep   float64
+ }
+ 
+-// MultiScaleResult holds the best match among scales.
++// MultiScaleResult is the best match found across scales.
+ type MultiScaleResult struct {
+-	X, Y  int
+-	Score float64
+-	Scale float64
+-	Found bool
++	X, Y            int
++	Score           float64
++	Scale           float64
++	Found           bool
++	Duration        time.Duration
++	ScalesEvaluated int
+ }
+ 
+-// MultiScaleMatch resizes the template to each scale and runs NCC, returning best result.
+-// This mitigates dimensional differences when the target object appears larger/smaller.
+-// Assumes uniform scaling without rotation.
++// MultiScaleMatch is the public, single-call API for multi-scale matching.
++// It forwards to the parallel implementation.
+ func MultiScaleMatch(frame *image.RGBA, tmpl image.Image, opts MultiScaleOptions) MultiScaleResult {
+-	// Delegate to parallel version for scalability; keeps existing API.
+ 	return MultiScaleMatchParallel(frame, tmpl, opts)
+ }
+ 
+-// MultiScaleMatchParallel performs the same operation as MultiScaleMatch but distributes
+-// scale evaluations across goroutines for better performance when many scales are tested.
+-// It respects StopOnScore via an atomic early-stop flag.
++// MultiScaleMatchParallel evaluates the template at multiple scales in
++// parallel and returns the best match. It supports an optional early-stop
++// threshold in MultiScaleOptions.StopOnScore.
+ func MultiScaleMatchParallel(frame *image.RGBA, tmpl image.Image, opts MultiScaleOptions) MultiScaleResult {
+ 	if frame == nil || tmpl == nil {
+ 		return MultiScaleResult{}
+ 	}
+ 
+-	// Precompute grayscale integrals
+ 	preGray := buildGrayPrecomp(frame)
++	baseTmpl := getTemplatePrecomp(tmpl)
++	if baseTmpl == nil {
++		return MultiScaleResult{}
++	}
++
+ 	if len(opts.Scales) == 0 {
+-		// Generate adaptive list if parameters look sane; else fallback to legacy defaults.
+ 		if opts.MinScale > 0 && opts.MaxScale > 0 && opts.ScaleStep > 0 && opts.MaxScale >= opts.MinScale {
+-			// Cap number of steps to prevent runaway.
+ 			maxSteps := 1 + int((opts.MaxScale-opts.MinScale)/opts.ScaleStep+0.5)
+-			if maxSteps > 200 { // arbitrary safety cap
++			if maxSteps > 200 {
+ 				maxSteps = 200
+ 			}
+ 			scales := make([]ScaleSpec, 0, maxSteps)
+@@ -67,10 +69,12 @@ func MultiScaleMatchParallel(frame *image.RGBA, tmpl image.Image, opts MultiScal
+ 		}
+ 	}
+ 
+-	var earlyStop int32 // 0 = continue, 1 = stop requested
++	var earlyStop int32
+ 	results := make(chan MultiScaleResult, len(opts.Scales))
+ 	var wg sync.WaitGroup
+-	sem := make(chan struct{}, runtime.NumCPU()) // bound concurrency
++	sem := make(chan struct{}, runtime.NumCPU())
++	var totalDur int64
++	var scalesCount uint64
+ 
+ 	for _, s := range opts.Scales {
+ 		scale := s.Factor
+@@ -85,21 +89,16 @@ func MultiScaleMatchParallel(frame *image.RGBA, tmpl image.Image, opts MultiScal
+ 			if atomic.LoadInt32(&earlyStop) == 1 {
+ 				return
+ 			}
+-			origB := tmpl.Bounds()
+-			w := int(float64(origB.Dx()) * factor)
+-			h := int(float64(origB.Dy()) * factor)
+-			if w < 2 || h < 2 {
++			scaledPc := getScaledTemplatePrecompFromBase(baseTmpl, factor)
++			if scaledPc == nil {
+ 				return
+ 			}
+-			var res NCCResult
+-			if factor == 1.0 {
+-				res = matchTemplateNCCGrayIntegral(frame, tmpl, opts.NCC, preGray)
+-			} else {
+-				scaled := image.NewRGBA(image.Rect(0, 0, w, h))
+-				draw.CatmullRom.Scale(scaled, scaled.Bounds(), tmpl, origB, draw.Over, nil)
+-				res = matchTemplateNCCGrayIntegral(frame, scaled, opts.NCC, preGray)
+-			}
++			res := matchTemplateNCCGrayIntegralPre(frame, scaledPc, opts.NCC, preGray)
+ 			msr := MultiScaleResult{X: res.X, Y: res.Y, Score: res.Score, Scale: factor, Found: res.Found}
++			if opts.NCC.DebugTiming && res.Dur > 0 {
++				atomic.AddInt64(&totalDur, res.Dur.Nanoseconds())
++			}
++			atomic.AddUint64(&scalesCount, 1)
+ 			if opts.StopOnScore > 0 && res.Score >= opts.StopOnScore {
+ 				if atomic.CompareAndSwapInt32(&earlyStop, 0, 1) {
+ 					results <- msr
+@@ -120,10 +119,16 @@ func MultiScaleMatchParallel(frame *image.RGBA, tmpl image.Image, opts MultiScal
+ 		if r.Score > best.Score {
+ 			best = r
+ 		}
+-		// If early stop triggered and we already processed that result, we can break.
+ 		if atomic.LoadInt32(&earlyStop) == 1 && r.Score >= opts.StopOnScore && opts.StopOnScore > 0 {
+ 			break
+ 		}
+ 	}
++	dur := atomic.LoadInt64(&totalDur)
++	if dur > 0 {
++		best.Duration = time.Duration(dur)
++	}
++	if count := atomic.LoadUint64(&scalesCount); count > 0 {
++		best.ScalesEvaluated = int(count)
++	}
+ 	return best
+ }
+diff --git a/domain/capture/ncc.go b/domain/capture/ncc.go
+index c321b3e..5cbab5d 100644
+--- a/domain/capture/ncc.go
++++ b/domain/capture/ncc.go
+@@ -3,12 +3,12 @@ package capture
+ import (
+ 	"image"
+ 	"math"
++	"sync"
+ 	"time"
+ )
+ 
+-// grayPrecomp holds precomputed grayscale pixel values and integral images (summed-area tables)
+-// for the current frame to allow O(1) mean/variance queries per window. Dot product still
+-// requires O(n) over template pixels. Only used for fully opaque grayscale template path.
++// grayPrecomp stores per-frame grayscale values and their summed-area tables
++// (integral images). The integrals allow O(1) window sum and variance queries.
+ type grayPrecomp struct {
+ 	gray       []float64 // per pixel grayscale (length W*H)
+ 	integral   []float64 // summed-area table of grayscale
+@@ -16,103 +16,199 @@ type grayPrecomp struct {
+ 	W, H       int
+ }
+ 
+-// buildGrayPrecomp constructs grayscale arrays and integral images for a frame.
+-func buildGrayPrecomp(frame *image.RGBA) *grayPrecomp {
+-	if frame == nil {
++// templatePrecomp caches grayscale pixels and summary statistics for a
++// template (or a scaled version of it).
++type templatePrecomp struct {
++	gray  []float32
++	sumT  float64
++	sumT2 float64
++	W, H  int
++	meanT float64
++	stdT  float64
++}
++
++// tmplCacheByDim caches templatePrecomp instances by their [width,height].
++var (
++	tmplCacheMu    sync.RWMutex
++	tmplCacheByDim = map[[2]int]*templatePrecomp{}
++)
++
++// getTemplatePrecomp returns a cached templatePrecomp for tmpl or builds and
++// caches a new one. Pixels with alpha==0 are ignored when computing stats.
++func getTemplatePrecomp(tmpl image.Image) *templatePrecomp {
++	if tmpl == nil {
+ 		return nil
+ 	}
+-	b := frame.Bounds()
+-	W, H := b.Dx(), b.Dy()
+-	g := make([]float64, W*H)
+-	I := make([]float64, W*H)
+-	I2 := make([]float64, W*H)
+-	for y := 0; y < H; y++ {
+-		var rowSum, rowSum2 float64
+-		for x := 0; x < W; x++ {
+-			r, gg, bb, a := frame.At(b.Min.X+x, b.Min.Y+y).RGBA()
+-			var gray float64
+-			if a != 0 { // treat transparent as 0 contribution
+-				gray = 0.2126*float64(r) + 0.7152*float64(gg) + 0.0722*float64(bb)
+-			}
+-			off := y*W + x
+-			g[off] = gray
+-			rowSum += gray
+-			rowSum2 += gray * gray
+-			if y == 0 {
+-				I[off] = rowSum
+-				I2[off] = rowSum2
+-			} else {
+-				I[off] = I[(y-1)*W+x] + rowSum
+-				I2[off] = I2[(y-1)*W+x] + rowSum2
++	b := tmpl.Bounds()
++	w, h := b.Dx(), b.Dy()
++	if w == 0 || h == 0 {
++		return nil
++	}
++	key := [2]int{w, h}
++	tmplCacheMu.RLock()
++	pc := tmplCacheByDim[key]
++	tmplCacheMu.RUnlock()
++	if pc != nil {
++		return pc
++	}
++	// Build new precomp
++	need := w * h
++	gray := make([]float32, need)
++	var sumT, sumT2 float64
++	for y := 0; y < h; y++ {
++		for x := 0; x < w; x++ {
++			r, g, bb, a := tmpl.At(b.Min.X+x, b.Min.Y+y).RGBA()
++			if a == 0 { // transparent ignored
++				continue
+ 			}
++			gval := 0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(bb)
++			off := y*w + x
++			gray[off] = float32(gval)
++			sumT += gval
++			sumT2 += gval * gval
+ 		}
+ 	}
+-	return &grayPrecomp{gray: g, integral: I, integralSq: I2, W: W, H: H}
++	n := float64(need)
++	meanT := sumT / n
++	varT := (sumT2 - sumT*sumT/n) / n
++	stdT := 0.0
++	if varT > 0 {
++		stdT = math.Sqrt(varT)
++	}
++	pc = &templatePrecomp{gray: gray, sumT: sumT, sumT2: sumT2, W: w, H: h, meanT: meanT, stdT: stdT}
++	tmplCacheMu.Lock()
++	// Double-check another goroutine didn't insert meanwhile; keep first to avoid duplicate slices.
++	if existing := tmplCacheByDim[key]; existing == nil {
++		tmplCacheByDim[key] = pc
++	} else {
++		pc = existing
++	}
++	tmplCacheMu.Unlock()
++	return pc
+ }
+ 
+-// integralSum returns sum over rectangle [x0,x1]x[y0,y1] inclusive.
+-func integralSum(I []float64, W int, x0, y0, x1, y1 int) float64 {
+-	if x0 > x1 || y0 > y1 {
+-		return 0
++// getScaledTemplatePrecompFromBase returns a cached or newly built scaled
++// templatePrecomp. Scaling is done with bilinear interpolation on the base
++// grayscale data to avoid repeated color conversions.
++func getScaledTemplatePrecompFromBase(base *templatePrecomp, factor float64) *templatePrecomp {
++	if base == nil || factor <= 0 {
++		return nil
+ 	}
+-	A := func(x, y int) float64 {
+-		if x < 0 || y < 0 {
+-			return 0
++	if factor == 1.0 {
++		return base
++	}
++	w := int(float64(base.W) * factor)
++	h := int(float64(base.H) * factor)
++	if w < 2 || h < 2 {
++		return nil
++	}
++	key := [2]int{w, h}
++	tmplCacheMu.RLock()
++	pc := tmplCacheByDim[key]
++	tmplCacheMu.RUnlock()
++	if pc != nil {
++		return pc
++	}
++	gray := make([]float32, w*h)
++	var sumT, sumT2 float64
++	// Precompute inverse factor for coordinate mapping.
++	fx := float64(base.W) / float64(w)
++	fy := float64(base.H) / float64(h)
++	bw := base.W
++	bh := base.H
++	src := base.gray
++	for y := 0; y < h; y++ {
++		ys := (float64(y)+0.5)*fy - 0.5
++		if ys < 0 {
++			ys = 0
++		} else if ys > float64(bh-1) {
++			ys = float64(bh - 1)
++		}
++		y0 := int(math.Floor(ys))
++		y1 := y0 + 1
++		if y1 >= bh {
++			y1 = bh - 1
++		}
++		dy := ys - float64(y0)
++		// dy used directly in interpolation (1-dy) and dy; no need to store wy0/wy1.
++		for x := 0; x < w; x++ {
++			xs := (float64(x)+0.5)*fx - 0.5
++			if xs < 0 {
++				xs = 0
++			} else if xs > float64(bw-1) {
++				xs = float64(bw - 1)
++			}
++			x0 := int(math.Floor(xs))
++			x1 := x0 + 1
++			if x1 >= bw {
++				x1 = bw - 1
++			}
++			dx := xs - float64(x0)
++			wx0 := 1 - dx
++			wx1 := dx
++			// Bilinear interpolation
++			g00 := src[y0*bw+x0]
++			g10 := src[y0*bw+x1]
++			g01 := src[y1*bw+x0]
++			g11 := src[y1*bw+x1]
++			top := float64(g00)*wx0 + float64(g10)*wx1
++			bottom := float64(g01)*wx0 + float64(g11)*wx1
++			gval := float32(top*(1-dy) + bottom*dy)
++			off := y*w + x
++			gray[off] = gval
++			fv := float64(gval)
++			sumT += fv
++			sumT2 += fv * fv
+ 		}
+-		return I[y*W+x]
+ 	}
+-	return A(x1, y1) - A(x0-1, y1) - A(x1, y0-1) + A(x0-1, y0-1)
++	n := float64(w * h)
++	meanT := sumT / n
++	varT := (sumT2 - sumT*sumT/n) / n
++	stdT := 0.0
++	if varT > 0 {
++		stdT = math.Sqrt(varT)
++	}
++	pc = &templatePrecomp{gray: gray, sumT: sumT, sumT2: sumT2, W: w, H: h, meanT: meanT, stdT: stdT}
++	tmplCacheMu.Lock()
++	if existing := tmplCacheByDim[key]; existing == nil {
++		tmplCacheByDim[key] = pc
++	} else {
++		pc = existing
++	}
++	tmplCacheMu.Unlock()
++	return pc
+ }
+ 
+-// matchTemplateNCCGrayIntegral performs NCC using precomputed grayscale + integral tables assuming
+-// fully opaque template (all pixels relevant).
+-func matchTemplateNCCGrayIntegral(frame *image.RGBA, tmpl image.Image, opts NCCOptions, pre *grayPrecomp) NCCResult {
++// matchTemplateNCCGrayIntegralPre computes normalized cross-correlation (NCC)
++// between a templatePrecomp and a frame represented by grayPrecomp. It returns
++// the best match position and score according to opts.
++func matchTemplateNCCGrayIntegralPre(frame *image.RGBA, pc *templatePrecomp, opts NCCOptions, pre *grayPrecomp) NCCResult {
+ 	start := time.Now()
+ 	res := NCCResult{Score: -1}
+-	if frame == nil || tmpl == nil || pre == nil {
++	if frame == nil || pc == nil || pre == nil {
+ 		return res
+ 	}
+ 	fb := frame.Bounds()
+-	tb := tmpl.Bounds()
+ 	W, H := fb.Dx(), fb.Dy()
+-	w, h := tb.Dx(), tb.Dy()
++	w, h := pc.W, pc.H
+ 	if w == 0 || h == 0 || W < w || H < h {
+ 		return res
+ 	}
+-
+-	// Build template grayscale + stats
+-	tGray := make([]float64, w*h)
+-	var sumT, sumT2 float64
+-	for ty := 0; ty < h; ty++ {
+-		for tx := 0; tx < w; tx++ {
+-			r, g, b, a := tmpl.At(tb.Min.X+tx, tb.Min.Y+ty).RGBA()
+-			if a == 0 { // Should not happen if fully opaque, but guard
+-				continue
+-			}
+-			gray := 0.2126*float64(r) + 0.7152*float64(g) + 0.0722*float64(b)
+-			off := ty*w + tx
+-			tGray[off] = gray
+-			sumT += gray
+-			sumT2 += gray * gray
+-		}
+-	}
+ 	n := float64(w * h)
+-	meanT := sumT / n
+-	varT := (sumT2 - sumT*sumT/n) / n
+-	if varT <= 1e-9 { // constant template equality shortcut (check multiple pixels)
+-		ref := tGray[0]
++	meanT := pc.meanT
++	stdT := pc.stdT
++	if stdT <= 1e-9 {
++		ref := float64(pc.gray[0])
+ 		for y := 0; y <= H-h; y += opts.Stride {
+ 			for x := 0; x <= W-w; x += opts.Stride {
+-				// Quick check center pixel equality
+ 				cy := y + h/2
+ 				cx := x + w/2
+ 				center := pre.gray[cy*W+cx]
+ 				if math.Abs(center-ref) > 1e-9 {
+ 					continue
+ 				}
+-				// Verify all pixels (early break)
+ 				ok := true
+-				for i := 0; i < len(tGray); i++ {
++				for i := 0; i < len(pc.gray); i++ {
+ 					py := i / w
+ 					px := i % w
+ 					if math.Abs(pre.gray[(y+py)*W+(x+px)]-ref) > 1e-9 {
+@@ -136,7 +232,6 @@ func matchTemplateNCCGrayIntegral(frame *image.RGBA, tmpl image.Image, opts NCCO
+ 		}
+ 		return res
+ 	}
+-	stdT := math.Sqrt(varT)
+ 
+ 	bestX, bestY, bestScore := 0, 0, -1.0
+ 	stride := opts.Stride
+@@ -145,7 +240,6 @@ func matchTemplateNCCGrayIntegral(frame *image.RGBA, tmpl image.Image, opts NCCO
+ 	}
+ 	for y := 0; y <= H-h; y += stride {
+ 		for x := 0; x <= W-w; x += stride {
+-			// Mean & variance via integrals
+ 			sumF := integralSum(pre.integral, pre.W, x, y, x+w-1, y+h-1)
+ 			sumF2 := integralSum(pre.integralSq, pre.W, x, y, x+w-1, y+h-1)
+ 			meanF := sumF / n
+@@ -154,12 +248,11 @@ func matchTemplateNCCGrayIntegral(frame *image.RGBA, tmpl image.Image, opts NCCO
+ 				continue
+ 			}
+ 			stdF := math.Sqrt(varF)
+-			// Dot product Σ F_i * T_i
+ 			var sumFT float64
+-			for i := 0; i < len(tGray); i++ {
++			for i := 0; i < len(pc.gray); i++ {
+ 				py := i / w
+ 				px := i % w
+-				sumFT += pre.gray[(y+py)*W+(x+px)] * tGray[i]
++				sumFT += pre.gray[(y+py)*W+(x+px)] * float64(pc.gray[i])
+ 			}
+ 			numer := sumFT - n*meanF*meanT
+ 			denom := n * stdF * stdT
+@@ -172,7 +265,6 @@ func matchTemplateNCCGrayIntegral(frame *image.RGBA, tmpl image.Image, opts NCCO
+ 			}
+ 		}
+ 	}
+-	// Optional refinement: treat same as original (not integral optimized) for simplicity.
+ 	if opts.Refine && stride > 1 {
+ 		minY := max(0, bestY-stride)
+ 		maxY := min(H-h, bestY+stride)
+@@ -189,10 +281,10 @@ func matchTemplateNCCGrayIntegral(frame *image.RGBA, tmpl image.Image, opts NCCO
+ 				}
+ 				stdF := math.Sqrt(varF)
+ 				var sumFT float64
+-				for i := 0; i < len(tGray); i++ {
++				for i := 0; i < len(pc.gray); i++ {
+ 					py := i / w
+ 					px := i % w
+-					sumFT += pre.gray[(y+py)*W+(x+px)] * tGray[i]
++					sumFT += pre.gray[(y+py)*W+(x+px)] * float64(pc.gray[i])
+ 				}
+ 				numer := sumFT - n*meanF*meanT
+ 				denom := n * stdF * stdT
+@@ -217,7 +309,62 @@ func matchTemplateNCCGrayIntegral(frame *image.RGBA, tmpl image.Image, opts NCCO
+ 	return res
+ }
+ 
+-// NCCOptions configures the normalized cross correlation matching.
++// buildGrayPrecomp computes per-pixel grayscale values and their summed-area
++// tables for a frame. Alpha==0 pixels contribute zero.
++func buildGrayPrecomp(frame *image.RGBA) *grayPrecomp {
++	if frame == nil {
++		return nil
++	}
++	b := frame.Bounds()
++	W, H := b.Dx(), b.Dy()
++	need := W * H
++	p := &grayPrecomp{
++		gray:       make([]float64, need),
++		integral:   make([]float64, need),
++		integralSq: make([]float64, need),
++		W:          W,
++		H:          H,
++	}
++	for y := 0; y < H; y++ {
++		var rowSum, rowSum2 float64
++		for x := 0; x < W; x++ {
++			r, gg, bb, a := frame.At(b.Min.X+x, b.Min.Y+y).RGBA()
++			var gray float64
++			if a != 0 {
++				gray = 0.2126*float64(r) + 0.7152*float64(gg) + 0.0722*float64(bb)
++			}
++			off := y*W + x
++			p.gray[off] = gray
++			rowSum += gray
++			rowSum2 += gray * gray
++			if y == 0 {
++				p.integral[off] = rowSum
++				p.integralSq[off] = rowSum2
++			} else {
++				p.integral[off] = p.integral[(y-1)*W+x] + rowSum
++				p.integralSq[off] = p.integralSq[(y-1)*W+x] + rowSum2
++			}
++		}
++	}
++	return p
++}
++
++// integralSum returns the inclusive sum over rectangle [x0..x1] x [y0..y1]
++// from an integral image stored in row-major order with width W.
++func integralSum(I []float64, W int, x0, y0, x1, y1 int) float64 {
++	if x0 > x1 || y0 > y1 {
++		return 0
++	}
++	A := func(x, y int) float64 {
++		if x < 0 || y < 0 {
++			return 0
++		}
++		return I[y*W+x]
++	}
++	return A(x1, y1) - A(x0-1, y1) - A(x1, y0-1) + A(x0-1, y0-1)
++}
++
++// NCCOptions configures normalized cross-correlation template matching.
+ type NCCOptions struct {
+ 	Threshold      float64 // Minimum NCC score for a positive match (default 0.80)
+ 	Stride         int     // Coarse stride for scanning (default 1)
+@@ -226,7 +373,7 @@ type NCCOptions struct {
+ 	DebugTiming    bool    // If true, measure elapsed time (no logging here; hook point)
+ }
+ 
+-// NCCResult holds the outcome of template matching.
++// NCCResult holds the outcome of a template matching operation.
+ type NCCResult struct {
+ 	X, Y  int
+ 	Score float64
+@@ -234,9 +381,9 @@ type NCCResult struct {
+ 	Dur   time.Duration // Only set if DebugTiming
+ }
+ 
+-// MatchTemplateNCC performs masked normalized cross-correlation on RGBA images.
+-// Transparency (alpha==0) in the template is ignored. Frame pixels with alpha==0
+-// contribute zero. Returns best match respecting Threshold and Stride.
++// MatchTemplateNCC performs masked NCC on RGBA images. Template pixels with
++// alpha==0 are ignored; frame alpha==0 pixels contribute zero. It returns
++// the best match according to Threshold and Stride options.
+ func MatchTemplateNCC(frame *image.RGBA, tmpl image.Image, opts NCCOptions) NCCResult {
+ 	if opts.Threshold <= 0 {
+ 		opts.Threshold = 0.80
+@@ -256,11 +403,10 @@ func MatchTemplateNCC(frame *image.RGBA, tmpl image.Image, opts NCCOptions) NCCR
+ 	if pre == nil {
+ 		return NCCResult{Score: -1}
+ 	}
+-	return matchTemplateNCCGrayIntegral(frame, tmpl, opts, pre)
++	pc := getTemplatePrecomp(tmpl)
++	res := matchTemplateNCCGrayIntegralPre(frame, pc, opts, pre)
++	return res
+ }
+-
+-// matchTemplateNCCGrayMasked handles original masked grayscale NCC path.
+-
+ func max(a, b int) int {
+ 	if a > b {
+ 		return a
+diff --git a/domain/capture/types.go b/domain/capture/types.go
+index 6fd4bd5..272b1b5 100644
+--- a/domain/capture/types.go
++++ b/domain/capture/types.go
+@@ -2,32 +2,29 @@ package capture
+ 
+ import "image"
+ 
+-// FrameSource exposes frame acquisition for presenters without start/stop control.
++// FrameSource provides read-only access to captured frames.
++// LatestFrame returns the freshest snapshot while Running reports activity.
+ type FrameSource interface {
+-	Frames() <-chan *image.RGBA
++	LatestFrame() FrameSnapshot
+ 	Running() bool
+ }
+ 
+-// SelectionRectProvider supplies an optional active selection rectangle.
++// SelectionRectProvider returns the current selection rectangle, if any.
+ type SelectionRectProvider interface{ SelectionRect() *image.Rectangle }
+ 
+-// ServiceContract narrows lifecycle control methods for capture.
++// ServiceContract exposes basic lifecycle control for capture services.
+ type ServiceContract interface {
+ 	Start()
+ 	Stop()
+ 	Running() bool
+ }
+ 
+-// ServiceWithSelection augments ServiceContract with selection provider mutation.
+-// Presenters typically do not need this; composition root uses it to wire selection overlay.
++// ServiceWithSelection extends ServiceContract with a setter for a selection provider.
+ type ServiceWithSelection interface {
+ 	ServiceContract
+ 	SetSelectionProvider(func() *image.Rectangle)
+ }
+ 
+-// CaptureService is the full public-facing interface for the concrete service.
+-// It intentionally embeds ServiceContract to clarify lifecycle subset.
+-// NOTE: The legacy CaptureService interface is defined in capture_service.go.
+-// To avoid redeclaration, we alias it here to satisfy patterns similar to
+-// domain/fishing where types.go centralizes contracts.
++// Service is the capture service interface used by higher-level components.
++// It is an alias for the concrete capture service defined elsewhere.
+ type Service interface{ CaptureService }
+diff --git a/domain/fishing/bite_detector.go b/domain/fishing/bite_detector.go
+index a3ee234..89df464 100644
+--- a/domain/fishing/bite_detector.go
++++ b/domain/fishing/bite_detector.go
+@@ -9,8 +9,8 @@ import (
+ 	"github.com/soocke/pixel-bot-go/config"
+ )
+ 
+-// BiteDetector runs during Monitoring state; it ingests ~1s of ROI frames and fires once on a significant change.
+-// Not concurrency-safe; call FeedFrame from a single goroutine.
++// BiteDetector detects bites from ROI frames.
++// Not safe for concurrent use; call FeedFrame from a single goroutine.
+ type BiteDetector struct {
+ 	cfg                                                                  *config.Config
+ 	logger                                                               *slog.Logger
+@@ -53,6 +53,8 @@ const (
+ 	frameDebounceNeeded = 1
+ )
+ 
++// NewBiteDetector returns a configured BiteDetector. If cfg is nil the
++// default configuration is used.
+ func NewBiteDetector(cfg *config.Config, logger *slog.Logger) *BiteDetector {
+ 	if cfg == nil {
+ 		cfg = config.DefaultConfig()
+@@ -60,6 +62,7 @@ func NewBiteDetector(cfg *config.Config, logger *slog.Logger) *BiteDetector {
+ 	return &BiteDetector{cfg: cfg, logger: logger, window: make([]float64, windowSize)}
+ }
+ 
++// Reset clears internal state and statistics.
+ func (b *BiteDetector) Reset() {
+ 	b.monitoringStarted = time.Now()
+ 	b.prev, b.ema, b.cur = nil, nil, nil
+@@ -84,6 +87,8 @@ func (b *BiteDetector) Reset() {
+ 	}
+ }
+ 
++// FeedFrame processes one ROI frame sampled at time t and returns true when
++// a bite is detected. Call from a single goroutine.
+ func (b *BiteDetector) FeedFrame(frame *image.RGBA, t time.Time) bool {
+ 	if frame == nil || b.triggered {
+ 		return false
+@@ -231,6 +236,10 @@ func (b *BiteDetector) FeedFrame(frame *image.RGBA, t time.Time) bool {
+ 	return false
+ }
+ 
++// FeedFrame processes a single ROI frame sampled at t and returns true when
++// a bite is detected. FeedFrame is not concurrency-safe and must be called
++// from a single goroutine.
++
+ func (b *BiteDetector) TargetLostHeuristic() bool {
+ 	if b.cfg == nil || b.cfg.MaxCastDurationSeconds <= 0 {
+ 		return false
+@@ -248,5 +257,5 @@ func (b *BiteDetector) TargetLostHeuristic() bool {
+ 	return false
+ }
+ 
+-// Ensure BiteDetector implements contract.
++// compile-time check that BiteDetector implements BiteDetectorContract.
+ var _ BiteDetectorContract = (*BiteDetector)(nil)
+diff --git a/domain/fishing/bite_detector_test.go b/domain/fishing/bite_detector_test.go
+index bd3c7a9..57b88ba 100644
+--- a/domain/fishing/bite_detector_test.go
++++ b/domain/fishing/bite_detector_test.go
+@@ -6,7 +6,7 @@ import (
+ 	"time"
+ )
+ 
+-// synthFrame builds a uniform RGBA frame then applies mutate.
++// synthFrame creates a uniform RGBA image and applies an optional mutate func.
+ func synthFrame(w, h int, base byte, mutate func(px []byte, w, h int)) *image.RGBA {
+ 	img := image.NewRGBA(image.Rect(0, 0, w, h))
+ 	for y := 0; y < h; y++ {
+@@ -21,6 +21,7 @@ func synthFrame(w, h int, base byte, mutate func(px []byte, w, h int)) *image.RG
+ 	return img
+ }
+ 
++// applyRegion sets RGB values to 'lum' inside the given rectangle (clamped).
+ func applyRegion(px []byte, w, h int, x0, y0, x1, y1 int, lum byte) {
+ 	if x0 < 0 {
+ 		x0 = 0
+@@ -42,6 +43,8 @@ func applyRegion(px []byte, w, h int, x0, y0, x1, y1 int, lum byte) {
+ 	}
+ }
+ 
++// feedFrames feeds frames to the BiteDetector at 50ms intervals and
++// returns the index of the frame that triggered detection, or -1.
+ func feedFrames(bd *BiteDetector, frames []*image.RGBA) int {
+ 	start := time.Now()
+ 	for i, f := range frames {
+diff --git a/domain/fishing/fsm.go b/domain/fishing/fsm.go
+index d1a9479..065c3a4 100644
+--- a/domain/fishing/fsm.go
++++ b/domain/fishing/fsm.go
+@@ -9,7 +9,8 @@ import (
+ 	"github.com/soocke/pixel-bot-go/config"
+ )
+ 
+-// FishingFSM manages fishing state transitions and side-effect actions.
++// FishingFSM manages fishing state, timers, detectors and side-effect actions.
++// It runs an internal event loop on a goroutine and serializes state transitions.
+ type FishingFSM struct {
+ 	state            FishingState
+ 	logger           *slog.Logger
+@@ -28,7 +29,8 @@ type FishingFSM struct {
+ 	listeners        []FishingStateListener
+ }
+ 
+-// NewFSM constructs and starts the event loop.
++// NewFSM creates and starts a FishingFSM. The FSM starts in StateHalt.
++// If cfg is nil a default cooldown is used.
+ func NewFSM(logger *slog.Logger, cfg *config.Config, actions ActionCallbacks, detectorCtor DetectorFactory) *FishingFSM {
+ 	cooldown := time.Second
+ 	if cfg != nil && cfg.CooldownSeconds > 0 {
+@@ -106,7 +108,7 @@ func (f *FishingFSM) loop() {
+ 	f.closed = true
+ }
+ 
+-// events
++// internal event types sent to the FSM loop
+ type (
+ 	evtTargetAcquired   struct{}
+ 	evtTargetAcquiredAt struct{ x, y int }
+@@ -129,12 +131,12 @@ func (f *FishingFSM) transition(next FishingState) {
+ 	if prev == next {
+ 		return
+ 	}
+-	// cancel search timer if leaving searching state
++	// stop search timer when leaving StateSearching
+ 	if prev == StateSearching && next != StateSearching && f.searchTimer != nil {
+ 		f.searchTimer.Stop()
+ 		f.searchTimer = nil
+ 	}
+-	// cancel cooldown timer if leaving cooldown state
++	// stop cooldown timer when leaving StateCooldown
+ 	if prev == StateCooldown && next != StateCooldown && f.cooldownTimer != nil {
+ 		f.cooldownTimer.Stop()
+ 		f.cooldownTimer = nil
+@@ -258,9 +260,9 @@ func (f *FishingFSM) transition(next FishingState) {
+ 	}
+ }
+ 
+-// handleTick was removed along with tick-based time simulation; timers now drive transitions.
++// Tick is retained for backward compatibility; timers drive transitions.
+ 
+-// Public API implements contracts
++// Public API methods
+ func (f *FishingFSM) AddListener(l FishingStateListener) { f.events <- evtAddListener{l: l} }
+ func (f *FishingFSM) Current() FishingState              { return f.state }
+ func (f *FishingFSM) EventTargetAcquired()               { f.events <- evtTargetAcquired{} }
+@@ -273,7 +275,7 @@ func (f *FishingFSM) EventAwaitFocus()                   { f.events <- evtAwaitF
+ func (f *FishingFSM) ForceCast()                         { f.events <- evtForceCast{} }
+ func (f *FishingFSM) Cancel()                            { f.events <- evtCancel{} }
+ 
+-// Tick is deprecated and now a no-op retained only for backward compatibility with presenters.
++// Tick is deprecated and is a no-op (retained for backward compatibility).
+ func (f *FishingFSM) Tick(now time.Time) {}
+ func (f *FishingFSM) ProcessMonitoringFrame(roi *image.RGBA, now time.Time) {
+ 	if roi != nil {
+@@ -301,6 +303,7 @@ func (f *FishingFSM) Close() {
+ 	close(f.events)
+ }
+ 
++// recoverLog recovers from a panic and logs the error if a logger is available.
+ func recoverLog(logger *slog.Logger, msg string) {
+ 	if r := recover(); r != nil {
+ 		if logger != nil {
+diff --git a/domain/fishing/fsm_test.go b/domain/fishing/fsm_test.go
+index 128f95e..50f3ee9 100644
+--- a/domain/fishing/fsm_test.go
++++ b/domain/fishing/fsm_test.go
+@@ -7,7 +7,7 @@ import (
+ 	"time"
+ )
+ 
+-// Functional transition tests; side-effect goroutines are no-ops.
++// Functional transition tests.
+ 
+ var discardLogger = slog.New(slog.NewTextHandler(&discardWriter{}, nil))
+ 
+@@ -15,9 +15,8 @@ type discardWriter struct{}
+ 
+ func (d *discardWriter) Write(p []byte) (int, error) { return len(p), nil }
+ 
+-// helper constructs FSM with no-op callbacks & nil detector
++// newTestFSM returns an FSM with no-op action callbacks for testing.
+ func newTestFSM() *FishingFSM {
+-	// we pass nil for detector factory; FSM guards nil detector usage in monitoring path
+ 	return NewFSM(discardLogger, nil, ActionCallbacks{
+ 		PressKey:   func(byte) {},
+ 		MoveCursor: func(int, int) {},
+@@ -45,6 +44,7 @@ func TestFishingFSM_ReelingAdvancesToCooldown(t *testing.T) {
+ 	}
+ }
+ 
++// waitForState waits up to timeout for the FSM to reach expected state.
+ func waitForState(t *testing.T, m *FishingFSM, expected FishingState, timeout time.Duration) {
+ 	deadline := time.Now().Add(timeout)
+ 	for time.Now().Before(deadline) {
+@@ -61,6 +61,7 @@ type transitionRecorder struct {
+ 	seq []FishingState
+ }
+ 
++// listener records transitions.
+ func (r *transitionRecorder) listener(prev, next FishingState) {
+ 	r.mu.Lock()
+ 	r.seq = append(r.seq, next)
+@@ -121,7 +122,7 @@ func TestFishingFSM_CooldownExpiration(t *testing.T) {
+ 	waitForState(t, m, StateMonitoring, 200*time.Millisecond)
+ 	m.EventFishBite()
+ 	waitForState(t, m, StateCooldown, 400*time.Millisecond)
+-	// expect automatic cast after cooldown timer fires (~cooldownDuration+extra)
++	// Expect automatic cast after cooldown.
+ 	waitForState(t, m, StateSearching, 3*time.Second)
+ }
+ 
+diff --git a/domain/fishing/types.go b/domain/fishing/types.go
+index 1d3473c..47713bd 100644
+--- a/domain/fishing/types.go
++++ b/domain/fishing/types.go
+@@ -8,7 +8,7 @@ import (
+ 	"github.com/soocke/pixel-bot-go/config"
+ )
+ 
+-// FishingState enumerates finite states of the fishing cycle.
++// FishingState enumerates fishing FSM states.
+ type FishingState int
+ 
+ const (
+@@ -42,7 +42,7 @@ func (s FishingState) String() string {
+ 	}
+ }
+ 
+-// ActionCallbacks externalize OS interactions (casting, cursor moves, reel click).
++// ActionCallbacks exposes OS actions used by the fishing logic.
+ type ActionCallbacks struct {
+ 	PressKey   func(vk byte)
+ 	MoveCursor func(x, y int)
+@@ -50,20 +50,20 @@ type ActionCallbacks struct {
+ 	ParseVK    func(key string) byte
+ }
+ 
+-// FishingStateListener is called on each successful state transition.
++// FishingStateListener is invoked on state transitions.
+ type FishingStateListener func(prev, next FishingState)
+ 
+-// BiteDetectorContract minimal detector contract used by FSM.
++// BiteDetectorContract is the interface for bite detectors.
+ type BiteDetectorContract interface {
+ 	FeedFrame(*image.RGBA, time.Time) bool
+ 	TargetLostHeuristic() bool
+ 	Reset()
+ }
+ 
+-// DetectorFactory constructs a detector instance.
++// DetectorFactory creates a BiteDetectorContract.
+ type DetectorFactory func(*config.Config, *slog.Logger) BiteDetectorContract
+ 
+-// Interface slices for consumers (presenters).
++// Small interfaces used by consumers.
+ type FishingStateSource interface{ Current() FishingState }
+ type FishingMonitorFrame interface{ ProcessMonitoringFrame(*image.RGBA, time.Time) }
+ type FishingTargetOps interface {
+@@ -85,7 +85,7 @@ type FishingCasting interface {
+ 	Cancel()
+ }
+ 
+-// FishingFSMContract aggregate for DI.
++// FishingFSMContract aggregates the FSM API.
+ type FishingFSMContract interface {
+ 	FishingStateSource
+ 	FishingMonitorFrame
+diff --git a/go.mod b/go.mod
+index 4f3aa57..dcadae5 100644
+--- a/go.mod
++++ b/go.mod
+@@ -3,7 +3,6 @@ module github.com/soocke/pixel-bot-go
+ go 1.25.4
+ 
+ require (
+-	golang.org/x/image v0.26.0
+ 	golang.org/x/sys v0.36.0
+ 	modernc.org/tk9.0 v1.73.0
+ )
+@@ -20,6 +19,7 @@ require (
+ 	github.com/ncruces/go-strftime v0.1.9 // indirect
+ 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+ 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
++	golang.org/x/image v0.26.0 // indirect
+ 	golang.org/x/net v0.39.0 // indirect
+ 	modernc.org/fileutil v1.3.40 // indirect
+ 	modernc.org/fsm v1.3.2 // indirect
+diff --git a/main.go b/main.go
+index 52e3184..6eb13d4 100644
+--- a/main.go
++++ b/main.go
+@@ -2,6 +2,8 @@ package main
+ 
+ import (
+ 	"log/slog"
++	"net/http"
++	_ "net/http/pprof" // register pprof handlers when debug enabled
+ 	"os"
+ 
+ 	"github.com/soocke/pixel-bot-go/app"
+@@ -21,6 +23,18 @@ func main() {
+ 	if loadErr != nil {
+ 		logger.Warn("config load failed; using defaults", "error", loadErr)
+ 	}
++
++	// Conditional pprof server for profiling memory / CPU when debug is enabled.
++	// Accessible at http://localhost:6060/debug/pprof/
++	if cfg.Debug {
++		const pprofAddr = "localhost:6060"
++		go func() {
++			logger.Info("starting pprof server", "addr", pprofAddr)
++			if err := http.ListenAndServe(pprofAddr, nil); err != nil {
++				logger.Warn("pprof server stopped", "error", err)
++			}
++		}()
++	}
+ 	appInstance := app.NewApp("Pixel Bot", 800, 600, cfg, logger)
+ 	if err := appInstance.Run(); err != nil {
+ 		logger.Error("app run failed", "error", err)
+diff --git a/ui/images/roi_extractor.go b/ui/images/roi_extractor.go
+index 77143b1..2c6d5f4 100644
+--- a/ui/images/roi_extractor.go
++++ b/ui/images/roi_extractor.go
+@@ -6,9 +6,10 @@ import (
+ 	"image/draw"
+ )
+ 
+-// ExtractROI produces an ROI image centered at (cx, cy) with desired square side 'size'.
+-// It clamps the rectangle to frame bounds and guarantees at least 1x1.
+-// Returns the ROI image (always *image.RGBA) and the rectangle relative to frame.
++// ExtractROI returns a square region-of-interest from the provided frame.
++// The ROI is centered at (cx, cy) with side length "size" (minimum 1).
++// The rectangle is clamped to the frame bounds and the returned image is
++// always an *image.RGBA. The returned rectangle is relative to the frame.
+ func ExtractROI(frame *image.RGBA, cx, cy, size int) (*image.RGBA, image.Rectangle, error) {
+ 	if frame == nil {
+ 		return nil, image.Rectangle{}, errors.New("nil frame")
+diff --git a/ui/images/roi_extractor_test.go b/ui/images/roi_extractor_test.go
+index 144a101..315d4ac 100644
+--- a/ui/images/roi_extractor_test.go
++++ b/ui/images/roi_extractor_test.go
+@@ -6,7 +6,7 @@ import (
+ )
+ 
+ func TestExtractROI_CentersAndClamps(t *testing.T) {
+-	// Create 100x100 frame
++	// frame: 100x100 image
+ 	frame := image.NewRGBA(image.Rect(0, 0, 100, 100))
+ 	roi, rect, err := ExtractROI(frame, 50, 50, 40)
+ 	if err != nil || roi == nil {
+@@ -36,7 +36,8 @@ func TestExtractROI_ClampsNearEdge(t *testing.T) {
+ 
+ func TestExtractROI_SizeAdjustedWhenTooLarge(t *testing.T) {
+ 	frame := image.NewRGBA(image.Rect(0, 0, 30, 30))
+-	roi, rect, _ := ExtractROI(frame, 5, 5, 50) // size larger than frame
++	// requested size larger than frame
++	roi, rect, _ := ExtractROI(frame, 5, 5, 50)
+ 	if roi == nil {
+ 		t.Fatalf("nil roi")
+ 	}
+@@ -47,6 +48,7 @@ func TestExtractROI_SizeAdjustedWhenTooLarge(t *testing.T) {
+ 
+ func TestExtractROI_MinSize(t *testing.T) {
+ 	frame := image.NewRGBA(image.Rect(0, 0, 10, 10))
++	// requested size zero -> expect minimum 1x1 ROI
+ 	roi, rect, _ := ExtractROI(frame, 0, 0, 0)
+ 	if roi == nil {
+ 		t.Fatalf("nil roi")
+diff --git a/ui/images/scale.go b/ui/images/scale.go
+index 1470ef4..d2adee3 100644
+--- a/ui/images/scale.go
++++ b/ui/images/scale.go
+@@ -7,39 +7,44 @@ import (
+ 	"image/png"
+ )
+ 
+-// EncodePNG encodes an image to PNG bytes. Errors are ignored and may return an empty slice.
++// EncodePNG encodes an image to PNG bytes with no compression using a fresh buffer each call.
++// This simpler implementation trades reduced allocations for clarity; the GC will reclaim
++// buffers when no longer referenced.
+ func EncodePNG(img image.Image) []byte {
+ 	if img == nil {
+ 		return nil
+ 	}
+-	var buf bytes.Buffer
+-	_ = png.Encode(&buf, img)
+-	return buf.Bytes()
++	var b bytes.Buffer
++	enc := png.Encoder{CompressionLevel: png.NoCompression}
++	_ = enc.Encode(&b, img)
++	return b.Bytes()
+ }
+ 
+-// ScaleToFit performs a nearest-neighbour scale so that the returned image fits within
+-// maxW x maxH preserving aspect ratio. If the source already fits, the original is returned.
+-func ScaleToFit(src image.Image, maxW, maxH int) image.Image {
++// ScaleToFit performs a nearest-neighbour scale so the result fits within maxW x maxH
++// preserving aspect ratio. A new *image.RGBA is allocated for every call regardless of
++// source dimensions; callers should retain the result if they need reuse.
++func ScaleToFit(src image.Image, maxW, maxH int) *image.RGBA {
+ 	if src == nil {
+ 		return nil
+ 	}
+ 	b := src.Bounds()
+ 	w, h := b.Dx(), b.Dy()
+-	if w <= maxW && h <= maxH {
+-		return src
+-	}
+ 	if maxW < 1 {
+ 		maxW = 1
+ 	}
+ 	if maxH < 1 {
+ 		maxH = 1
+ 	}
++	// If fits already, still allocate a new RGBA for consistency.
+ 	ratioW := float64(maxW) / float64(w)
+ 	ratioH := float64(maxH) / float64(h)
+ 	ratio := ratioW
+ 	if ratioH < ratio {
+ 		ratio = ratioH
+ 	}
++	if w <= maxW && h <= maxH {
++		ratio = 1.0
++	}
+ 	newW := int(float64(w)*ratio + 0.5)
+ 	newH := int(float64(h)*ratio + 0.5)
+ 	if newW < 1 {
+diff --git a/ui/model/capture_model.go b/ui/model/capture_model.go
+index 130aaf4..0ee6b59 100644
+--- a/ui/model/capture_model.go
++++ b/ui/model/capture_model.go
+@@ -4,11 +4,14 @@ import (
+ 	"sync/atomic"
+ )
+ 
+-// CaptureModel tracks whether capture is enabled. The zero value is disabled and usable.
+-// Concurrency-safe via atomic Bool because UI callbacks and presenter ticks may race.
++// CaptureModel tracks whether capture is enabled.
++//
++// The zero value represents disabled capture and is safe to use. Access is
++// concurrency-safe: the enabled flag is stored in an atomic.Bool because UI
++// callbacks and presenter ticks may access it from different goroutines.
+ type CaptureModel struct{ enabled atomic.Bool }
+ 
+-// Enabled reports whether capture is currently enabled.
++// Enabled reports whether capture is enabled.
+ func (m *CaptureModel) Enabled() bool {
+ 	if m == nil {
+ 		return false
+@@ -16,7 +19,7 @@ func (m *CaptureModel) Enabled() bool {
+ 	return m.enabled.Load()
+ }
+ 
+-// SetEnabled stores the enabled flag.
++// SetEnabled sets the enabled flag.
+ func (m *CaptureModel) SetEnabled(b bool) {
+ 	if m == nil {
+ 		return
+diff --git a/ui/model/detection_model.go b/ui/model/detection_model.go
+index 2a7a31c..4a048a7 100644
+--- a/ui/model/detection_model.go
++++ b/ui/model/detection_model.go
+@@ -4,29 +4,29 @@ import (
+ 	"image"
+ )
+ 
+-// DetectionModel holds the current global ROI rectangle. Zero value means no active ROI and is usable.
+-// No synchronization needed: updates occur on the UI thread tick.
++// DetectionModel holds the current global ROI rectangle.
++// The zero value (empty rectangle) means no active ROI.
++// No synchronization is required because updates happen on the UI thread.
+ type DetectionModel struct {
+ 	roi image.Rectangle
+ }
+ 
++// NewDetectionModel returns an initialized DetectionModel.
+ func NewDetectionModel() *DetectionModel { return &DetectionModel{} }
+ 
+-// SetROI sets the rectangle (global coordinates). Use an empty rect to clear.
++// SetROI sets the global ROI. Passing an empty or non-positive rectangle clears the ROI.
+ func (m *DetectionModel) SetROI(r image.Rectangle) {
+ 	if m == nil {
+ 		return
+ 	}
+-	// classify rectangle
+ 	if r.Empty() || r.Dx() <= 0 || r.Dy() <= 0 {
+-		// treat as clear; report invalid if dimensions non-positive
+ 		m.roi = image.Rectangle{}
+ 		return
+ 	}
+ 	m.roi = r
+ }
+ 
+-// ROI returns the current rectangle (may be empty).
++// ROI returns the current global ROI (may be empty).
+ func (m *DetectionModel) ROI() image.Rectangle {
+ 	if m == nil {
+ 		return image.Rectangle{}
+diff --git a/ui/model/session_model.go b/ui/model/session_model.go
+index fac8166..f8fb5d0 100644
+--- a/ui/model/session_model.go
++++ b/ui/model/session_model.go
+@@ -4,42 +4,41 @@ import (
+ 	"time"
+ )
+ 
+-// SessionModel tracks the current session duration and accumulated completed active time.
+-// Decoupled from UI; presenters poll Values() and update views. Zero value is usable.
++// SessionModel tracks the current session duration and the accumulated active time.
++// It is decoupled from the UI; presenters should poll Values() and update views.
++// The zero value is ready to use.
+ type SessionModel struct {
+-	// active indicates whether capture is currently running.
+-	active bool
+-	// captureStart is the timestamp when the current session began.
+-	captureStart time.Time
+-	// lastSessionDuration is the duration of the ongoing (if active) or most recent session.
++	active              bool
++	captureStart        time.Time
+ 	lastSessionDuration time.Duration
+-	// accumulated stores the sum of all completed (inactive) session durations.
+-	accumulated time.Duration
++	accumulated         time.Duration
+ }
+ 
+-// NewSessionModel constructs a new model instance.
++// NewSessionModel returns a pointer to a ready-to-use SessionModel.
+ func NewSessionModel() *SessionModel { return &SessionModel{} }
+ 
+-// OnTick advances timing given current capturing state at time now. Call periodically (presenter tick).
++// OnTick updates the model using the current capture state and timestamp.
++// Call periodically (for example, from a presenter tick).
+ func (m *SessionModel) OnTick(capturing bool, now time.Time) {
+ 	if m == nil {
+ 		return
+ 	}
+ 	if capturing {
+-		if !m.active { // transition from off -> on
++		if !m.active { // transition off -> on
+ 			m.active = true
+ 			m.captureStart = now
+ 			m.lastSessionDuration = 0
+ 		}
+ 		m.lastSessionDuration = now.Sub(m.captureStart)
+-	} else if m.active { // transition from on -> off
++	} else if m.active { // transition on -> off
+ 		m.lastSessionDuration = now.Sub(m.captureStart)
+ 		m.accumulated += m.lastSessionDuration
+ 		m.active = false
+ 	}
+ }
+ 
+-// Values returns the current session and total durations. Total includes the ongoing session while active.
++// Values returns the current session duration and the total accumulated duration.
++// The total includes the ongoing session when active.
+ func (m *SessionModel) Values() (session, total time.Duration) {
+ 	if m == nil {
+ 		return 0, 0
+diff --git a/ui/model/session_model_test.go b/ui/model/session_model_test.go
+index 71c3798..5d6e7ee 100644
+--- a/ui/model/session_model_test.go
++++ b/ui/model/session_model_test.go
+@@ -9,30 +9,30 @@ func TestSessionModel_BasicLifecycle(t *testing.T) {
+ 	m := NewSessionModel()
+ 	base := time.Unix(0, 0)
+ 
+-	// start at t0
++	// Start at t0 and run for 5s.
+ 	m.OnTick(true, base)
+-	// advance 5s
++	// Advance 5s.
+ 	m.OnTick(true, base.Add(5*time.Second))
+ 	session, total := m.Values()
+ 	if session < 5*time.Second || total < 5*time.Second {
+ 		t.Fatalf("expected ~5s session & total; got session=%v total=%v", session, total)
+ 	}
+ 
+-	// stop at 5s
++	// Stop at 5s.
+ 	m.OnTick(false, base.Add(5*time.Second))
+ 	session, total = m.Values()
+ 	if session < 5*time.Second || total < 5*time.Second {
+ 		t.Fatalf("after stop expected persisted 5s; got session=%v total=%v", session, total)
+ 	}
+ 
+-	// idle 2s (no change)
++	// Idle 2s (no change expected).
+ 	m.OnTick(false, base.Add(7*time.Second))
+ 	session2, total2 := m.Values()
+ 	if session2 != session || total2 != total {
+ 		t.Fatalf("idle tick should not change durations: before session=%v total=%v after session=%v total=%v", session, total, session2, total2)
+ 	}
+ 
+-	// second session at 10s lasts 3s
++	// Second session at 10s lasting 3s.
+ 	m.OnTick(true, base.Add(10*time.Second))
+ 	m.OnTick(true, base.Add(13*time.Second))
+ 	s3, t3 := m.Values()
+diff --git a/ui/presenter/capture_presenter.go b/ui/presenter/capture_presenter.go
+index ec3aade..83a525e 100644
+--- a/ui/presenter/capture_presenter.go
++++ b/ui/presenter/capture_presenter.go
+@@ -4,36 +4,37 @@ import (
+ 	"github.com/soocke/pixel-bot-go/domain/capture"
+ )
+ 
+-// CaptureModel provides enabled state access.
++// CaptureModel provides access to the capture enabled state.
+ type CaptureModel interface {
+ 	Enabled() bool
+ 	SetEnabled(bool)
+ }
+ 
+-// LifecycleContract narrows what presenter needs from the capture layer.
++// LifecycleContract is the minimal lifecycle API used by the presenter.
+ type LifecycleContract interface {
+ 	Start()
+ 	Stop()
+ }
+ 
+-// CaptureFSM exposes focus & halt events directly (align with FishingFSM names).
++// CaptureFSM provides the events the presenter needs to interact with the FSM.
+ type CaptureFSM interface {
+ 	EventAwaitFocus()
+ 	EventHalt()
+ }
+ 
+ // CaptureView updates UI elements affected by capture toggling.
+-// State label updates are now owned solely by FSMPresenter; this presenter
+-// no longer mutates it directly to preserve single responsibility.
++// The presenter does not manage state-label updates; that responsibility
++// belongs to the FSMPresenter.
+ type CaptureView interface {
+ 	PreviewReset()
+ 	ConfigEditable(bool)
+ }
+ 
+-// CapturePresenter owns presentation logic for toggling capture state.
++// CapturePresenter coordinates capture enable/disable actions between the
++// model, capture service, FSM and view.
+ type CapturePresenter struct {
+ 	model   CaptureModel
+-	service LifecycleContract // narrowed from full capture.CaptureService
++	service LifecycleContract
+ 	fsm     CaptureFSM
+ 	view    CaptureView
+ }
+diff --git a/ui/presenter/capture_presenter_test.go b/ui/presenter/capture_presenter_test.go
+index 9170831..bdb2d90 100644
+--- a/ui/presenter/capture_presenter_test.go
++++ b/ui/presenter/capture_presenter_test.go
+@@ -17,9 +17,10 @@ type mockService struct{ started, stopped int }
+ 
+ func (s *mockService) Start()                                       { s.started++ }
+ func (s *mockService) Stop()                                        { s.stopped++ }
+-func (s *mockService) Frames() <-chan *image.RGBA                   { return nil }
++func (s *mockService) LatestFrame() cap.FrameSnapshot               { return cap.FrameSnapshot{} }
+ func (s *mockService) Running() bool                                { return s.started > s.stopped }
+ func (s *mockService) SetSelectionProvider(func() *image.Rectangle) {}
++func (s *mockService) Stats() cap.CaptureStats                      { return cap.CaptureStats{} }
+ 
+ var _ cap.CaptureService = (*mockService)(nil)
+ 
+diff --git a/ui/presenter/detection_presenter.go b/ui/presenter/detection_presenter.go
+index 40dac53..dfad25c 100644
+--- a/ui/presenter/detection_presenter.go
++++ b/ui/presenter/detection_presenter.go
+@@ -1,45 +1,75 @@
+ package presenter
+ 
+ import (
++	"errors"
+ 	"image"
+-	"log/slog"
++	"math"
++	"sync"
+ 	"time"
+ 
++	"log/slog"
++
+ 	"github.com/soocke/pixel-bot-go/config"
+ 	"github.com/soocke/pixel-bot-go/domain/capture"
+-	"github.com/soocke/pixel-bot-go/domain/fishing" // Placeholder for alignment
++	"github.com/soocke/pixel-bot-go/domain/fishing"
+ 	"github.com/soocke/pixel-bot-go/ui/images"
+ 	"github.com/soocke/pixel-bot-go/ui/model"
+ )
+ 
+-// FrameSource supplies capture frames.
++// FrameSource supplies the most recent frame captured from the game window.
+ type FrameSource interface {
+ 	Running() bool
+-	Frames() <-chan *image.RGBA
++	LatestFrame() capture.FrameSnapshot
+ }
+ 
+-// DetectionFSM abstracts required FSM interactions.
++// DetectionFSM exposes the minimal fishing state operations used by the presenter.
+ type DetectionFSM interface {
+ 	Current() fishing.FishingState
+-	EventTargetAcquiredAt(int, int)
++	EventTargetAcquiredAt(x, y int)
+ 	TargetCoordinates() (int, int, bool)
+-	ProcessMonitoringFrame(*image.RGBA, time.Time)
++	ProcessMonitoringFrame(img *image.RGBA, now time.Time)
+ }
+ 
+-// SelectionRectProvider supplies optional selection rectangle.
+-// SelectionRectProvider supplies optional selection rectangle.
+-// Method name aligned with view.SelectionOverlay.ActiveRect for direct injection (no adapter).
+-type SelectionRectProvider interface{ ActiveRect() *image.Rectangle }
++// SelectionRectProvider returns the currently active capture selection.
++type SelectionRectProvider interface {
++	ActiveRect() *image.Rectangle
++}
+ 
+-// DetectionView updates capture + ROI preview.
+-// DetectionView updates capture + ROI preview. UpdateDetection now accepts image.Image
+-// to avoid unnecessary adapter wrapping (*image.RGBA still satisfies image.Image).
++// DetectionView describes the UI surface updated by the presenter.
+ type DetectionView interface {
+-	UpdateCapture(image.Image)
+-	UpdateDetection(image.Image)
++	UpdateCapture(img image.Image)
++	UpdateDetection(img image.Image)
++}
++
++type detectionTaskKind int
++
++const (
++	detectionTaskSearch detectionTaskKind = iota + 1
++	detectionTaskMonitor
++)
++
++type detectionTask struct {
++	kind         detectionTaskKind
++	snapshot     capture.FrameSnapshot
++	selection    image.Rectangle
++	hasSelection bool
++	cfg          *config.Config
++	target       image.Image
++	targetPoint  image.Point
++}
++
++type detectionResult struct {
++	kind     detectionTaskKind
++	sequence uint64
++	err      error
++	found    bool
++	location image.Point
++	roi      *image.RGBA
++	roiRect  image.Rectangle
++	duration time.Duration
+ }
+ 
+-// DetectionPresenter drives detection & ROI extraction, updating model & view.
++// DetectionPresenter coordinates capture preview and detection scheduling.
+ type DetectionPresenter struct {
+ 	Enabled   func() bool
+ 	Source    FrameSource
+@@ -50,89 +80,285 @@ type DetectionPresenter struct {
+ 	TargetImg image.Image
+ 	Model     *model.DetectionModel
+ 	logger    *slog.Logger
++
++	workerOnce sync.Once
++	workCh     chan detectionTask
++	resultCh   chan detectionResult
++
++	lastSearchSeq  uint64
++	lastMonitorSeq uint64
++	lastSearchTime time.Time
++	searchDelay    time.Duration
+ }
+ 
+-func NewDetectionPresenter(enabled func() bool, src FrameSource, fsm DetectionFSM, sel SelectionRectProvider, view DetectionView, cfg *config.Config, target image.Image, model *model.DetectionModel) *DetectionPresenter {
+-	return &DetectionPresenter{Enabled: enabled, Source: src, FSM: fsm, Selection: sel, View: view, Config: cfg, TargetImg: target, Model: model}
++// NewDetectionPresenter constructs a detection presenter.
++func NewDetectionPresenter(enabled func() bool, source FrameSource, fsm DetectionFSM, selection SelectionRectProvider, view DetectionView, cfg *config.Config, target image.Image, model *model.DetectionModel, logger *slog.Logger) *DetectionPresenter {
++	if cfg == nil {
++		cfg = config.DefaultConfig()
++	}
++	return &DetectionPresenter{
++		Enabled:        enabled,
++		Source:         source,
++		FSM:            fsm,
++		Selection:      selection,
++		View:           view,
++		Config:         cfg,
++		TargetImg:      target,
++		Model:          model,
++		logger:         logger,
++		workCh:         make(chan detectionTask, 1),
++		resultCh:       make(chan detectionResult, 1),
++		searchDelay:    65 * time.Millisecond,
++		lastSearchSeq:  0,
++		lastMonitorSeq: 0,
++	}
+ }
+ 
+-// ProcessFrame reads a frame (non-blocking) and processes detection logic based on FSM state.
++// ProcessFrame pulls the latest frame, schedules detection work, and handles worker results.
+ func (p *DetectionPresenter) ProcessFrame() {
+-	if p == nil || p.Source == nil || p.FSM == nil || p.View == nil || p.Enabled == nil || p.Model == nil {
++	if p == nil || p.Enabled == nil || p.Source == nil || p.FSM == nil || p.View == nil {
+ 		return
+ 	}
++
++	p.ensureWorker()
++
++	for {
++		select {
++		case res := <-p.resultCh:
++			p.handleResult(res)
++		default:
++			goto drained
++		}
++	}
++
++drained:
+ 	if !p.Enabled() || !p.Source.Running() {
+ 		return
+ 	}
+-	fsmState := p.FSM.Current()
+-	if fsmState == fishing.StateWaitingFocus {
++
++	snapshot := p.Source.LatestFrame()
++	frame := snapshot.Image
++	if frame == nil {
++		return
++	}
++
++	p.View.UpdateCapture(frame)
++
++	var selection image.Rectangle
++	hasSelection := false
++	if p.Selection != nil {
++		if rect := p.Selection.ActiveRect(); rect != nil {
++			selection = *rect
++			hasSelection = true
++		}
++	}
++
++	switch p.FSM.Current() {
++	case fishing.StateSearching:
++		p.maybeDispatchSearch(snapshot, selection, hasSelection)
++	case fishing.StateMonitoring:
++		p.maybeDispatchMonitor(snapshot, selection, hasSelection)
++	}
++}
++
++func (p *DetectionPresenter) ensureWorker() {
++	p.workerOnce.Do(func() {
++		go p.runWorker()
++	})
++}
++
++func (p *DetectionPresenter) runWorker() {
++	for task := range p.workCh {
++		res := p.executeTask(task)
++		if res.kind == 0 {
++			continue
++		}
++		select {
++		case p.resultCh <- res:
++		default:
++			select {
++			case <-p.resultCh:
++			default:
++			}
++			select {
++			case p.resultCh <- res:
++			default:
++			}
++		}
++	}
++}
++
++func (p *DetectionPresenter) maybeDispatchSearch(snapshot capture.FrameSnapshot, selection image.Rectangle, hasSelection bool) {
++	if p.TargetImg == nil {
+ 		return
+ 	}
+-	frame := <-p.Source.Frames()
+-	if frame == nil {
++	if snapshot.Sequence == 0 || snapshot.Sequence == p.lastSearchSeq {
+ 		return
+ 	}
+-	// Display scaled preview only; analysis may use original or downscaled copy.
+-	p.View.UpdateCapture(frame) // preview scaling handled by view
+-	// Optional analysis frame scaling for template matching (searching state only).
+-	analysisFrame := frame
+-	var scale float64 = 1.0
+-	if p.Config != nil && p.Config.AnalysisScale > 0 && p.Config.AnalysisScale < 1.0 {
+-		// Use ScaleToFit to approximate uniform scale reduction.
+-		b := frame.Bounds()
+-		w := int(float64(b.Dx()) * p.Config.AnalysisScale)
+-		h := int(float64(b.Dy()) * p.Config.AnalysisScale)
+-		if w < 1 {
+-			w = 1
++	if !p.lastSearchTime.IsZero() && time.Since(p.lastSearchTime) < p.searchDelay {
++		return
++	}
++	p.lastSearchSeq = snapshot.Sequence
++	p.lastSearchTime = time.Now()
++	task := detectionTask{
++		kind:         detectionTaskSearch,
++		snapshot:     snapshot,
++		selection:    selection,
++		hasSelection: hasSelection,
++		cfg:          p.copyConfig(),
++		target:       p.TargetImg,
++	}
++	p.dispatchTask(task)
++}
++
++func (p *DetectionPresenter) maybeDispatchMonitor(snapshot capture.FrameSnapshot, selection image.Rectangle, hasSelection bool) {
++	if snapshot.Sequence == 0 || snapshot.Sequence == p.lastMonitorSeq {
++		return
++	}
++	px, py, ok := p.FSM.TargetCoordinates()
++	if !ok {
++		return
++	}
++	p.lastMonitorSeq = snapshot.Sequence
++	task := detectionTask{
++		kind:         detectionTaskMonitor,
++		snapshot:     snapshot,
++		selection:    selection,
++		hasSelection: hasSelection,
++		cfg:          p.copyConfig(),
++		targetPoint:  image.Pt(px, py),
++	}
++	p.dispatchTask(task)
++}
++
++func (p *DetectionPresenter) dispatchTask(task detectionTask) {
++	select {
++	case p.workCh <- task:
++	default:
++		select {
++		case <-p.workCh:
++		default:
+ 		}
+-		if h < 1 {
+-			h = 1
++		select {
++		case p.workCh <- task:
++		default:
+ 		}
++	}
++}
++
++func (p *DetectionPresenter) executeTask(task detectionTask) detectionResult {
++	res := detectionResult{kind: task.kind, sequence: task.snapshot.Sequence}
++	frame := task.snapshot.Image
++	if frame == nil {
++		res.err = errors.New("nil frame")
++		return res
++	}
++	cfg := task.cfg
++	if cfg == nil {
++		cfg = config.DefaultConfig()
++	}
++	switch task.kind {
++	case detectionTaskSearch:
++		return p.doSearch(task, frame, cfg)
++	case detectionTaskMonitor:
++		return p.doMonitor(task, frame, cfg)
++	default:
++		res.err = errors.New("unknown detection task kind")
++		return res
++	}
++}
++
++func (p *DetectionPresenter) doSearch(task detectionTask, frame *image.RGBA, cfg *config.Config) detectionResult {
++	res := detectionResult{kind: detectionTaskSearch, sequence: task.snapshot.Sequence}
++	analysis := frame
++	scaleX, scaleY := 1.0, 1.0
++	if cfg.AnalysisScale > 0 && cfg.AnalysisScale < 1.0 {
++		w := int(math.Max(1, math.Round(float64(frame.Bounds().Dx())*cfg.AnalysisScale)))
++		h := int(math.Max(1, math.Round(float64(frame.Bounds().Dy())*cfg.AnalysisScale)))
+ 		scaled := images.ScaleToFit(frame, w, h)
+-		if rgba, ok := scaled.(*image.RGBA); ok {
+-			analysisFrame = rgba
+-			scale = p.Config.AnalysisScale
++		if scaled != nil && scaled.Bounds().Dx() > 0 && scaled.Bounds().Dy() > 0 {
++			analysis = scaled
++			scaleX = float64(frame.Bounds().Dx()) / float64(analysis.Bounds().Dx())
++			scaleY = float64(frame.Bounds().Dy()) / float64(analysis.Bounds().Dy())
+ 		}
+ 	}
+-	if fsmState == fishing.StateSearching && p.TargetImg != nil {
+-		x, y, ok, err := capture.DetectTemplate(analysisFrame, p.TargetImg, p.Config)
+-		if err != nil {
+-			p.logger.Error("detectTemplate", "error", err)
++	start := time.Now()
++	match, err := capture.DetectTemplateDetailed(analysis, task.target, cfg)
++	res.duration = time.Since(start)
++	if err != nil {
++		res.err = err
++		return res
++	}
++	if !match.Found {
++		return res
++	}
++	x := match.X
++	y := match.Y
++	if analysis != frame {
++		x = int(math.Round(float64(x) * scaleX))
++		y = int(math.Round(float64(y) * scaleY))
++	}
++	if task.hasSelection {
++		x += task.selection.Min.X
++		y += task.selection.Min.Y
++	}
++	res.found = true
++	res.location = image.Pt(x, y)
++	return res
++}
++
++func (p *DetectionPresenter) doMonitor(task detectionTask, frame *image.RGBA, cfg *config.Config) detectionResult {
++	res := detectionResult{kind: detectionTaskMonitor, sequence: task.snapshot.Sequence}
++	pt := task.targetPoint
++	localX := pt.X
++	localY := pt.Y
++	if task.hasSelection {
++		localX -= task.selection.Min.X
++		localY -= task.selection.Min.Y
++	}
++	roi, rect, err := images.ExtractROI(frame, localX, localY, cfg.ROISizePx)
++	if err != nil {
++		res.err = err
++		return res
++	}
++	globalRect := rect
++	if task.hasSelection {
++		globalRect = rect.Add(task.selection.Min)
++	}
++	res.found = true
++	res.location = pt
++	res.roi = roi
++	res.roiRect = globalRect
++	return res
++}
++
++func (p *DetectionPresenter) handleResult(res detectionResult) {
++	if res.err != nil {
++		if p.logger != nil {
++			p.logger.Error("detection", "error", res.err)
+ 		}
+-		if ok {
+-			// Translate coordinates back to original frame space if scaled.
+-			if scale != 1.0 {
+-				x = int(float64(x)/scale + 0.5)
+-				y = int(float64(y)/scale + 0.5)
+-			}
+-			if sel := p.Selection.ActiveRect(); sel != nil {
+-				x += sel.Min.X
+-				y += sel.Min.Y
+-			}
+-			p.FSM.EventTargetAcquiredAt(x, y)
++		return
++	}
++	switch res.kind {
++	case detectionTaskSearch:
++		if res.found {
++			p.FSM.EventTargetAcquiredAt(res.location.X, res.location.Y)
+ 		}
+-	} else if fsmState == fishing.StateMonitoring {
+-		// Monitoring retains original frame for ROI extraction fidelity.
+-		x, y, ok := p.FSM.TargetCoordinates()
+-		if ok {
+-			if sel := p.Selection.ActiveRect(); sel != nil { // convert global to frame-local
+-				x -= sel.Min.X
+-				y -= sel.Min.Y
++	case detectionTaskMonitor:
++		if res.roi != nil {
++			if p.Model != nil {
++				p.Model.SetROI(res.roiRect)
+ 			}
+-			roiImg, roiRect, err := images.ExtractROI(frame, x, y, p.Config.ROISizePx)
+-			if err != nil || roiImg == nil {
+-				return
+-			}
+-			if sel := p.Selection.ActiveRect(); sel != nil { // store global rect
+-				p.Model.SetROI(image.Rect(sel.Min.X+roiRect.Min.X, sel.Min.Y+roiRect.Min.Y, sel.Min.X+roiRect.Max.X, sel.Min.Y+roiRect.Max.Y))
+-			} else {
+-				p.Model.SetROI(roiRect)
+-			}
+-			p.View.UpdateDetection(roiImg)
+-			p.FSM.ProcessMonitoringFrame(roiImg, time.Now())
++			p.View.UpdateDetection(res.roi)
++			p.FSM.ProcessMonitoringFrame(res.roi, time.Now())
+ 		}
+ 	}
+-	// Recycle original frame after all processing to enable buffer reuse.
+-	// Safe because we no longer access 'frame' after this point.
+-	capture.RecycleFrame(frame)
++}
++
++func (p *DetectionPresenter) copyConfig() *config.Config {
++	if p.Config == nil {
++		return config.DefaultConfig()
++	}
++	clone := *p.Config
++	return &clone
+ }
+diff --git a/ui/presenter/focus_watcher.go b/ui/presenter/focus_watcher.go
+index a86c33a..1d84ad1 100644
+--- a/ui/presenter/focus_watcher.go
++++ b/ui/presenter/focus_watcher.go
+@@ -10,26 +10,27 @@ import (
+ 	"github.com/soocke/pixel-bot-go/domain/fishing"
+ )
+ 
+-// FocusFSM narrows the FSM contract needed by the focus watcher.
++// FocusFSM is the minimal FSM interface used by FocusWatcher.
+ type FocusFSM interface {
+ 	Current() fishing.FishingState
+ 	EventFocusAcquired()
+ }
+ 
+-// FocusWatcher automatically watches which window is in focus and fire the event on window change.
++// FocusWatcher watches the foreground window while the FSM is in
++// StateWaitingFocus and triggers EventFocusAcquired when a match occurs.
+ type FocusWatcher struct {
+ 	FSM        FocusFSM
+ 	Logger     *slog.Logger
+ 	Foreground func() (string, error)
+-	Selected   func() string // user-selected window title (normalized by provider)
++	Selected   func() string
+ 	interval   time.Duration
+ 	running    atomic.Bool
+ 	done       chan struct{}
+ 	fired      bool
+-	lastTitle  string // last foreground title seen (normalized)
++	lastTitle  string
+ }
+ 
+-// NewFocusWatcher constructs a focus watcher with optional delay.
++// NewFocusWatcher returns a FocusWatcher. If fg or sel are nil, defaults are used.
+ func NewFocusWatcher(fsm FocusFSM, logger *slog.Logger, fg func() (string, error), sel func() string) *FocusWatcher {
+ 	if fg == nil {
+ 		fg = action.ForegroundWindowTitle
+@@ -40,8 +41,8 @@ func NewFocusWatcher(fsm FocusFSM, logger *slog.Logger, fg func() (string, error
+ 	return &FocusWatcher{FSM: fsm, Logger: logger, Foreground: fg, Selected: sel, interval: 250 * time.Millisecond}
+ }
+ 
+-// Tick checks state and triggers EventFocusAcquired after Delay in waiting state.
+-// OnState should be called from an FSM listener; it starts/stops polling based on WaitingFocus state.
++// OnState starts polling when next == StateWaitingFocus and stops otherwise.
++// Register it as an FSM listener.
+ func (w *FocusWatcher) OnState(prev, next fishing.FishingState) {
+ 	if w == nil {
+ 		return
+@@ -50,7 +51,7 @@ func (w *FocusWatcher) OnState(prev, next fishing.FishingState) {
+ 		w.start()
+ 		return
+ 	}
+-	// leaving waiting state
++	// Stop polling when leaving the waiting state.
+ 	w.stop()
+ }
+ 
+@@ -90,7 +91,8 @@ func (w *FocusWatcher) poll() {
+ 	if w.fired || w.FSM == nil {
+ 		return
+ 	}
+-	if w.FSM.Current() != fishing.StateWaitingFocus { // safety
++	// Ensure FSM is still waiting for focus.
++	if w.FSM.Current() != fishing.StateWaitingFocus {
+ 		return
+ 	}
+ 	if w.Foreground == nil {
+@@ -110,7 +112,8 @@ func (w *FocusWatcher) poll() {
+ 		return
+ 	}
+ 	current := strings.ToLower(fgTitle)
+-	if current != w.lastTitle { // only react on change
++	// Only react on title change.
++	if current != w.lastTitle {
+ 		w.lastTitle = current
+ 		if current == selected {
+ 			w.FSM.EventFocusAcquired()
+@@ -118,13 +121,12 @@ func (w *FocusWatcher) poll() {
+ 			if w.Logger != nil {
+ 				w.Logger.Debug("focus acquired", "window", fgTitle)
+ 			}
+-			// stop after firing to save cycles
+ 			w.stop()
+ 		}
+ 	}
+ }
+ 
+-func (w *FocusWatcher) reset() { // unused after refactor; retained for future reuse
++func (w *FocusWatcher) reset() {
+ 	w.fired = false
+ 	w.lastTitle = ""
+ }
+diff --git a/ui/presenter/focus_watcher_test.go b/ui/presenter/focus_watcher_test.go
+index 0b0cb50..c4f9894 100644
+--- a/ui/presenter/focus_watcher_test.go
++++ b/ui/presenter/focus_watcher_test.go
+@@ -15,7 +15,9 @@ type mockFocusFSM struct {
+ func (m *mockFocusFSM) Current() fishing.FishingState { return m.state }
+ func (m *mockFocusFSM) EventFocusAcquired()           { m.fired++; m.state = fishing.StateSearching }
+ 
+-// Test that watcher fires only when foreground title changes and matches selection while waiting.
++// TestFocusWatcher_FiresOnMatchChange verifies the watcher triggers the FSM
++// only when the foreground window title changes to a value that matches the
++// current selection while the FSM is in the waiting-for-focus state.
+ func TestFocusWatcher_FiresOnMatchChange(t *testing.T) {
+ 	fsm := &mockFocusFSM{state: fishing.StateWaitingFocus}
+ 	titles := []string{"Other", "GameWindow"}
+@@ -44,7 +46,9 @@ func TestFocusWatcher_FiresOnMatchChange(t *testing.T) {
+ 	}
+ }
+ 
+-// Test that leaving focus state resets and allows firing again.
++// TestFocusWatcher_ResetOnStateExit verifies the watcher resets when the FSM
++// leaves the waiting state and can fire again after re-entering with a matching
++// title.
+ func TestFocusWatcher_ResetOnStateExit(t *testing.T) {
+ 	fsm := &mockFocusFSM{state: fishing.StateWaitingFocus}
+ 	title := "WinA"
+diff --git a/ui/presenter/fsm_presenter.go b/ui/presenter/fsm_presenter.go
+index 82bce75..e9f413a 100644
+--- a/ui/presenter/fsm_presenter.go
++++ b/ui/presenter/fsm_presenter.go
+@@ -6,15 +6,15 @@ import (
+ 	"github.com/soocke/pixel-bot-go/domain/fishing"
+ )
+ 
+-// FSMSource exposes the domain fishing FSM methods presenter needs.
++// FSMSource provides the fishing FSM methods the presenter requires.
+ type FSMSource interface {
+ 	Current() fishing.FishingState
+ }
+ 
+-// StateView updates state label.
++// StateView sets the state label in the view.
+ type StateView interface{ SetStateLabel(string) }
+ 
+-// FSMPresenter consumes FSM ticks & pending state changes and updates the view.
++// FSMPresenter receives FSM ticks and pending state changes, and updates the view.
+ type FSMPresenter struct {
+ 	eng     FSMSource
+ 	view    StateView
+@@ -26,7 +26,9 @@ func NewFSMPresenter(eng FSMSource, view StateView) *FSMPresenter {
+ 	return &FSMPresenter{eng: eng, view: view}
+ }
+ 
+-// OnState queues a state transitioned from FSM listener.
++// OnState queues a transitioned state from the FSM listener.
++//
++// The latest queued state will be reflected on the next Tick.
+ func (p *FSMPresenter) OnState(s fishing.FishingState) {
+ 	if p == nil {
+ 		return
+@@ -34,6 +36,8 @@ func (p *FSMPresenter) OnState(s fishing.FishingState) {
+ 	p.pending = append(p.pending, s)
+ }
+ 
++// Tick processes queued states and updates the view with the most recent state.
++// It clears the pending queue after processing.
+ func (p *FSMPresenter) Tick(now time.Time) {
+ 	if p == nil || p.eng == nil || p.view == nil {
+ 		return
+diff --git a/ui/presenter/session_presenter.go b/ui/presenter/session_presenter.go
+index c445e7c..e690d71 100644
+--- a/ui/presenter/session_presenter.go
++++ b/ui/presenter/session_presenter.go
+@@ -6,30 +6,32 @@ import (
+ 	"github.com/soocke/pixel-bot-go/ui/model"
+ )
+ 
+-// CaptureEnabledModel supplies capture enabled state.
++// CaptureEnabledModel reports whether capture is enabled.
+ type CaptureEnabledModel interface{ Enabled() bool }
+ 
+-// SessionView receives formatted session durations.
++// SessionView displays formatted session and total durations.
+ type SessionView interface {
+-	SetSession(sessionSeconds, totalSeconds int)
++	SetSession(session, total time.Duration)
+ }
+ 
+-// SessionPresenter formats session & total durations from model to view.
++// SessionPresenter formats session and total durations from the model to the view.
+ type SessionPresenter struct {
+ 	sess *model.SessionModel
+ 	cap  CaptureEnabledModel
+ 	view SessionView
+ }
+ 
++// NewSessionPresenter returns a new SessionPresenter.
+ func NewSessionPresenter(sess *model.SessionModel, cap CaptureEnabledModel, view SessionView) *SessionPresenter {
+ 	return &SessionPresenter{sess: sess, cap: cap, view: view}
+ }
+ 
++// Tick updates the presenter: advance the session model and push values to the view.
+ func (p *SessionPresenter) Tick(now time.Time) {
+ 	if p == nil || p.sess == nil || p.cap == nil || p.view == nil {
+ 		return
+ 	}
+ 	p.sess.OnTick(p.cap.Enabled(), now)
+ 	s, t := p.sess.Values()
+-	p.view.SetSession(int(s.Seconds()), int(t.Seconds()))
++	p.view.SetSession(s, t)
+ }
+diff --git a/ui/presenter/update_loop.go b/ui/presenter/update_loop.go
+index 68fcbc8..227b200 100644
+--- a/ui/presenter/update_loop.go
++++ b/ui/presenter/update_loop.go
+@@ -3,6 +3,9 @@ package presenter
+ import "time"
+ 
+ // Loop aggregates feature presenters and drives periodic updates.
++//
++// It calls Tick/ProcessFrame on the sub-presenters and invokes a
++// scheduler callback. The zero value is usable (methods are nil-safe).
+ type Loop struct {
+ 	Session  *SessionPresenter
+ 	FSM      *FSMPresenter
+diff --git a/ui/view/capture_preview.go b/ui/view/capture_preview.go
+index 91f229d..edc8a07 100644
+--- a/ui/view/capture_preview.go
++++ b/ui/view/capture_preview.go
+@@ -18,22 +18,29 @@ type CapturePreview interface {
+ }
+ 
+ type capturePreview struct {
+-	captureLabel   *LabelWidget
+-	detectionLabel *LabelWidget
+-	targetW        int
+-	targetH        int
++	captureLabel       *LabelWidget
++	detectionLabel     *LabelWidget
++	targetW            int
++	targetH            int
++	prevCapturePhoto   *Img // last Tk photo image instance for capture
++	prevDetectionPhoto *Img // last Tk photo image instance for detection
+ }
+ 
++// Internal state tracks current preview photos so we can dispose old images
++// before replacing them, preventing accumulation of off-screen image data.
++
+ // NewCapturePreview creates the preview labels, grids them and returns the view.
+ // Layout: capture spans columns 0-3; detection ROI sits at column 4 of the provided row.
+ func NewCapturePreview(row int) CapturePreview {
+ 	placeholder := image.NewRGBA(image.Rect(0, 0, 200, 120))
+ 	pngBytes := images.EncodePNG(placeholder)
+-	capture := Label(Image(NewPhoto(Data(pngBytes))), Borderwidth(1), Relief("sunken"))
+-	detection := Label(Image(NewPhoto(Data(pngBytes))), Borderwidth(1), Relief("sunken"))
++	capPhoto := NewPhoto(Data(pngBytes))
++	detPhoto := NewPhoto(Data(pngBytes))
++	capture := Label(Image(capPhoto), Borderwidth(1), Relief("sunken"))
++	detection := Label(Image(detPhoto), Borderwidth(1), Relief("sunken"))
+ 	Grid(capture, Row(row), Column(0), Columnspan(4), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
+ 	Grid(detection, Row(row), Column(4), Columnspan(1), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
+-	return &capturePreview{captureLabel: capture, detectionLabel: detection}
++	return &capturePreview{captureLabel: capture, detectionLabel: detection, prevCapturePhoto: capPhoto, prevDetectionPhoto: detPhoto}
+ }
+ 
+ const (
+@@ -47,34 +54,52 @@ func (v *capturePreview) UpdateCapture(img image.Image) {
+ 	if v.captureLabel == nil || img == nil {
+ 		return
+ 	}
+-	// Determine target size (fallback to legacy constants if unset)
++	// Determine target size (fallback to max constants if unset).
+ 	w, h := v.targetW, v.targetH
+ 	if w <= 0 || h <= 0 {
+ 		w, h = maxPreviewW, maxPreviewH
+ 	}
+-	// Scale for display only; original frame retained upstream for analysis.
++	// Scale for display only; allocate a fresh scaled image each call.
+ 	scaled := images.ScaleToFit(img, w, h)
+-	v.captureLabel.Configure(Image(NewPhoto(Data(images.EncodePNG(scaled)))))
++	pngBytes := images.EncodePNG(scaled)
++	// Replace previous photo to avoid retaining obsolete pixel buffers.
++	if v.prevCapturePhoto != nil {
++		v.prevCapturePhoto.Delete()
++	}
++	newPhoto := NewPhoto(Data(pngBytes))
++	v.prevCapturePhoto = newPhoto
++	v.captureLabel.Configure(Image(newPhoto))
+ }
+ 
+ func (v *capturePreview) UpdateDetection(img image.Image) {
+-	if v.detectionLabel == nil {
++	if v.detectionLabel == nil || img == nil {
+ 		return
+ 	}
+-	if img == nil {
+-		return
++	pngBytes := images.EncodePNG(img)
++	if v.prevDetectionPhoto != nil {
++		v.prevDetectionPhoto.Delete()
+ 	}
+-	v.detectionLabel.Configure(Image(NewPhoto(Data(images.EncodePNG(img)))))
++	newPhoto := NewPhoto(Data(pngBytes))
++	v.prevDetectionPhoto = newPhoto
++	v.detectionLabel.Configure(Image(newPhoto))
+ }
+ 
+ func (v *capturePreview) Reset() {
+ 	placeholder := image.NewRGBA(image.Rect(0, 0, 200, 120))
+ 	pngBytes := images.EncodePNG(placeholder)
+ 	if v.captureLabel != nil {
+-		v.captureLabel.Configure(Image(NewPhoto(Data(pngBytes))))
++		if v.prevCapturePhoto != nil {
++			v.prevCapturePhoto.Delete()
++		}
++		v.prevCapturePhoto = NewPhoto(Data(pngBytes))
++		v.captureLabel.Configure(Image(v.prevCapturePhoto))
+ 	}
+ 	if v.detectionLabel != nil {
+-		v.detectionLabel.Configure(Image(NewPhoto(Data(pngBytes))))
++		if v.prevDetectionPhoto != nil {
++			v.prevDetectionPhoto.Delete()
++		}
++		v.prevDetectionPhoto = NewPhoto(Data(pngBytes))
++		v.detectionLabel.Configure(Image(v.prevDetectionPhoto))
+ 	}
+ }
+ 
+diff --git a/ui/view/config_panel.go b/ui/view/config_panel.go
+index e1c7683..9605b20 100644
+--- a/ui/view/config_panel.go
++++ b/ui/view/config_panel.go
+@@ -14,11 +14,10 @@ import (
+ )
+ 
+ // ConfigPanel encapsulates the configuration form widgets and apply logic.
+-// It owns its widgets and writes back into *config.Config on ApplyChanges.
+ type ConfigPanel interface {
+-	Build(startRow int, parent ...Widget) (endRow int) // optional parent to place the panel inside
++	Build(startRow int, parent ...Widget) (endRow int)
+ 	SetEditable(enabled bool)
+-	ApplyChanges() // parses widget text into underlying config and persists
++	ApplyChanges()
+ }
+ 
+ type configPanel struct {
+@@ -26,10 +25,10 @@ type configPanel struct {
+ 	cfgPath  string
+ 	logger   *slog.Logger
+ 	applyBtn *ButtonWidget
+-	widgets  map[string]*TextWidget // keyed by internal field id
++	widgets  map[string]*TextWidget
+ }
+ 
+-// NewConfigPanel creates the view bound to cfg.
++// NewConfigPanel creates a configuration panel bound to the provided config.
+ func NewConfigPanel(cfg *config.Config, cfgPath string, logger *slog.Logger) ConfigPanel {
+ 	return &configPanel{cfg: cfg, cfgPath: cfgPath, logger: logger, widgets: make(map[string]*TextWidget)}
+ }
+@@ -37,7 +36,6 @@ func NewConfigPanel(cfg *config.Config, cfgPath string, logger *slog.Logger) Con
+ func (v *configPanel) Build(startRow int, parent ...Widget) (row int) {
+ 	c := v.cfg
+ 	row = startRow
+-	// choose grid target (parent frame or App root)
+ 	var target Widget = App
+ 	if len(parent) > 0 && parent[0] != nil {
+ 		target = parent[0]
+@@ -162,7 +160,6 @@ func (v *configPanel) ApplyChanges() {
+ 	}
+ }
+ 
+-// parsing helpers (unexported)
+ func parseFloatField(s string) (float64, bool) {
+ 	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+ 	if err != nil {
+diff --git a/ui/view/root_view.go b/ui/view/root_view.go
+index 5776046..760609c 100644
+--- a/ui/view/root_view.go
++++ b/ui/view/root_view.go
+@@ -6,33 +6,28 @@ import (
+ 	"regexp"
+ 	"strconv"
+ 	"strings"
++	"time"
+ 
+ 	"github.com/soocke/pixel-bot-go/config"
+ 	"github.com/soocke/pixel-bot-go/ui/images"
+ 	"github.com/soocke/pixel-bot-go/ui/theme"
+ 
+-	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders.
++	//lint:ignore ST1001 Dot import for concise Tk widget DSL.
+ 	. "modernc.org/tk9.0"
+ )
+ 
+ // RootView composes the top-level application layout and wires UI callbacks.
+-// It owns high-level subviews but exposes minimal exported fields for presenters.
+ type RootView struct {
+ 	cfg     *config.Config
+ 	cfgPath string
+ 	logger  *slog.Logger
+ 
+-	// Subviews
+-	Session     SessionStats
+-	ConfigPanel ConfigPanel
+-	CapturePrev CapturePreview
+-
+-	// Widgets
++	Session          SessionStats
++	ConfigPanel      ConfigPanel
++	CapturePrev      CapturePreview
+ 	StateLabel       *TLabelWidget
+ 	WindowSelect     *TComboboxWidget
+ 	StatusLabel      *LabelWidget
+-	sessionLabel     *TLabelWidget
+-	totalLabel       *TLabelWidget
+ 	windowExplainLbl *TLabelWidget
+ 	captureLabel     *LabelWidget
+ 	detectionLabel   *LabelWidget
+@@ -40,96 +35,79 @@ type RootView struct {
+ 	selectionBtn     *ButtonWidget
+ 	exitBtn          *ButtonWidget
+ 	captureRow       int
+-	// Layout containers we may rebuild
+-	configFrame     *FrameWidget
+-	mainFrame       *FrameWidget
+-	headerFrame     *FrameWidget
+-	leftInlineFrame *FrameWidget
+-	actionsFrame    *FrameWidget
+-	statusBarFrame  *FrameWidget
+-	configVisible   bool
+-	toggleConfigBtn *ButtonWidget
+-	scaleBound      bool
+-	darkMode        bool
+-	darkToggleBtn   *ButtonWidget
++	configFrame      *FrameWidget
++	mainFrame        *FrameWidget
++	headerFrame      *FrameWidget
++	leftInlineFrame  *FrameWidget
++	actionsFrame     *FrameWidget
++	statusBarFrame   *FrameWidget
++	configVisible    bool
++	toggleConfigBtn  *ButtonWidget
++	scaleBound       bool
++	darkMode         bool
++	darkToggleBtn    *ButtonWidget
+ }
+ 
+-// UI abstracts the subset of view operations needed by presenters, enabling decoupling
+-// from the concrete RootView implementation.
++// UI abstracts view operations needed by presenters.
+ type UI interface {
+ 	SetStateLabel(text string)
+ 	SetConfigEditable(enabled bool)
+ 	UpdateCapture(img image.Image)
+ 	UpdateDetection(img image.Image)
+-	SetSession(seconds int, totalSeconds int)
++	SetSession(session, total time.Duration)
+ }
+ 
+ func NewRootView(cfg *config.Config, cfgPath string, logger *slog.Logger) *RootView {
+ 	return &RootView{cfg: cfg, cfgPath: cfgPath, logger: logger}
+ }
+ 
+-// Build constructs the layout. titles: list of window titles for selection dropdown.
+-// Handlers are invoked on user actions.
++// Build constructs the layout with window titles for selection dropdown.
+ func (rv *RootView) Build(titles []string, onToggleCapture func(), onSelectionGrid func(), onExit func(), onWindowChanged func(title string)) {
+ 	if rv == nil {
+ 		return
+ 	}
+-	// Initialize styles once (idempotent if called multiple times in current session).
+ 	theme.InitStyles()
+-	// Apply persisted dark mode preference before constructing palette-dependent widgets.
+ 	if rv.cfg != nil && rv.cfg.DarkMode {
+ 		theme.SetDark(true)
+ 		rv.darkMode = true
+ 	}
+ 
+-	// --- Modern Layout Structure ---
+-	// Grid the App root: header (row0), body (row1), status (row2)
+ 	GridRowConfigure(App, 0, Weight(0))
+ 	GridRowConfigure(App, 1, Weight(1))
+ 	GridRowConfigure(App, 2, Weight(0))
+-	GridColumnConfigure(App, 0, Weight(0)) // side panel
+-	GridColumnConfigure(App, 1, Weight(1)) // main content
++	GridColumnConfigure(App, 0, Weight(0))
++	GridColumnConfigure(App, 1, Weight(1))
+ 
+ 	pal := theme.CurrentPalette()
+ 
+-	// Header Frame (with sub-frame for toggle + timers stacked)
+ 	rv.headerFrame = Frame(Background(pal.Surface), Borderwidth(0))
+ 	Grid(rv.headerFrame, Row(0), Column(0), Columnspan(2), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
+-	GridColumnConfigure(rv.headerFrame, 0, Weight(0)) // left stack
+-	GridColumnConfigure(rv.headerFrame, 1, Weight(1)) // actions stretch
+-	GridColumnConfigure(rv.headerFrame, 2, Weight(0)) // state label
++	GridColumnConfigure(rv.headerFrame, 0, Weight(0))
++	GridColumnConfigure(rv.headerFrame, 1, Weight(1))
++	GridColumnConfigure(rv.headerFrame, 2, Weight(0))
+ 
+-	// Left inline frame: toggle + timers on same row
+ 	rv.leftInlineFrame = Frame(Background(pal.Surface), Borderwidth(0))
+ 	Grid(rv.leftInlineFrame, In(rv.headerFrame), Row(0), Column(0), Sticky("nw"))
+-	GridColumnConfigure(rv.leftInlineFrame, 0, Weight(0)) // toggle
+-	GridColumnConfigure(rv.leftInlineFrame, 1, Weight(0)) // session
+-	GridColumnConfigure(rv.leftInlineFrame, 2, Weight(0)) // total
++	GridColumnConfigure(rv.leftInlineFrame, 0, Weight(0))
++	GridColumnConfigure(rv.leftInlineFrame, 1, Weight(0))
++	GridColumnConfigure(rv.leftInlineFrame, 2, Weight(0))
+ 
+-	rv.Session = NewSessionStats(0)
+-	rv.sessionLabel = TLabel(Txt("Session: 00:00"))
+-	rv.totalLabel = TLabel(Txt("Total: 00:00"))
+-	Grid(rv.sessionLabel, In(rv.leftInlineFrame), Row(0), Column(1), Sticky("w"), Padx("0.2m"))
+-	Grid(rv.totalLabel, In(rv.leftInlineFrame), Row(0), Column(2), Sticky("w"), Padx("0.2m"))
++	rv.Session = NewSessionStats(rv.leftInlineFrame, 0, 1)
+ 
+-	// Actions / window selection area
+ 	rv.actionsFrame = Frame(Background(pal.Surface))
+ 	Grid(rv.actionsFrame, In(rv.headerFrame), Row(0), Column(1), Sticky("we"))
+-	// Columns: 0 explanation label, 1 combobox (stretch), 2 capture btn, 3 selection btn, 4 exit btn
+ 	GridColumnConfigure(rv.actionsFrame, 0, Weight(0))
+ 	GridColumnConfigure(rv.actionsFrame, 1, Weight(1))
+ 	GridColumnConfigure(rv.actionsFrame, 2, Weight(0))
+ 	GridColumnConfigure(rv.actionsFrame, 3, Weight(0))
+ 	GridColumnConfigure(rv.actionsFrame, 4, Weight(0))
+ 
+-	// State label on right
+ 	rv.StateLabel = TLabel(Txt("State: <none>"))
+ 	Grid(rv.StateLabel, In(rv.headerFrame), Row(0), Column(2), Sticky("e"), Padx("0.3m"))
+ 
+ 	if len(titles) == 0 {
+ 		titles = []string{"<none>"}
+ 	}
+-	// Explanation label for window selection purpose
+ 	rv.windowExplainLbl = TLabel(Txt("Target Window:"))
+ 	Grid(rv.windowExplainLbl, In(rv.actionsFrame), Row(0), Column(0), Sticky("w"), Padx("0.2m"), Pady("0.2m"))
+ 	rv.WindowSelect = TCombobox(Values(titles), Width(26))
+@@ -153,7 +131,6 @@ func (rv *RootView) Build(titles []string, onToggleCapture func(), onSelectionGr
+ 	rv.exitBtn = Button(Txt("Exit"), Background(pal.Danger), Foreground("white"), Relief("raised"), Borderwidth(1), Command(onExit))
+ 	Grid(rv.exitBtn, In(rv.actionsFrame), Row(0), Column(4), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
+ 
+-	// Body: config hidden by default; mainFrame spans both columns initially
+ 	rv.configVisible = false
+ 	rv.configFrame = nil
+ 	rv.mainFrame = Frame(Background(pal.Surface), Relief("flat"))
+@@ -161,48 +138,37 @@ func (rv *RootView) Build(titles []string, onToggleCapture func(), onSelectionGr
+ 	GridRowConfigure(rv.mainFrame, 0, Weight(1))
+ 	GridColumnConfigure(rv.mainFrame, 0, Weight(1))
+ 
+-	// Prepare ConfigPanel (UI built only when shown)
+ 	rv.ConfigPanel = NewConfigPanel(rv.cfg, rv.cfgPath, rv.logger)
+ 	rv.captureRow = 0
+ 
+-	// Capture & Detection preview inside mainFrame
+-	// Provide placeholder images so widgets reserve appropriate pixel dimensions.
+-	// Capture placeholder (arbitrary 400x225 similar to previous constants)
+ 	capturePh := image.NewRGBA(image.Rect(0, 0, 400, 225))
+ 	capture := Label(Image(NewPhoto(Data(images.EncodePNG(capturePh)))), Relief("sunken"), Borderwidth(1))
+ 	Grid(capture, In(rv.mainFrame), Row(0), Column(0), Sticky("nsew"), Padx("0.3m"), Pady("0.3m"))
+ 
+-	// Detection placeholder sized exactly to configured ROI (square)
+ 	roiSize := rv.cfg.ROISizePx
+-	if roiSize <= 0 { // fallback safety
++	if roiSize <= 0 {
+ 		roiSize = 80
+ 	}
+ 	detectionPh := image.NewRGBA(image.Rect(0, 0, roiSize, roiSize))
+ 	detection := Label(Image(NewPhoto(Data(images.EncodePNG(detectionPh)))), Relief("sunken"), Borderwidth(1))
+-	// Place detection to the right of capture; allow natural size (no Width/Height hints)
+ 	Grid(detection, In(rv.mainFrame), Row(0), Column(1), Sticky("n"), Padx("0.3m"), Pady("0.3m"))
+ 
+-	// Replace old CapturePrev with new labels hooking into same interface expectations.
+ 	rv.CapturePrev = &capturePreview{captureLabel: capture, detectionLabel: detection}
+ 	rv.captureLabel = capture
+ 	rv.detectionLabel = detection
+-	// Provide generous initial fallback size before geometry is realized.
+ 	if cp, ok := rv.CapturePrev.(*capturePreview); ok {
+ 		cp.setTargetSize(800, 450)
+ 	}
+-	// Bind <Configure> once to recompute scaling when window size changes (first real layout pass).
+ 	if !rv.scaleBound {
+ 		Bind(App, "<Configure>", Command(func() { rv.updatePreviewScale() }))
+ 		rv.scaleBound = true
+ 	}
+ 
+-	// Status bar
+ 	rv.statusBarFrame = Frame(Background(pal.Surface))
+ 	Grid(rv.statusBarFrame, Row(2), Column(0), Columnspan(2), Sticky("we"))
+ 	rv.StatusLabel = Label(Txt("Ready"), Anchor("w"))
+ 	Grid(rv.StatusLabel, In(rv.statusBarFrame), Row(0), Column(0), Sticky("w"), Padx("0.4m"), Pady("0.2m"))
+ 
+-	// Add config toggle button (placed after initial build so frames exist)
+ 	rv.toggleConfigBtn = Button(Txt("Show Config"), Background(pal.Primary), Foreground("white"), Relief("raised"), Borderwidth(1),
+ 		Command(func() { rv.toggleConfig() }))
+ 	Grid(rv.toggleConfigBtn, In(rv.leftInlineFrame), Row(0), Column(0), Sticky("w"), Padx("0.2m"), Pady("0.1m"))
+@@ -248,12 +214,12 @@ func (rv *RootView) UpdateDetection(img image.Image) {
+ }
+ 
+ // SetSession updates both session and total capture durations.
+-func (rv *RootView) SetSession(seconds int, totalSeconds int) {
++func (rv *RootView) SetSession(session, total time.Duration) {
+ 	if rv == nil || rv.Session == nil {
+ 		return
+ 	}
+-	rv.Session.SetSession(seconds)
+-	rv.Session.SetTotal(totalSeconds)
++	rv.Session.SetSession(session)
++	rv.Session.SetTotal(total)
+ }
+ 
+ // --- CapturePresenter view contract methods ---
+@@ -342,12 +308,7 @@ func (rv *RootView) applyPalette() {
+ 		rv.configFrame.Configure(Background(pal.Surface))
+ 	}
+ 	// Labels
+-	if rv.sessionLabel != nil {
+-		rv.sessionLabel.Configure(Background(pal.Surface), Foreground(pal.Text))
+-	}
+-	if rv.totalLabel != nil {
+-		rv.totalLabel.Configure(Background(pal.Surface), Foreground(pal.Text))
+-	}
++	// SessionStats component manages its own labels' palette; nothing additional here.
+ 	if rv.windowExplainLbl != nil {
+ 		rv.windowExplainLbl.Configure(Background(pal.Surface), Foreground(pal.TextMuted))
+ 	}
+diff --git a/ui/view/selection_overlay.go b/ui/view/selection_overlay.go
+index c6074bc..006c6d0 100644
+--- a/ui/view/selection_overlay.go
++++ b/ui/view/selection_overlay.go
+@@ -11,7 +11,7 @@ import (
+ 
+ 	"github.com/soocke/pixel-bot-go/config"
+ 
+-	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders.
++	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders
+ 	. "modernc.org/tk9.0"
+ )
+ 
+@@ -20,14 +20,14 @@ import (
+ type SelectionOverlay interface {
+ 	OpenOrFocus()
+ 	Clear()
+-	ActiveRect() *image.Rectangle // method name used directly by presenter (SelectionRectProvider)
++	ActiveRect() *image.Rectangle
+ }
+ 
+ type selectionOverlay struct {
+ 	logger    *slog.Logger
+ 	cfg       *config.Config
+ 	cfgPath   string
+-	selection atomic.Value // image.Rectangle
++	selection atomic.Value // stores image.Rectangle
+ 	win       *ToplevelWidget
+ }
+ 
+@@ -105,7 +105,6 @@ func (v *selectionOverlay) confirm() {
+ 			v.cfg.SelectionW, v.cfg.SelectionH = rect.Dx(), rect.Dy()
+ 			_ = v.cfg.Save(v.cfgPath)
+ 		}
+-	} else {
+ 	}
+ 	v.destroy()
+ }
+@@ -131,16 +130,16 @@ func (v *selectionOverlay) ActiveRect() *image.Rectangle {
+ 	return &r
+ }
+ 
+-// computeCenteredGeometry returns the screen width/height using Tk winfo queries.
+-// It falls back to nominal 1280x720 if queries fail.
++// computeCenteredGeometry returns the screen width and height.
++// Currently returns static values; should be replaced with proper Tk winfo queries.
+ func computeCenteredGeometry() (float64, float64) {
+-	// Fallback static screen size; replace with proper winfo queries if available.
+ 	return 1920, 1080
+ }
+ 
+-// geometry parsing
++// geomReSel matches window geometry strings in the format "WIDTHxHEIGHT+X+Y"
+ var geomReSel = regexp.MustCompile(`^(\d+)x(\d+)\+(-?\d+)\+(-?\d+)$`)
+ 
++// parseGeometrySel parses a Tk geometry string and returns the corresponding rectangle.
+ func parseGeometrySel(g string) (image.Rectangle, bool) {
+ 	g = strings.TrimSpace(g)
+ 	m := geomReSel.FindStringSubmatch(g)
+diff --git a/ui/view/session_stats.go b/ui/view/session_stats.go
+index 5d36e37..2000c1e 100644
+--- a/ui/view/session_stats.go
++++ b/ui/view/session_stats.go
+@@ -2,14 +2,16 @@ package view
+ 
+ import (
+ 	"fmt"
+-	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders.
++	"time"
++
++	//lint:ignore ST1001 Dot import for concise Tk widget DSL.
+ 	. "modernc.org/tk9.0"
+ )
+ 
+-// SessionStats defines the minimal interface to update session and total capture durations.
++// SessionStats updates session and total capture durations.
+ type SessionStats interface {
+-	SetSession(seconds int)
+-	SetTotal(seconds int)
++	SetSession(d time.Duration)
++	SetTotal(d time.Duration)
+ }
+ 
+ type sessionStats struct {
+@@ -17,28 +19,44 @@ type sessionStats struct {
+ 	totalLbl   *LabelWidget
+ }
+ 
+-// NewSessionStats creates the two labels and grids them at the provided row.
+-func NewSessionStats(row int) SessionStats {
++// NewSessionStats creates session and total duration labels in a grid layout.
++// The session label is placed at (row, startCol) and total label at (row, startCol+1).
++// If parent is nil, labels are positioned relative to the App root.
++func NewSessionStats(parent *FrameWidget, row, startCol int) SessionStats {
+ 	s := &sessionStats{sessionLbl: Label(Width(14)), totalLbl: Label(Width(14))}
+-	Grid(s.sessionLbl, Row(row), Column(0), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
+-	Grid(s.totalLbl, Row(row), Column(1), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
++	// Position session label
++	if parent != nil {
++		Grid(s.sessionLbl, In(parent), Row(row), Column(startCol), Sticky("w"), Padx("0.2m"))
++	} else {
++		Grid(s.sessionLbl, Row(row), Column(startCol), Sticky("w"), Padx("0.2m"))
++	}
++	// Position total label
++	if parent != nil {
++		Grid(s.totalLbl, In(parent), Row(row), Column(startCol+1), Sticky("w"), Padx("0.2m"))
++	} else {
++		Grid(s.totalLbl, Row(row), Column(startCol+1), Sticky("w"), Padx("0.2m"))
++	}
+ 	s.sessionLbl.Configure(Txt("Session: 00:00"))
+ 	s.totalLbl.Configure(Txt("Total: 00:00"))
+ 	return s
+ }
+ 
+-func (s *sessionStats) SetSession(seconds int) {
++// SetSession updates the session duration display.
++func (s *sessionStats) SetSession(d time.Duration) {
+ 	if s == nil || s.sessionLbl == nil {
+ 		return
+ 	}
++	seconds := int(d.Seconds())
+ 	min, sec := seconds/60, seconds%60
+ 	s.sessionLbl.Configure(Txt(fmt.Sprintf("Session: %02d:%02d", min, sec)))
+ }
+ 
+-func (s *sessionStats) SetTotal(seconds int) {
++// SetTotal updates the total duration display.
++func (s *sessionStats) SetTotal(d time.Duration) {
+ 	if s == nil || s.totalLbl == nil {
+ 		return
+ 	}
++	seconds := int(d.Seconds())
+ 	min, sec := seconds/60, seconds%60
+ 	s.totalLbl.Configure(Txt(fmt.Sprintf("Total: %02d:%02d", min, sec)))
+ }
