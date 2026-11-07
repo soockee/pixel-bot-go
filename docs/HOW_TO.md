@@ -133,7 +133,7 @@ Label a session from your own casts and reels, giving your bindings:
 go run ./cmd/detecteval -label datasets/zone1-day -cast mouse:x1 -reel mouse:right
 ```
 
-Check a few casts against the frames, because the bite times are estimates: the file names are milliseconds from the start, and `-reaction` (default 400) is how long you take to click after a bite. It will not replace an existing `labels.json`, so hand corrections are safe. Do not move the game window while recording, or the bobber boxes will be wrong.
+Check a few casts against the frames, because the bite times are estimates: the file names are milliseconds from the start, and `-reaction` (default 1200) is how long you take to click after a bite. It will not replace an existing `labels.json`, so hand corrections are safe. Do not move the game window while recording, or the bobber boxes will be wrong.
 
 Then pass every dataset to include:
 
@@ -141,7 +141,22 @@ Then pass every dataset to include:
 go run ./cmd/detecteval datasets/zone1-day datasets/zone1-night
 ```
 
-To compare another detector, add it to the `locators` or `biteDetectors` map in `cmd/detecteval/main.go` and select it with `-locator` or `-bite`.
+This compares every registered technique, one column each. Use `-locator` or `-bite` to compare only some.
+
+### Add and try a technique
+
+1. Implement `detect.Locator` or `detect.BiteDetector`.
+2. Add one line for it in `domain/detect/registry.go`.
+3. Run `detecteval`. The new technique appears as a column.
+4. To use it in the app, enter its name under Show Config, in **Locator** or **Bite Detector**.
+
+### Export data for training
+
+```powershell
+go run ./cmd/detecteval -export datasets-crops datasets/zone1-day datasets/zone1-night
+```
+
+This saves only the area watched in each cast, plus an `index.jsonl`, which is far smaller than the full frames. Keep the output out of git.
 
 ## Collect and compare playtest traces
 

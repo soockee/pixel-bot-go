@@ -3,11 +3,13 @@ package view
 import (
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/action"
+	"github.com/soocke/pixel-bot-go/domain/detect"
 	"github.com/soocke/pixel-bot-go/ui/theme"
 
 	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders.
@@ -59,6 +61,8 @@ func (v *ConfigPanel) Build(target Widget) {
 	makeRow("stopKey", "Stop Hotkey (after restart)", c.StopKey)
 	makeRow("maxFailedCasts", "Max Failed Casts", fmt.Sprintf("%d", c.MaxFailedCasts))
 	makeRow("maxSessionMinutes", "Max Session Minutes", fmt.Sprintf("%d", c.MaxSessionMinutes))
+	makeRow("locator", "Locator ("+strings.Join(detect.LocatorNames(), ", ")+")", c.Locator)
+	makeRow("biteDetector", "Bite Detector ("+strings.Join(detect.BiteDetectorNames(), ", ")+")", c.BiteDetector)
 	makeRow("recordDir", "Recording Folder", c.RecordDir)
 	makeRow("recordKeys", "Record Keys (true/false)", fmt.Sprintf("%t", c.RecordKeys))
 	makeRow("roiSizePx", "ROI Size Px", fmt.Sprintf("%d", c.ROISizePx))
@@ -116,6 +120,14 @@ func (v *ConfigPanel) apply() {
 	key("stopKey", &cfg.StopKey)
 	integer("maxFailedCasts", &cfg.MaxFailedCasts)
 	integer("maxSessionMinutes", &cfg.MaxSessionMinutes)
+	choice := func(id string, dst *string, names []string) {
+		field(id, func(s string) bool {
+			*dst = s
+			return slices.Contains(names, s)
+		})
+	}
+	choice("locator", &cfg.Locator, detect.LocatorNames())
+	choice("biteDetector", &cfg.BiteDetector, detect.BiteDetectorNames())
 	field("recordDir", func(s string) bool {
 		cfg.RecordDir = s
 		return s != ""

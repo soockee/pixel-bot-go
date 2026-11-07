@@ -71,8 +71,15 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions)
 	}
 	c.FSM = fishing.NewFSM(logger, cfg, callbacks)
 
-	newLocator := func(config.Config) detect.Locator { return detect.NewMarkerLocator() }
-	c.Engine = fishing.NewEngine(c.frames(), c.FSM, newLocator, detect.NewMotionBiteDetector(logger), cfg, logger)
+	detectors := func(run config.Config) (detect.Locator, detect.BiteDetector, error) {
+		locator, err := detect.NewLocator(run.Locator, run)
+		if err != nil {
+			return nil, nil, err
+		}
+		bite, err := detect.NewBiteDetector(run.BiteDetector, logger)
+		return locator, bite, err
+	}
+	c.Engine = fishing.NewEngine(c.frames(), c.FSM, detectors, cfg, logger)
 
 	c.CapturePresenter = presenter.NewCapturePresenter(c.Capture, c.Engine, c.FSM, c.RootView)
 	c.RecordPresenter = presenter.NewRecordPresenter(c.prepareRecording, c.RootView, recorder.DefaultListen)

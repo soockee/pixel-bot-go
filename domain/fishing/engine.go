@@ -32,32 +32,39 @@ type Preview struct {
 // detection the FSM state calls for, and feeds the result to the FSM. It has no
 // UI dependency. Start and Stop must be called from one goroutine.
 type Engine struct {
-	frames     FrameSource
-	fsm        *FishingFSM
-	newLocator func(config.Config) detect.Locator
-	bite       detect.BiteDetector
-	cfg        *config.Config
-	logger     *slog.Logger
-	preview    atomic.Pointer[Preview]
-	cancel     context.CancelFunc
-	done       chan struct{}
+	frames    FrameSource
+	fsm       *FishingFSM
+	detectors DetectorFactory
+	cfg       *config.Config
+	logger    *slog.Logger
+	preview   atomic.Pointer[Preview]
+	cancel    context.CancelFunc
+	done      chan struct{}
 }
 
-// NewEngine returns a stopped Engine. newLocator builds the locator for a run
-// from that run's config.
-func NewEngine(frames FrameSource, fsm *FishingFSM, newLocator func(config.Config) detect.Locator, bite detect.BiteDetector, cfg *config.Config, logger *slog.Logger) *Engine {
-	return &Engine{frames: frames, fsm: fsm, newLocator: newLocator, bite: bite, cfg: cfg, logger: logger}
+// DetectorFactory builds the detectors for a run from that run's config.
+type DetectorFactory func(config.Config) (detect.Locator, detect.BiteDetector, error)
+
+// NewEngine returns a stopped Engine.
+func NewEngine(frames FrameSource, fsm *FishingFSM, detectors DetectorFactory, cfg *config.Config, logger *slog.Logger) *Engine {
+	return &Engine{frames: frames, fsm: fsm, detectors: detectors, cfg: cfg, logger: logger}
 }
 
-// Start begins a run with a copy of the current config. Starting twice is a no-op.
-func (e *Engine) Start() {
+// Start begins a run with the detectors the current config names. Starting twice
+// is a no-op.
+func (e *Engine) Start() error {
 	if e.cancel != nil {
-		return
+		return nil
+	}
+	locator, bite, err := e.detectors(*e.cfg)
+	if err != nil {
+		return err
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel, e.done = cancel, make(chan struct{})
-	r := &run{engine: e, locator: e.newLocator(*e.cfg)}
+	r := &run{engine: e, locator: locator, bite: bite}
 	go r.loop(ctx, e.done)
+	return nil
 }
 
 // Stop ends the run, waits for its goroutine and clears the preview.
@@ -78,6 +85,7 @@ func (e *Engine) Preview() *Preview { return e.preview.Load() }
 type run struct {
 	engine     *Engine
 	locator    detect.Locator
+	bite       detect.BiteDetector
 	target     image.Rectangle // locked area in screen coordinates
 	lastSearch time.Time
 	searches   int
@@ -142,11 +150,11 @@ func (r *run) search(frame capture.Frame) {
 func (r *run) monitor(frame capture.Frame) *image.RGBA {
 	e := r.engine
 	if !r.monitoring {
-		e.bite.Reset()
+		r.bite.Reset()
 		r.monitoring = true
 	}
 	roi := frame.Image.SubImage(r.target.Sub(frame.Origin)).(*image.RGBA)
-	if e.bite.Feed(roi, frame.CapturedAt) {
+	if r.bite.Feed(roi, frame.CapturedAt) {
 		e.fsm.EventFishBite()
 	}
 	return roi

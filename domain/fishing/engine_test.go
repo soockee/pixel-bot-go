@@ -31,6 +31,13 @@ func (s *sceneFrames) Next() (capture.Frame, error) {
 	return capture.Frame{Image: img, Origin: s.origin, CapturedAt: time.Now()}, nil
 }
 
+func startEngine(t *testing.T, engine *Engine) {
+	t.Helper()
+	if err := engine.Start(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func newSceneEngine(t *testing.T, log *actionLog) (*Engine, *FishingFSM, *sceneFrames, image.Rectangle) {
 	t.Helper()
 	tmpl, err := assets.FishingTargetImage()
@@ -42,8 +49,10 @@ func newSceneEngine(t *testing.T, log *actionLog) (*Engine, *FishingFSM, *sceneF
 	frames := &sceneFrames{render: r.Render, origin: image.Pt(-1000, 200)}
 	frames.set(fakegame.PhaseBobber)
 	fsm := NewFSM(nil, cfg, recordingActions(log))
-	newLocator := func(config.Config) detect.Locator { return detect.NewMarkerLocator() }
-	engine := NewEngine(frames, fsm, newLocator, detect.NewMotionBiteDetector(nil), cfg, testLogger)
+	detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
+		return detect.NewMarkerLocator(), detect.NewMotionBiteDetector(nil), nil
+	}
+	engine := NewEngine(frames, fsm, detectors, cfg, testLogger)
 	return engine, fsm, frames, r.BobberRect().Add(frames.origin)
 }
 
@@ -54,7 +63,7 @@ func TestEngineReelsWhenTheSceneSplashes(t *testing.T) {
 		log := &actionLog{}
 		engine, fsm, frames, bobber := newSceneEngine(t, log)
 		defer fsm.Close()
-		engine.Start()
+		startEngine(t, engine)
 		defer engine.Stop()
 		fsm.EventAwaitFocus()
 		fsm.EventFocusAcquired()
@@ -79,7 +88,7 @@ func TestEngineStaysQuietOnAStaticBobber(t *testing.T) {
 		log := &actionLog{}
 		engine, fsm, _, _ := newSceneEngine(t, log)
 		defer fsm.Close()
-		engine.Start()
+		startEngine(t, engine)
 		defer engine.Stop()
 		fsm.EventAwaitFocus()
 		fsm.EventFocusAcquired()
@@ -99,8 +108,8 @@ func TestEnginePublishesPreviewUntilStopped(t *testing.T) {
 			t.Fatal("preview before Start")
 		}
 
-		engine.Start()
-		engine.Start() // a second Start is a no-op
+		startEngine(t, engine)
+		startEngine(t, engine) // a second Start is a no-op
 		time.Sleep(100 * time.Millisecond)
 		if p := engine.Preview(); p == nil || p.Frame == nil {
 			t.Fatalf("preview = %+v, want a frame", p)
@@ -112,6 +121,20 @@ func TestEnginePublishesPreviewUntilStopped(t *testing.T) {
 			t.Error("preview survived Stop")
 		}
 	})
+}
+
+func TestEngineReportsDetectorsItCannotBuild(t *testing.T) {
+	cfg := testConfig()
+	fsm := NewFSM(nil, cfg, recordingActions(&actionLog{}))
+	defer fsm.Close()
+	engine := NewEngine(&failingFrames{}, fsm, func(config.Config) (detect.Locator, detect.BiteDetector, error) {
+		return nil, nil, errors.New("unknown locator")
+	}, cfg, testLogger)
+
+	if err := engine.Start(); err == nil {
+		t.Fatal("want an error")
+	}
+	engine.Stop() // nothing started, so this must be safe
 }
 
 type failingFrames struct{ calls atomic.Int32 }
@@ -127,9 +150,12 @@ func TestEngineSurvivesCaptureFailures(t *testing.T) {
 		cfg := testConfig()
 		fsm := NewFSM(nil, cfg, recordingActions(&actionLog{}))
 		defer fsm.Close()
-		engine := NewEngine(frames, fsm, func(config.Config) detect.Locator { return nil }, detect.NewMotionBiteDetector(nil), cfg, testLogger)
+		detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
+			return nil, detect.NewMotionBiteDetector(nil), nil
+		}
+		engine := NewEngine(frames, fsm, detectors, cfg, testLogger)
 
-		engine.Start()
+		startEngine(t, engine)
 		time.Sleep(time.Second)
 		engine.Stop()
 

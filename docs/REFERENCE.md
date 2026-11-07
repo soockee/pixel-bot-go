@@ -63,6 +63,8 @@ return (x,y,score,scale,found?)
 | StopKey (`stop_key`)        | Global hotkey that halts the run            | Hidden from other apps; read at start  |
 | MaxFailedCasts              | Casts in a row without a reel before halting | Default 5                             |
 | MaxSessionMinutes           | Run length; halts at the next cast after it | Default 60                             |
+| Locator (`locator`)         | Technique that finds the bobber             | `marker` by default; see `detect.LocatorNames` |
+| BiteDetector (`bite_detector`) | Technique that recognises a bite        | `motion` by default                    |
 | RecordDir (`record_dir`)    | Folder for new recordings                   | Default `datasets`                     |
 | RecordKeys (`record_keys`)  | Record keys as well as the mouse            | Default true                           |
 
@@ -165,7 +167,7 @@ Selection rule, applied to the dev split only: stay within `max_actions_per_even
 
 A cast covers the time the bobber is on screen. Leave out `bite_ms` if no bite came. `empty` lists spans with no bobber.
 
-`go run ./cmd/detecteval [-config file] [-locator marker|ncc] [-bite motion] [-json] dir...` prints one column per dataset and a total:
+`go run ./cmd/detecteval [-config file] [-locator names] [-bite names] [-json] dir...` compares techniques across all the datasets given and prints one column per technique. `-locator` and `-bite` take comma-separated names, and both default to `all`:
 
 | Metric | Meaning |
 | ------ | ------- |
@@ -176,9 +178,9 @@ A cast covers the time the bobber is on screen. Leave out `bite_ms` if no bite c
 | False bites per cast | First trigger earlier than that, or in a cast with no bite |
 | Bite latency p95 | Trigger time after `bite_ms`, rounded up to 0 for early triggers |
 
-Bite metrics watch the labelled bobber, so they do not depend on the locator. `n/a` means nothing was measured. All values except search time repeat exactly. Recordings run at about 10 fps and the live app at 30 fps, so bite numbers are an approximation.
+Bite metrics watch the marker box when one shows, as the app does, and otherwise a square around the labelled bobber. Every bite detector sees the same areas, and the choice of locator does not affect them. `n/a` means nothing was measured. All values except search time repeat exactly. Recordings run at about 10 fps and the live app at 30 fps, so bite numbers are an approximation.
 
-`detecteval -label <dir> [-cast mouse:x1] [-reel mouse:right] [-reaction 400] [-box 40]` pairs each cast with the next reel click. Bindings are `mouse:<button>` for a click or `key:<name>`, including chords such as `key:Shift+B`.
+`detecteval -label <dir> [-cast mouse:x1] [-reel mouse:right] [-reaction 1200] [-box 40]` pairs each cast with the next reel click. Bindings are `mouse:<button>` for a click or `key:<name>`, including chords such as `key:Shift+B`.
 
 | Label | Value |
 | ----- | ----- |
@@ -188,6 +190,8 @@ Bite metrics watch the labelled bobber, so they do not depend on the locator. `n
 | `empty` | From 1 s after a reel to the next cast, if at least 1 s long |
 
 A cast with no reel, a reel within the first 2 s, and a click outside the frame are skipped and listed. Every labelled cast has a bite, so false bites can only count against early triggers.
+
+`detecteval -export <new dir> dir...` saves each cast's watched area, from the cast until the reel, as `<dataset>/cast-NNN/<ms>.png`. `index.jsonl` has one row per crop with `file`, `dataset`, `cast`, `ms`, `box`, `reel_ms` and the estimated `bite_ms`.
 
 ## Shared Playtest Trace Interface
 

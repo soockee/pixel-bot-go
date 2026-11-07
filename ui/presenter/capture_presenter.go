@@ -14,7 +14,7 @@ type CaptureModel interface {
 
 // Lifecycle is the pipeline the presenter starts and stops.
 type Lifecycle interface {
-	Start()
+	Start() error
 	Stop()
 }
 
@@ -28,6 +28,7 @@ type CaptureFSM interface {
 type CaptureView interface {
 	PreviewReset()
 	SetRunning(bool)
+	SetStatus(string)
 }
 
 // CapturePresenter coordinates capture enable/disable actions between the
@@ -50,7 +51,10 @@ func (c *CapturePresenter) Enable() {
 	if c.model.Enabled() {
 		return
 	}
-	c.pipeline.Start()
+	if err := c.pipeline.Start(); err != nil {
+		c.view.SetStatus("Cannot start: " + err.Error())
+		return
+	}
 	c.model.SetEnabled(true)
 	c.fsm.EventAwaitFocus()
 	c.view.SetRunning(true)

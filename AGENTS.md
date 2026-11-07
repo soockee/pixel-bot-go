@@ -37,7 +37,7 @@ There is no Makefile. `.github/workflows/ci.yml` runs gofmt, vet, tests and the 
 | `ui/images`, `ui/theme` | PNG encoding for Tk, theming |
 | `debug/` | `/debug/state` handler |
 | `assets/` | Embedded `fishing_target.png` template (`embed.go`), used by the simulator and NCC evaluation |
-| `cmd/detecteval/` | Measures a `Locator` and `BiteDetector` on recorded datasets, and writes `labels.json` from a session with `-label`; add candidates to its maps. See `docs/REFERENCE.md` |
+| `cmd/detecteval/` | Compares every registered `Locator` and `BiteDetector` on recorded datasets, writes `labels.json` from a session with `-label`, and exports each cast's watched area with `-export`. See `docs/REFERENCE.md` |
 | `internal/dataset/` | Dataset format, labels and the frame loop |
 | `internal/recorder/` | `-record` sessions (frames plus mouse and key input in one window), the loopback dashboard and `-view` |
 | `cmd/responsebench/` | Standalone virtual-clock benchmark of pacing and retry policies; run `go run ./cmd/responsebench`. See `docs/REFERENCE.md`. Output goes to the git-ignored `responsebench-results/` |
@@ -46,6 +46,7 @@ There is no Makefile. `.github/workflows/ci.yml` runs gofmt, vet, tests and the 
 
 - FSM lifecycle: `waiting_focus → searching → monitoring → reeling → cooldown → casting → searching`. A single event channel serializes transitions; timers decouple cadence from UI ticks. Add new event sources by feeding that channel rather than mutating state directly. Each state has at most one deadline (`arm`), a transition cancels it, and input actions run on the loop, so nothing pending can act after Stop or a focus change.
 - `fishing.Engine` runs the pipeline on one goroutine with no UI dependency: it grabs a frame, runs the detection the FSM state calls for, and sends the result to the FSM. The UI only reads `Engine.Preview` on its tick.
+- Techniques are exchangeable: implement `detect.Locator` or `detect.BiteDetector` and add one line to `domain/detect/registry.go`. The `locator` and `bite_detector` config values pick them in the app and config panel, and `detecteval` compares them all by default.
 - Algorithms plug in through `detect.Locator` and `detect.BiteDetector`, frames through `fishing.FrameSource`, and input through `fishing.ActionCallbacks`, so tests substitute fakes instead of touching Win32. Keep those seams when adding input, capture or detection behavior. Define other interfaces where they are consumed.
 - The bobber is whatever the addon marks: `detect.MarkerLocator` returns the box inside its corner brackets, the box centre is the click point, and the box is the area watched for a bite. Without the addon the bot finds nothing and halts after `max_failed_casts`.
 - Build all wiring in `app/container.go`; do not construct services inside presenters or views. Constructors require their dependencies, so do not add nil guards for them.

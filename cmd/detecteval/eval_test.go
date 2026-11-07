@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -11,7 +12,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/soocke/pixel-bot-go/assets"
 	"github.com/soocke/pixel-bot-go/domain/detect"
@@ -73,52 +73,56 @@ func writeFakeDataset(t *testing.T) string {
 	return dir
 }
 
-func TestRunMeasuresTheRealDetectorsAndRepeats(t *testing.T) {
+func evaluate(t *testing.T, locators, bites string, dirs ...string) Report {
+	t.Helper()
+	var out bytes.Buffer
+	if err := run("", locators, bites, true, dirs, &out); err != nil {
+		t.Fatal(err)
+	}
+	var report Report
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatal(err)
+	}
+	return report
+}
+
+func TestCompareRunsEveryTechniqueAndRepeats(t *testing.T) {
 	dir := writeFakeDataset(t)
-	evaluate := func() []row {
-		var out bytes.Buffer
-		if err := run("", "ncc", "motion", true, []string{dir}, &out); err != nil {
-			t.Fatal(err)
-		}
-		var rows []row
-		if err := json.Unmarshal(out.Bytes(), &rows); err != nil {
-			t.Fatal(err)
-		}
-		return rows
-	}
 
-	first := evaluate()
+	first := evaluate(t, "all", "all", dir)
 
-	want := Counts{Casts: 2, Locks: 2, LocksOnBobber: 2, EmptyFrames: 4, BiteCasts: 1, BitesCaught: 1, BiteLatenciesMS: []int64{0}}
-	if got := first[len(first)-1].Counts; !reflect.DeepEqual(got, want) {
-		t.Errorf("counts = %+v, want %+v", got, want)
+	for _, name := range detect.LocatorNames() {
+		want := LocatorCounts{Casts: 2, Locks: 2, LocksOnBobber: 2, EmptyFrames: 4}
+		if got := first.Locators[name]; got != want {
+			t.Errorf("locator %s: got %+v, want %+v", name, got, want)
+		}
 	}
-	if second := evaluate(); !reflect.DeepEqual(first, second) {
+	want := BiteCounts{Casts: 2, BiteCasts: 1, BitesCaught: 1, BiteLatenciesMS: []int64{0}}
+	if got := first.Bites["motion"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("motion: got %+v, want %+v", got, want)
+	}
+	if second := evaluate(t, "all", "all", dir); !reflect.DeepEqual(first, second) {
 		t.Errorf("runs differ:\n%+v\n%+v", first, second)
 	}
 }
 
-func TestMarkerLocatorFindsTheFakeBobber(t *testing.T) {
-	var out bytes.Buffer
-	if err := run("", "marker", "motion", true, []string{writeFakeDataset(t)}, &out); err != nil {
-		t.Fatal(err)
+func TestDatasetsAddUp(t *testing.T) {
+	dir := writeFakeDataset(t)
+	got := evaluate(t, "marker", "motion", dir, dir)
+	if c := got.Locators["marker"]; c.Casts != 4 || c.EmptyFrames != 8 {
+		t.Errorf("locator counts = %+v", c)
 	}
-	var rows []row
-	if err := json.Unmarshal(out.Bytes(), &rows); err != nil {
-		t.Fatal(err)
-	}
-	got := rows[len(rows)-1].Counts
-	if got.Locks != 2 || got.LocksOnBobber != 2 || got.FalseLocks != 0 {
-		t.Errorf("counts = %+v", got)
+	if c := got.Bites["motion"]; c.BiteCasts != 2 || c.BitesCaught != 2 {
+		t.Errorf("bite counts = %+v", c)
 	}
 }
 
-func TestPrintedTableShowsTargets(t *testing.T) {
+func TestPrintedReportHasOneColumnPerTechnique(t *testing.T) {
 	var out bytes.Buffer
-	if err := run("", "ncc", "motion", false, []string{writeFakeDataset(t)}, &out); err != nil {
+	if err := run("", "all", "all", false, []string{writeFakeDataset(t)}, &out); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Bobber found per cast", ">= 98%", "100.0%", "Search time p95"} {
+	for _, want := range []string{"marker", "ncc", "motion", "Bobber found per cast", ">= 98%", "100.0%", "Search time p95"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output lacks %q:\n%s", want, out.String())
 		}
@@ -131,10 +135,10 @@ func TestRunRejectsBadArguments(t *testing.T) {
 		locator, bite string
 		dirs          []string
 	}{
-		{"unknown locator", "nope", "motion", []string{"x"}},
-		{"unknown bite detector", "ncc", "nope", []string{"x"}},
-		{"no datasets", "ncc", "motion", nil},
-		{"missing dataset", "ncc", "motion", []string{"does-not-exist"}},
+		{"unknown locator", "nope", "all", []string{"x"}},
+		{"unknown bite detector", "all", "nope", []string{"x"}},
+		{"no datasets", "all", "all", nil},
+		{"missing dataset", "all", "all", []string{"does-not-exist"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -152,27 +156,33 @@ type stubLocator struct {
 
 func (s stubLocator) Locate(*image.RGBA) (detect.Match, bool) { return s.match, s.found }
 
-type stubBite struct{ atMS int64 }
-
-func (s stubBite) Reset() {}
-func (s stubBite) Feed(_ *image.RGBA, t time.Time) bool {
-	return s.atMS >= 0 && t.UnixMilli() == s.atMS
-}
-
 func TestWrongLockCountsAgainstTheClickRate(t *testing.T) {
 	d, err := dataset.Load(writeFakeDataset(t))
 	if err != nil {
 		t.Fatal(err)
 	}
-	eval := &evaluator{locator: stubLocator{detect.Match{X: 1, Y: 1}, true}, bite: stubBite{-1}, roiSize: 40}
+	var got LocatorCounts
 
-	got, err := eval.run(d)
-	if err != nil {
+	if _, err := evaluateLocator(stubLocator{detect.Match{X: 1, Y: 1}, true}, d, &got); err != nil {
 		t.Fatal(err)
 	}
 
 	if got.Locks != 2 || got.LocksOnBobber != 0 || got.FalseLocks != got.EmptyFrames {
 		t.Errorf("counts = %+v", got)
+	}
+}
+
+func TestBitesAreWatchedInTheMarkerBox(t *testing.T) {
+	d, err := dataset.Load(writeFakeDataset(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	areas, err := watchAreas(d, 80)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := areas[0]; got.Dx() == 80 || !got.Overlaps(d.Labels.Casts[0].Bobber.Image()) {
+		t.Errorf("area = %v, want the marker's box", got)
 	}
 }
 
@@ -182,17 +192,17 @@ func TestScoreBite(t *testing.T) {
 		name    string
 		trigger int64
 		bite    *int64
-		want    Counts
+		want    BiteCounts
 	}{
-		{"on time", 1100, &bite, Counts{BitesCaught: 1, BiteLatenciesMS: []int64{100}}},
-		{"just before the label", 900, &bite, Counts{BitesCaught: 1, BiteLatenciesMS: []int64{0}}},
-		{"too early", 700, &bite, Counts{FalseBites: 1}},
-		{"too late", 2600, &bite, Counts{}},
-		{"no bite in the cast", 1000, nil, Counts{FalseBites: 1}},
+		{"on time", 1100, &bite, BiteCounts{BitesCaught: 1, BiteLatenciesMS: []int64{100}}},
+		{"just before the label", 900, &bite, BiteCounts{BitesCaught: 1, BiteLatenciesMS: []int64{0}}},
+		{"too early", 700, &bite, BiteCounts{FalseBites: 1}},
+		{"too late", 2600, &bite, BiteCounts{}},
+		{"no bite in the cast", 1000, nil, BiteCounts{FalseBites: 1}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var got Counts
+			var got BiteCounts
 			scoreBite(tt.trigger, tt.bite, &got)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("got %+v, want %+v", got, tt.want)
@@ -205,7 +215,7 @@ func TestEmptyMeasurementsAreNotReportedAsZero(t *testing.T) {
 	if got := percent(0, 0); got != "n/a" {
 		t.Errorf("percent(0, 0) = %q", got)
 	}
-	if got := latency(Counts{}); got != "n/a" {
+	if got := latency(BiteCounts{}); got != "n/a" {
 		t.Errorf("latency = %q", got)
 	}
 }
@@ -228,5 +238,57 @@ func TestPercentile95(t *testing.T) {
 		if got := percentile95(tt.values); got != tt.want {
 			t.Errorf("percentile95(%d values) = %d, want %d", len(tt.values), got, tt.want)
 		}
+	}
+}
+
+func TestExportWritesCropsAndAnIndex(t *testing.T) {
+	src := writeFakeDataset(t)
+	out := filepath.Join(t.TempDir(), "crops")
+	var status bytes.Buffer
+
+	if err := export(out, []string{src}, 80, &status); err != nil {
+		t.Fatal(err)
+	}
+
+	file, err := os.Open(filepath.Join(out, "index.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	rows := 0
+	scan := bufio.NewScanner(file)
+	for scan.Scan() {
+		var row indexRow
+		if err := json.Unmarshal(scan.Bytes(), &row); err != nil {
+			t.Fatal(err)
+		}
+		rows++
+		crop, err := os.Open(filepath.Join(out, filepath.FromSlash(row.File)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg, err := png.DecodeConfig(crop)
+		crop.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Width != row.Box.W || cfg.Height != row.Box.H {
+			t.Errorf("%s is %dx%d, box is %+v", row.File, cfg.Width, cfg.Height, row.Box)
+		}
+		if row.Cast == 0 && (row.BiteMS == nil || *row.BiteMS != 1000 || row.ReelMS != 1200) {
+			t.Errorf("row = %+v", row)
+		}
+	}
+	if rows != 32 { // the second cast's landing window reaches back over the first
+		t.Errorf("rows = %d, want 32", rows)
+	}
+	if !strings.Contains(status.String(), "Exported 32 crops") {
+		t.Errorf("status = %q", status.String())
+	}
+}
+
+func TestExportRefusesAnExistingDirectory(t *testing.T) {
+	if err := export(t.TempDir(), []string{writeFakeDataset(t)}, 80, &bytes.Buffer{}); err == nil {
+		t.Error("want an error")
 	}
 }

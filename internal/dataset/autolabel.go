@@ -16,10 +16,12 @@ import (
 
 const (
 	sessionFile = "session.json"
-	landingMS   = 2000 // the bobber is in the air for this long after a cast
 	settleMS    = 1000 // the bobber is gone this long after a reel
 	minEmptyMS  = 1000 // shorter gaps are not worth measuring
 )
+
+// LandingMS is how long the bobber is in the air after a cast.
+const LandingMS = 2000
 
 // SessionInfo holds what labels need beyond the frames and the input trace.
 // shortcut: the offset is read once, so moving the window mid-session makes the
@@ -132,7 +134,7 @@ func AutoLabel(dir string, opts AutoLabelOptions) (Labels, []string, error) {
 }
 
 func labelCast(castMS, reelMS int64, click *playtrace.Position, info SessionInfo, bounds image.Rectangle, opts AutoLabelOptions) (Cast, string) {
-	start, bite := castMS+landingMS, reelMS-opts.ReactionMS
+	start, bite := castMS+LandingMS, reelMS-opts.ReactionMS
 	if click == nil {
 		return Cast{}, fmt.Sprintf("reel at %d ms has no position", reelMS)
 	}

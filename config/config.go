@@ -46,6 +46,10 @@ type Config struct {
 	MaxFailedCasts int `json:"max_failed_casts"`
 	// MaxSessionMinutes halts the bot at the first cast after this long.
 	MaxSessionMinutes int `json:"max_session_minutes"`
+	// Locator and BiteDetector name the techniques to use. The registered names
+	// are in domain/detect/registry.go.
+	Locator      string `json:"locator"`
+	BiteDetector string `json:"bite_detector"`
 	// RecordDir is the folder that holds one new directory per recording.
 	RecordDir string `json:"record_dir"`
 	// RecordKeys records keys in the selected window as well as the mouse.
@@ -76,6 +80,8 @@ func DefaultConfig() *Config {
 		StopKey:                "F10",
 		MaxFailedCasts:         5,
 		MaxSessionMinutes:      60,
+		Locator:                "marker",
+		BiteDetector:           "motion",
 		RecordDir:              "datasets",
 		RecordKeys:             true,
 		ROISizePx:              80,
@@ -117,6 +123,12 @@ func (c *Config) Validate() error {
 	}
 	if c.MaxSessionMinutes <= 0 {
 		c.MaxSessionMinutes = d.MaxSessionMinutes
+	}
+	if c.Locator == "" {
+		c.Locator = d.Locator
+	}
+	if c.BiteDetector == "" {
+		c.BiteDetector = d.BiteDetector
 	}
 	if c.RecordDir == "" {
 		c.RecordDir = d.RecordDir

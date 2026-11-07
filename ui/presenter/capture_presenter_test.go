@@ -1,6 +1,7 @@
 package presenter
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/soocke/pixel-bot-go/domain/fishing"
@@ -11,10 +12,18 @@ type mockModel struct{ enabled bool }
 func (m *mockModel) Enabled() bool     { return m.enabled }
 func (m *mockModel) SetEnabled(b bool) { m.enabled = b }
 
-type mockPipeline struct{ started, stopped int }
+type mockPipeline struct {
+	started, stopped int
+	err              error
+}
 
-func (s *mockPipeline) Start() { s.started++ }
-func (s *mockPipeline) Stop()  { s.stopped++ }
+func (s *mockPipeline) Start() error {
+	if s.err == nil {
+		s.started++
+	}
+	return s.err
+}
+func (s *mockPipeline) Stop() { s.stopped++ }
 
 type mockFSM struct{ awaited, halted int }
 
@@ -24,10 +33,12 @@ func (f *mockFSM) EventHalt()       { f.halted++ }
 type mockView struct {
 	reset   int
 	running bool
+	status  string
 }
 
-func (v *mockView) PreviewReset()     { v.reset++ }
-func (v *mockView) SetRunning(b bool) { v.running = b }
+func (v *mockView) PreviewReset()      { v.reset++ }
+func (v *mockView) SetRunning(b bool)  { v.running = b }
+func (v *mockView) SetStatus(s string) { v.status = s }
 
 func TestCapturePresenterEnableDisableAreIdempotent(t *testing.T) {
 	m := &mockModel{}
@@ -64,6 +75,19 @@ func TestCapturePresenterStopsCaptureAfterFSMHalt(t *testing.T) {
 	p.Tick()
 	if m.Enabled() || pipeline.stopped != 1 {
 		t.Fatalf("capture still running: enabled=%v stopped=%d", m.Enabled(), pipeline.stopped)
+	}
+}
+
+func TestCapturePresenterShowsWhyItCannotStart(t *testing.T) {
+	m := &mockModel{}
+	fsm := &mockFSM{}
+	view := &mockView{}
+	p := NewCapturePresenter(m, &mockPipeline{err: errors.New("unknown locator")}, fsm, view)
+
+	p.Enable()
+
+	if m.Enabled() || fsm.awaited != 0 || view.running || view.status != "Cannot start: unknown locator" {
+		t.Errorf("enabled=%v awaited=%d running=%v status=%q", m.Enabled(), fsm.awaited, view.running, view.status)
 	}
 }
 

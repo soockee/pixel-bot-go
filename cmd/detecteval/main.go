@@ -1,61 +1,57 @@
-// Command detecteval measures a bobber locator and a bite detector on recorded
+// Command detecteval compares bobber locators and bite detectors on recorded
 // datasets. It prints the metrics from docs/ARCHITECTURE_REVIEW.md with their
-// targets.
+// targets, one column per technique.
 //
-// Usage: detecteval [-config file] [-locator name] [-bite name] [-json] dataset-dir...
+// Usage: detecteval [-config file] [-locator names] [-bite names] [-json] dataset-dir...
 //
 //	detecteval -label dataset-dir [-cast binding] [-reel binding] [-reaction ms] [-box px]
+//	detecteval -export new-dir [-config file] dataset-dir...
 //
-// -label writes labels.json from a session's cast and reel input.
+// -locator and -bite take comma-separated names or "all". -label writes
+// labels.json from a session's cast and reel input. -export saves each cast's
+// watched area as small images for training.
 package main
 
 import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"image"
 	"io"
 	"log/slog"
-	"maps"
 	"os"
 	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
 
-	"github.com/soocke/pixel-bot-go/assets"
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/detect"
 	"github.com/soocke/pixel-bot-go/internal/dataset"
 )
 
-// Candidates under comparison. Add new detectors here.
-var (
-	locators = map[string]func(tmpl image.Image, cfg config.Config) detect.Locator{
-		"marker": func(image.Image, config.Config) detect.Locator { return detect.NewMarkerLocator() },
-		"ncc":    func(tmpl image.Image, cfg config.Config) detect.Locator { return detect.NewNCCLocator(tmpl, cfg) },
-	}
-	biteDetectors = map[string]func() detect.BiteDetector{
-		"motion": func() detect.BiteDetector { return detect.NewMotionBiteDetector(slog.New(slog.DiscardHandler)) },
-	}
-)
-
 func main() {
 	configPath := flag.String("config", "", "config file (default: built-in defaults)")
-	locatorName := flag.String("locator", "marker", "locator: "+strings.Join(slices.Sorted(maps.Keys(locators)), ", "))
-	biteName := flag.String("bite", "motion", "bite detector: "+strings.Join(slices.Sorted(maps.Keys(biteDetectors)), ", "))
+	locatorNames := flag.String("locator", "all", "locators to compare: all, or some of "+strings.Join(detect.LocatorNames(), ","))
+	biteNames := flag.String("bite", "all", "bite detectors to compare: all, or some of "+strings.Join(detect.BiteDetectorNames(), ","))
 	asJSON := flag.Bool("json", false, "print the counts as JSON, without timings")
 	label := flag.String("label", "", "write labels.json for this recorded session and exit")
 	cast := flag.String("cast", "mouse:x1", "with -label: input that casts, for example mouse:x1 or key:F3")
 	reel := flag.String("reel", "mouse:right", "with -label: input that reels")
-	reaction := flag.Int64("reaction", 400, "with -label: assumed ms from the bite to the reel click")
+	reaction := flag.Int64("reaction", 1200, "with -label: assumed ms from the bite to the reel click")
 	box := flag.Int("box", 40, "with -label: side in pixels of the bobber box around the reel click")
+	exportDir := flag.String("export", "", "save each cast's watched area into this new directory and exit")
 	flag.Parse()
 	var err error
-	if *label != "" {
+	switch {
+	case *label != "":
 		err = writeLabels(*label, dataset.AutoLabelOptions{Cast: *cast, Reel: *reel, ReactionMS: *reaction, BoxPx: *box}, os.Stdout)
-	} else {
-		err = run(*configPath, *locatorName, *biteName, *asJSON, flag.Args(), os.Stdout)
+	case *exportDir != "":
+		var cfg *config.Config
+		if cfg, err = loadConfig(*configPath); err == nil {
+			err = export(*exportDir, flag.Args(), cfg.ROISizePx, os.Stdout)
+		}
+	default:
+		err = run(*configPath, *locatorNames, *biteNames, *asJSON, flag.Args(), os.Stdout)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "detecteval:", err)
@@ -78,90 +74,139 @@ func writeLabels(dir string, opts dataset.AutoLabelOptions, out io.Writer) error
 	return nil
 }
 
-type row struct {
-	Name   string `json:"name"`
-	Counts Counts `json:"counts"`
+func loadConfig(path string) (*config.Config, error) {
+	if path == "" {
+		return config.DefaultConfig(), nil
+	}
+	return config.Load(path)
 }
 
-func run(configPath, locatorName, biteName string, asJSON bool, dirs []string, out io.Writer) error {
-	newLocator, ok := locators[locatorName]
-	if !ok {
-		return fmt.Errorf("unknown locator %q", locatorName)
+// pickNames expands "all" and checks the names against those registered.
+func pickNames(arg string, registered []string) ([]string, error) {
+	if arg == "all" {
+		return registered, nil
 	}
-	newBite, ok := biteDetectors[biteName]
-	if !ok {
-		return fmt.Errorf("unknown bite detector %q", biteName)
+	names := strings.Split(arg, ",")
+	for _, name := range names {
+		if !slices.Contains(registered, name) {
+			return nil, fmt.Errorf("unknown technique %q, have %s", name, strings.Join(registered, ", "))
+		}
+	}
+	return names, nil
+}
+
+// Report holds the results of a comparison over all datasets.
+type Report struct {
+	Locators map[string]LocatorCounts `json:"locators"`
+	Bites    map[string]BiteCounts    `json:"bites"`
+}
+
+func run(configPath, locatorArg, biteArg string, asJSON bool, dirs []string, out io.Writer) error {
+	locators, err := pickNames(locatorArg, detect.LocatorNames())
+	if err != nil {
+		return err
+	}
+	bites, err := pickNames(biteArg, detect.BiteDetectorNames())
+	if err != nil {
+		return err
 	}
 	if len(dirs) == 0 {
 		return fmt.Errorf("no datasets given")
 	}
-	cfg := config.DefaultConfig()
-	if configPath != "" {
-		var err error
-		if cfg, err = config.Load(configPath); err != nil {
-			return err
-		}
-	}
-	tmpl, err := assets.FishingTargetImage()
+	cfg, err := loadConfig(configPath)
 	if err != nil {
 		return err
 	}
 
-	eval := &evaluator{locator: newLocator(tmpl, *cfg), bite: newBite(), roiSize: cfg.ROISizePx}
-	var rows []row
-	var total Counts
+	report := Report{Locators: map[string]LocatorCounts{}, Bites: map[string]BiteCounts{}}
+	searches := map[string][]time.Duration{}
 	for _, dir := range dirs {
 		d, err := dataset.Load(dir)
 		if err != nil {
 			return fmt.Errorf("%s: %w", dir, err)
 		}
-		counts, err := eval.run(d)
+		for _, name := range locators {
+			locator, err := detect.NewLocator(name, *cfg)
+			if err != nil {
+				return err
+			}
+			counts := report.Locators[name]
+			times, err := evaluateLocator(locator, d, &counts)
+			if err != nil {
+				return fmt.Errorf("%s: %w", dir, err)
+			}
+			report.Locators[name] = counts
+			searches[name] = append(searches[name], times...)
+		}
+		areas, err := watchAreas(d, cfg.ROISizePx)
 		if err != nil {
 			return fmt.Errorf("%s: %w", dir, err)
 		}
-		rows = append(rows, row{d.Name, counts})
-		total.add(counts)
+		for _, name := range bites {
+			bite, err := detect.NewBiteDetector(name, slog.New(slog.DiscardHandler))
+			if err != nil {
+				return err
+			}
+			counts := report.Bites[name]
+			if err := evaluateBite(bite, d, areas, &counts); err != nil {
+				return fmt.Errorf("%s: %w", dir, err)
+			}
+			report.Bites[name] = counts
+		}
 	}
-	rows = append(rows, row{"total", total})
 	if asJSON {
 		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
-		return enc.Encode(rows)
+		return enc.Encode(report)
 	}
-	return printTable(out, rows, eval.searches)
+	return printReport(out, report, locators, bites, searches)
 }
 
-func printTable(out io.Writer, rows []row, searches []time.Duration) error {
+func printReport(out io.Writer, r Report, locators, bites []string, searches map[string][]time.Duration) error {
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	metrics := []struct {
-		name, target string
-		value        func(Counts) string
-	}{
-		{"Casts", "", func(c Counts) string { return fmt.Sprint(c.Casts) }},
-		{"Bobber found per cast", ">= 98%", func(c Counts) string { return percent(c.Locks, c.Casts) }},
-		{"False locks on empty frames", "<= 1%", func(c Counts) string { return percent(c.FalseLocks, c.EmptyFrames) }},
-		{"Click point inside the bobber", ">= 99%", func(c Counts) string { return percent(c.LocksOnBobber, c.Locks) }},
-		{"Bites caught", ">= 98%", func(c Counts) string { return percent(c.BitesCaught, c.BiteCasts) }},
-		{"False bites per cast", "<= 2%", func(c Counts) string { return percent(c.FalseBites, c.Casts) }},
-		{"Bite latency p95", "<= 300 ms", latency},
-	}
-	header := []string{"Metric", "Target"}
-	for _, r := range rows {
-		header = append(header, r.Name)
-	}
-	fmt.Fprintln(w, strings.Join(header, "\t"))
-	for _, m := range metrics {
-		cells := []string{m.name, m.target}
-		for _, r := range rows {
-			cells = append(cells, m.value(r.Counts))
+	table := func(title string, names []string, rows [][2]string, cell func(row int, name string) string) {
+		fmt.Fprintln(w, strings.Join(append([]string{title, "Target"}, names...), "\t"))
+		for i, row := range rows {
+			cells := []string{row[0], row[1]}
+			for _, name := range names {
+				cells = append(cells, cell(i, name))
+			}
+			fmt.Fprintln(w, strings.Join(cells, "\t"))
 		}
-		fmt.Fprintln(w, strings.Join(cells, "\t"))
+		fmt.Fprintln(w)
 	}
-	if err := w.Flush(); err != nil {
-		return err
-	}
-	_, err := fmt.Fprintf(out, "\nSearch time p95: %v (target <= 100ms, varies per run)\n", percentile95(searches).Round(time.Millisecond))
-	return err
+	table("Locator", locators, [][2]string{
+		{"Casts", ""}, {"Bobber found per cast", ">= 98%"}, {"False locks on empty frames", "<= 1%"},
+		{"Click point inside the bobber", ">= 99%"}, {"Search time p95, varies per run", "<= 100ms"},
+	}, func(row int, name string) string {
+		c := r.Locators[name]
+		switch row {
+		case 0:
+			return fmt.Sprint(c.Casts)
+		case 1:
+			return percent(c.Locks, c.Casts)
+		case 2:
+			return percent(c.FalseLocks, c.EmptyFrames)
+		case 3:
+			return percent(c.LocksOnBobber, c.Locks)
+		}
+		return percentile95(searches[name]).Round(100 * time.Microsecond).String()
+	})
+	table("Bite detector", bites, [][2]string{
+		{"Casts", ""}, {"Bites caught", ">= 98%"}, {"False bites per cast", "<= 2%"}, {"Bite latency p95", "<= 300 ms"},
+	}, func(row int, name string) string {
+		c := r.Bites[name]
+		switch row {
+		case 0:
+			return fmt.Sprint(c.Casts)
+		case 1:
+			return percent(c.BitesCaught, c.BiteCasts)
+		case 2:
+			return percent(c.FalseBites, c.Casts)
+		}
+		return latency(c)
+	})
+	return w.Flush()
 }
 
 // percent shows n/a when nothing was measured, so an empty result never looks
@@ -173,7 +218,7 @@ func percent(n, of int) string {
 	return fmt.Sprintf("%.1f%%", float64(n)/float64(of)*100)
 }
 
-func latency(c Counts) string {
+func latency(c BiteCounts) string {
 	if len(c.BiteLatenciesMS) == 0 {
 		return "n/a"
 	}
