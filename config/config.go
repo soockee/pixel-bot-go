@@ -46,6 +46,10 @@ type Config struct {
 	MaxFailedCasts int `json:"max_failed_casts"`
 	// MaxSessionMinutes halts the bot at the first cast after this long.
 	MaxSessionMinutes int `json:"max_session_minutes"`
+	// RecordDir is the folder that holds one new directory per recording.
+	RecordDir string `json:"record_dir"`
+	// RecordKeys records keys in the selected window as well as the mouse.
+	RecordKeys bool `json:"record_keys"`
 
 	// Bite detection configuration (only actively used fields retained).
 	ROISizePx int `json:"roi_size_px"` // square ROI side length in pixels
@@ -72,6 +76,8 @@ func DefaultConfig() *Config {
 		StopKey:                "F10",
 		MaxFailedCasts:         5,
 		MaxSessionMinutes:      60,
+		RecordDir:              "datasets",
+		RecordKeys:             true,
 		ROISizePx:              80,
 		MaxCastDurationSeconds: 30,
 		CooldownSeconds:        8,
@@ -111,6 +117,9 @@ func (c *Config) Validate() error {
 	}
 	if c.MaxSessionMinutes <= 0 {
 		c.MaxSessionMinutes = d.MaxSessionMinutes
+	}
+	if c.RecordDir == "" {
+		c.RecordDir = d.RecordDir
 	}
 	c.ROISizePx = min(max(c.ROISizePx, 32), 256) // keep the ROI modest for performance
 	c.MaxCastDurationSeconds = min(max(c.MaxCastDurationSeconds, 5), 180)

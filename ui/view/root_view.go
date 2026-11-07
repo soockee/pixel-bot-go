@@ -20,6 +20,7 @@ type RootCallbacks struct {
 	Window        func() string // the selected window title
 	SetWindow     func(title string)
 	ToggleCapture func()
+	ToggleRecord  func()
 	OpenSelection func()
 	Exit          func()
 }
@@ -44,6 +45,7 @@ type RootView struct {
 	detectionLabel   *LabelWidget
 	refreshBtn       *ButtonWidget
 	captureBtn       *ButtonWidget
+	recordBtn        *ButtonWidget
 	selectionBtn     *ButtonWidget
 	exitBtn          *ButtonWidget
 	configFrame      *FrameWidget
@@ -121,10 +123,12 @@ func (rv *RootView) Build(calls RootCallbacks) {
 	Grid(rv.refreshBtn, In(rv.actionsFrame), Row(0), Column(2), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
 	rv.captureBtn = primaryButton("Start", pal, calls.ToggleCapture)
 	Grid(rv.captureBtn, In(rv.actionsFrame), Row(0), Column(3), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
+	rv.recordBtn = primaryButton("Record", pal, calls.ToggleRecord)
+	Grid(rv.recordBtn, In(rv.actionsFrame), Row(0), Column(4), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
 	rv.selectionBtn = primaryButton("Selection", pal, calls.OpenSelection)
-	Grid(rv.selectionBtn, In(rv.actionsFrame), Row(0), Column(4), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
+	Grid(rv.selectionBtn, In(rv.actionsFrame), Row(0), Column(5), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
 	rv.exitBtn = Button(Txt("Exit"), Background(pal.Danger), Foreground("white"), Relief("raised"), Borderwidth(1), Command(calls.Exit))
-	Grid(rv.exitBtn, In(rv.actionsFrame), Row(0), Column(5), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
+	Grid(rv.exitBtn, In(rv.actionsFrame), Row(0), Column(6), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
 	rv.refreshWindows()
 
 	rv.mainFrame = Frame(Background(pal.Surface), Relief("flat"))
@@ -201,15 +205,34 @@ func (rv *RootView) SetStateLabel(text string) { rv.stateLabel.Configure(Txt(tex
 // SetStatus shows a message in the status bar.
 func (rv *RootView) SetStatus(text string) { rv.statusLabel.Configure(Txt(text)) }
 
-// SetRunning shows the capture state on the button and locks the config while running.
+// SetRunning shows the capture state on the button and locks the config while
+// running. A recording and a run exclude each other.
 func (rv *RootView) SetRunning(running bool) {
 	rv.running = running
 	rv.configPanel.SetEditable(!running)
+	rv.recordBtn.Configure(State(buttonState(!running)))
 	if running {
 		rv.captureBtn.Configure(Txt("Stop"))
 	} else {
 		rv.captureBtn.Configure(Txt("Start"))
 	}
+}
+
+// SetRecording shows the recording state on the button.
+func (rv *RootView) SetRecording(recording bool) {
+	rv.captureBtn.Configure(State(buttonState(!recording)))
+	if recording {
+		rv.recordBtn.Configure(Txt("Stop Recording"))
+	} else {
+		rv.recordBtn.Configure(Txt("Record"))
+	}
+}
+
+func buttonState(enabled bool) string {
+	if enabled {
+		return "normal"
+	}
+	return "disabled"
 }
 
 // UpdateCapture shows a captured frame.
@@ -279,7 +302,7 @@ func (rv *RootView) applyPalette() {
 	} else {
 		rv.darkToggleBtn.Configure(Txt("Dark Mode"))
 	}
-	for _, b := range []*ButtonWidget{rv.toggleConfigBtn, rv.darkToggleBtn, rv.refreshBtn, rv.captureBtn, rv.selectionBtn} {
+	for _, b := range []*ButtonWidget{rv.toggleConfigBtn, rv.darkToggleBtn, rv.refreshBtn, rv.captureBtn, rv.recordBtn, rv.selectionBtn} {
 		b.Configure(Background(pal.Primary), Foreground("white"))
 	}
 	rv.exitBtn.Configure(Background(pal.Danger), Foreground("white"))

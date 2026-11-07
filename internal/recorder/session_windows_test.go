@@ -54,6 +54,18 @@ func TestClientOriginOfMissingWindowFails(t *testing.T) {
 	}
 }
 
+func TestIsMinimized(t *testing.T) {
+	for origin, want := range map[point]bool{
+		{-32000, -32000}: true,
+		{-1920, 148}:     false, // a window on a monitor left of the primary
+		{0, 0}:           false,
+	} {
+		if got := isMinimized(origin); got != want {
+			t.Errorf("isMinimized(%v) = %v", origin, got)
+		}
+	}
+}
+
 func TestSessionWithUnknownWindowCreatesNothing(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "session")
 	err := Session{Dir: dir, Window: "no window has this title 7f3a", Status: &bytes.Buffer{}}.Run(context.Background())

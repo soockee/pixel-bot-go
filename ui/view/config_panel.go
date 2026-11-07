@@ -59,6 +59,8 @@ func (v *ConfigPanel) Build(target Widget) {
 	makeRow("stopKey", "Stop Hotkey (after restart)", c.StopKey)
 	makeRow("maxFailedCasts", "Max Failed Casts", fmt.Sprintf("%d", c.MaxFailedCasts))
 	makeRow("maxSessionMinutes", "Max Session Minutes", fmt.Sprintf("%d", c.MaxSessionMinutes))
+	makeRow("recordDir", "Recording Folder", c.RecordDir)
+	makeRow("recordKeys", "Record Keys (true/false)", fmt.Sprintf("%t", c.RecordKeys))
 	makeRow("roiSizePx", "ROI Size Px", fmt.Sprintf("%d", c.ROISizePx))
 	makeRow("cooldownSeconds", "Cooldown Seconds", fmt.Sprintf("%d", c.CooldownSeconds))
 	makeRow("maxCastDurationSeconds", "Max Cast Duration Seconds", fmt.Sprintf("%d", c.MaxCastDurationSeconds))
@@ -68,10 +70,7 @@ func (v *ConfigPanel) Build(target Widget) {
 
 // SetEditable enables or disables the form.
 func (v *ConfigPanel) SetEditable(enabled bool) {
-	state := "disabled"
-	if enabled {
-		state = "normal"
-	}
+	state := buttonState(enabled)
 	for _, w := range v.widgets {
 		w.Configure(State(state))
 	}
@@ -117,6 +116,11 @@ func (v *ConfigPanel) apply() {
 	key("stopKey", &cfg.StopKey)
 	integer("maxFailedCasts", &cfg.MaxFailedCasts)
 	integer("maxSessionMinutes", &cfg.MaxSessionMinutes)
+	field("recordDir", func(s string) bool {
+		cfg.RecordDir = s
+		return s != ""
+	})
+	boolean("recordKeys", &cfg.RecordKeys)
 	integer("roiSizePx", &cfg.ROISizePx)
 	integer("cooldownSeconds", &cfg.CooldownSeconds)
 	integer("maxCastDurationSeconds", &cfg.MaxCastDurationSeconds)

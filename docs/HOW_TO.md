@@ -97,19 +97,16 @@ Invoke-RestMethod http://localhost:6060/debug/state | ConvertTo-Json -Depth 8
 Select the local simulator in the app and start capture. The response includes the usual FSM fields and a `trace_observer` object with both detectors' totals and the last 32 alerts. Each alert has its elapsed time, score, cutoff, triggering record, and cast IDs. The model flag enables debug for that process and requires dry-run.
 
 ## Record a Session
-One command records the screen and your input together, on the same clock. It opens no app window and sends no input.
+A recording saves the screen and your input together, on the same clock, and sends no input.
 
-1. Set the selection in the app and close it. The recorder uses the saved selection.
-2. Find the exact window title, then start recording in a new directory:
+1. Start the app, pick the target window and click **Selection** to set the area. Click **Refresh** if the window is missing.
+2. Click **Record**. The status bar shows the new folder and the dashboard address.
+3. Focus the game and play by hand.
+4. Press the stop hotkey (default F10), or click **Stop Recording** in the app.
 
-```powershell
-.\pixel-bot-go.exe -list-windows
-.\pixel-bot-go.exe -record datasets/zone1-day -window "World of Warcraft"
-```
+Each recording gets a new timestamped folder holding `frames/` and `input.jsonl`. Set **Recording Folder** and **Record Keys** under Show Config. The default `datasets/` folder is ignored by git. Start stays disabled while recording, and Record while the bot runs.
 
-3. Focus the selected window and play by hand. Return to the terminal and press Ctrl+C to finish.
-
-The directory then holds `frames/` and `input.jsonl`. Leave out `-window` to record frames only, which then need `labels.json` written by hand, and add `-no-keys` to skip keys. `datasets/` is ignored by git.
+For scripts and agents, the same recording runs without a window: `pixel-bot-go.exe -record <dir> -window "<title>"`, stopped with Ctrl+C, using the selection saved in the config. Leave out `-window` to record frames only, which then need `labels.json` written by hand, and add `-no-keys` to skip keys. `-list-windows` prints the titles.
 
 The recorder stores client-area cursor positions, relative mouse counts, both wheel axes, and press and release events for left, right, middle, Mouse 4, and Mouse 5. It also records key down and up with virtual-key and scan codes, repeat status, and shortcuts such as Shift+B. Mouse capture requires the pointer over the selected client area. Keyboard capture follows the selected foreground window, including its chat or text fields. Use `-no-keys` for mouse-only sessions. Keyboard input Windows marks as injected is skipped.
 
@@ -117,7 +114,7 @@ The JSONL keeps the raw button transitions and adds one gesture per completed ho
 
 ### View a recording
 
-The recorder prints the dashboard address at startup. Open `http://127.0.0.1:6070/` to view the latest frame, movement density, completed click locations, a recent cursor path, raw right-button camera motion, and a log of gestures and shortcuts. The page updates while recording.
+The status bar shows the dashboard address while recording. Open `http://127.0.0.1:6070/` to view the latest frame, movement density, completed click locations, a recent cursor path, raw right-button camera motion, and a log of gestures and shortcuts. The page updates while recording.
 
 To review a saved session, or a trace file from an earlier recorder:
 

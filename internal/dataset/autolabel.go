@@ -104,7 +104,11 @@ func AutoLabel(dir string, opts AutoLabelOptions) (Labels, []string, error) {
 				labels.Empty = append(labels.Empty, Span{clearFrom, ms})
 			}
 			pending = &ms
-		case reel.matches(e) && pending != nil:
+		case reel.matches(e) && pending == nil:
+			// A reel with no cast means a bobber was out, so the time before it
+			// does not count as empty.
+			clearFrom = ms + settleMS
+		case reel.matches(e):
 			c, problem := labelCast(*pending, ms, e.Position, info, bounds, opts)
 			if problem != "" {
 				skipped = append(skipped, problem)

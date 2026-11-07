@@ -63,6 +63,8 @@ return (x,y,score,scale,found?)
 | StopKey (`stop_key`)        | Global hotkey that halts the run            | Hidden from other apps; read at start  |
 | MaxFailedCasts              | Casts in a row without a reel before halting | Default 5                             |
 | MaxSessionMinutes           | Run length; halts at the next cast after it | Default 60                             |
+| RecordDir (`record_dir`)    | Folder for new recordings                   | Default `datasets`                     |
+| RecordKeys (`record_keys`)  | Record keys as well as the mouse            | Default true                           |
 
 ## Capabilities
 * Watch a screen region for the bobber template.

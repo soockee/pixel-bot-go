@@ -87,6 +87,24 @@ func TestAutoLabelPairsCastsAndReels(t *testing.T) {
 	}
 }
 
+// A recording can start with a cast already out.
+func TestReelBeforeTheFirstCastIsNotEmptyTime(t *testing.T) {
+	dir := writeSession(t,
+		click(25000, "right", 500, 300),
+		click(26500, "x1", 10, 10),
+		click(40000, "right", 500, 300),
+	)
+
+	got, _, err := AutoLabel(dir, testOptions)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Empty) != 0 || len(got.Casts) != 1 {
+		t.Errorf("got %+v", got)
+	}
+}
+
 func TestCastPressThatMovedStillCounts(t *testing.T) {
 	cast := click(5000, "x1", 10, 10)
 	cast.Type = "drag"

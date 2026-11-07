@@ -154,8 +154,14 @@ func (w windowTarget) clientOrigin() (image.Point, error) {
 	if ok, _, err := clientToScreen.Call(w.handle, uintptr(unsafe.Pointer(&origin))); ok == 0 {
 		return image.Point{}, fmt.Errorf("find client area: %w", err)
 	}
+	if isMinimized(origin) {
+		return image.Point{}, errors.New("the selected window is minimized")
+	}
 	return image.Pt(int(origin.X), int(origin.Y)), nil
 }
+
+// isMinimized recognizes where Windows parks minimized windows.
+func isMinimized(origin point) bool { return origin.X <= -32000 && origin.Y <= -32000 }
 
 func (w windowTarget) position(screen point) (clientPosition, bool) {
 	// POINT is passed by value. Windows packs its two LONGs into one

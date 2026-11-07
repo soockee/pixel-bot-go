@@ -59,6 +59,7 @@ func (a *app) Run() error {
 		Window:        c.Capture.Window,
 		SetWindow:     c.Capture.SetWindow,
 		ToggleCapture: a.toggleCapture,
+		ToggleRecord:  c.RecordPresenter.Toggle,
 		OpenSelection: c.Selection.OpenOrFocus,
 		Exit:          a.exitHandler,
 	})
@@ -81,6 +82,7 @@ func (a *app) exitHandler() {
 	if a.afterID != "" {
 		TclAfterCancel(a.afterID)
 	}
+	a.container.RecordPresenter.Stop()
 	a.container.Engine.Stop()
 	a.container.FSM.Close()
 	Destroy(App)
@@ -93,24 +95,10 @@ func (a *app) scheduleTick() {
 	})
 }
 
-// startProblem explains why capture must not start, or returns "".
-func (a *app) startProblem() string {
-	// A false match outside a chosen area would click whatever is there.
-	sel := a.container.Selection.ActiveRect()
-	if sel == nil {
-		return "no saved selection"
-	}
-	// A test run configured for one monitor must never capture or click on another.
-	if screen, ok := action.ScreenBounds(a.container.Config.Screen); ok && !sel.In(screen) {
-		return "selection is outside the configured screen"
-	}
-	return ""
-}
-
 // toggleCapture delegates to the capture presenter after checking that a start is safe.
 func (a *app) toggleCapture() {
 	if !a.container.Capture.Enabled() {
-		if problem := a.startProblem(); problem != "" {
+		if problem := a.container.startProblem(); problem != "" {
 			a.logger.Error("start refused: " + problem)
 			a.container.RootView.SetStatus("Cannot start: " + problem)
 			return
@@ -120,8 +108,9 @@ func (a *app) toggleCapture() {
 	a.container.CapturePresenter.Toggle()
 }
 
-// watchStopKey registers the global stop hotkey. It goes straight to the FSM so
-// it still works if Tk stalls; the capture presenter then stops capture.
+// watchStopKey registers the global stop hotkey, which also ends a recording. It
+// goes straight to the FSM so it still works if Tk stalls; the capture presenter
+// then stops capture.
 func (a *app) watchStopKey() {
 	key := a.container.Config.StopKey
 	vk, ok := action.ParseVK(key)
@@ -130,7 +119,11 @@ func (a *app) watchStopKey() {
 		a.container.RootView.SetStatus("Stop hotkey unavailable: unknown key " + key)
 		return
 	}
-	if err := action.WatchHotkey(vk, a.container.FSM.EventHalt); err != nil {
+	stop := func() {
+		a.container.FSM.EventHalt()
+		a.container.RecordPresenter.RequestStop()
+	}
+	if err := action.WatchHotkey(vk, stop); err != nil {
 		a.logger.Error("stop hotkey unavailable", "key", key, "error", err)
 		a.container.RootView.SetStatus("Stop hotkey unavailable: " + key + " is in use")
 	}

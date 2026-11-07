@@ -48,11 +48,18 @@ func (s Session) Run(parent context.Context) error {
 			defer listener.Close()
 		}
 	}
+	var info dataset.SessionInfo
+	if s.Window != "" {
+		var err error
+		if info, err = s.sessionInfo(target); err != nil {
+			return err
+		}
+	}
 	if err := dataset.Create(s.Dir); err != nil {
 		return err
 	}
 	if s.Window != "" {
-		if err := s.saveInfo(target); err != nil {
+		if err := dataset.WriteSessionInfo(s.Dir, info); err != nil {
 			return err
 		}
 	}
@@ -78,17 +85,17 @@ func (s Session) Run(parent context.Context) error {
 	return errors.Join(frameErr, inputErr)
 }
 
-// saveInfo stores how to turn a position in the window into a frame pixel.
-func (s Session) saveInfo(target windowTarget) error {
+// sessionInfo works out how to turn a position in the window into a frame pixel.
+func (s Session) sessionInfo(target windowTarget) (dataset.SessionInfo, error) {
 	frame, err := s.Frames.Next()
 	if err != nil {
-		return err
+		return dataset.SessionInfo{}, err
 	}
 	origin, err := target.clientOrigin()
 	if err != nil {
-		return err
+		return dataset.SessionInfo{}, err
 	}
-	return dataset.WriteSessionInfo(s.Dir, dataset.SessionInfo{ClientToFrame: origin.Sub(frame.Origin)})
+	return dataset.SessionInfo{ClientToFrame: origin.Sub(frame.Origin)}, nil
 }
 
 // View serves the dashboard for a saved session directory or trace file until

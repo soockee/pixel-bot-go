@@ -1,7 +1,10 @@
 package app
 
 import (
+	"errors"
+	"io"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -11,6 +14,7 @@ import (
 	"github.com/soocke/pixel-bot-go/domain/detect"
 	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/internal/playtrace"
+	"github.com/soocke/pixel-bot-go/internal/recorder"
 	"github.com/soocke/pixel-bot-go/internal/traceobserver"
 	"github.com/soocke/pixel-bot-go/ui/model"
 	"github.com/soocke/pixel-bot-go/ui/presenter"
@@ -26,6 +30,7 @@ type AppContainer struct {
 	RootView         *view.RootView
 	Selection        *view.SelectionOverlay
 	CapturePresenter *presenter.CapturePresenter
+	RecordPresenter  *presenter.RecordPresenter
 	Loop             *presenter.Loop
 	trace            *liveTrace
 }
@@ -67,10 +72,10 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions)
 	c.FSM = fishing.NewFSM(logger, cfg, callbacks)
 
 	newLocator := func(config.Config) detect.Locator { return detect.NewMarkerLocator() }
-	frames := capture.Source{Region: c.Selection.ActiveRect}
-	c.Engine = fishing.NewEngine(frames, c.FSM, newLocator, detect.NewMotionBiteDetector(logger), cfg, logger)
+	c.Engine = fishing.NewEngine(c.frames(), c.FSM, newLocator, detect.NewMotionBiteDetector(logger), cfg, logger)
 
 	c.CapturePresenter = presenter.NewCapturePresenter(c.Capture, c.Engine, c.FSM, c.RootView)
+	c.RecordPresenter = presenter.NewRecordPresenter(c.prepareRecording, c.RootView, recorder.DefaultListen)
 	focusWatcher := presenter.NewFocusWatcher(c.FSM, inFront)
 	c.FSM.AddListener(func(prev, next fishing.FishingState) {
 		focusWatcher.OnState(prev, next)
@@ -80,7 +85,43 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions)
 		presenter.NewSessionPresenter(model.NewSessionModel(), c.Capture, c.RootView),
 		presenter.NewFSMPresenter(c.FSM, c.RootView),
 		c.CapturePresenter,
+		c.RecordPresenter,
 		presenter.NewPreviewPresenter(c.Engine, c.RootView),
 	)
 	return c
+}
+
+func (c *AppContainer) frames() capture.Source {
+	return capture.Source{Region: c.Selection.ActiveRect}
+}
+
+// startProblem explains why a run or recording must not start, or returns "".
+func (c *AppContainer) startProblem() string {
+	// A false match outside a chosen area would click whatever is there.
+	sel := c.Selection.ActiveRect()
+	if sel == nil {
+		return "no saved selection"
+	}
+	// A test run configured for one monitor must never capture or click on another.
+	if screen, ok := action.ScreenBounds(c.Config.Screen); ok && !sel.In(screen) {
+		return "selection is outside the configured screen"
+	}
+	return ""
+}
+
+// prepareRecording builds a recording of the selected window and selection in
+// a new timestamped folder.
+func (c *AppContainer) prepareRecording() (presenter.RecordJob, error) {
+	if problem := c.startProblem(); problem != "" {
+		return presenter.RecordJob{}, errors.New(problem)
+	}
+	session := recorder.Session{
+		Dir:    filepath.Join(c.Config.RecordDir, time.Now().Format("20060102-150405")),
+		Frames: c.frames(),
+		Window: c.Capture.Window(),
+		Listen: recorder.DefaultListen,
+		Keys:   c.Config.RecordKeys,
+		Status: io.Discard,
+	}
+	return presenter.RecordJob{Dir: session.Dir, Run: session.Run}, nil
 }
