@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/soocke/pixel-bot-go/assets"
+	"github.com/soocke/pixel-bot-go/domain/action"
 	"github.com/soocke/pixel-bot-go/internal/fakegame"
 	"github.com/soocke/pixel-bot-go/ui/images"
 
@@ -26,7 +27,8 @@ const frameInterval = 50 * time.Millisecond
 func main() {
 	scenarioPath := flag.String("scenario", "", "path to a scenario JSON file (default: built-in loop)")
 	title := flag.String("title", "Fake Game", "window title")
-	pos := flag.String("pos", "50,50", "window position x,y on screen")
+	pos := flag.String("pos", "50,50", "window position x,y, relative to the chosen screen")
+	screen := flag.Int("screen", 0, "monitor to open on: 1 = primary, 2 = next from the left (0 = primary origin)")
 	flag.Parse()
 
 	sc := fakegame.DefaultScenario()
@@ -48,6 +50,12 @@ func main() {
 	var px, py int
 	if _, err := fmt.Sscanf(*pos, "%d,%d", &px, &py); err != nil {
 		fmt.Fprintln(os.Stderr, "fakegame: bad -pos, want x,y")
+		os.Exit(1)
+	}
+	if b, ok := action.ScreenBounds(*screen); ok {
+		px, py = px+b.Min.X, py+b.Min.Y
+	} else if *screen > 0 {
+		fmt.Fprintln(os.Stderr, "fakegame: screen not found:", *screen)
 		os.Exit(1)
 	}
 	WmGeometry(App, fmt.Sprintf("+%d+%d", px, py))

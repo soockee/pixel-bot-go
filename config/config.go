@@ -9,6 +9,9 @@ import (
 // Fields may be loaded from a JSON file and overridden by command-line flags.
 type Config struct {
 	Debug bool `json:"debug"`
+	// Screen picks the monitor the windows open on (1 = primary, 2 = next from
+	// the left, ...). 0 keeps the default placement. Overridden by -screen.
+	Screen int `json:"screen"`
 	// DryRun logs input actions instead of injecting them. Set by the -dry-run
 	// flag or PIXELBOT_DRY_RUN=1; never persisted to the config file.
 	DryRun bool `json:"-"`
@@ -126,6 +129,10 @@ func (c *Config) Validate() error {
 	}
 	if c.CooldownSeconds > 60 { // more than a minute likely unnecessary
 		c.CooldownSeconds = 60
+	}
+
+	if c.Screen < 0 {
+		c.Screen = 0
 	}
 
 	// AnalysisScale validation

@@ -19,6 +19,10 @@ import (
 const (
 	smCxScreen   = 0
 	smCyScreen   = 1
+	smXVirtual   = 76 // SM_XVIRTUALSCREEN: left of the whole multi-monitor desktop
+	smYVirtual   = 77
+	smCxVirtual  = 78
+	smCyVirtual  = 79
 	srccopy      = 0x00CC0020
 	dibRGBColors = 0
 	biRgb        = 0
@@ -78,9 +82,10 @@ func GrabSelection(sel image.Rectangle) (*image.RGBA, error) {
 	if sel.Empty() {
 		return nil, errors.New("capture: empty selection")
 	}
-	sw := int(getSystemMetric(smCxScreen))
-	sh := int(getSystemMetric(smCyScreen))
-	screen := image.Rect(0, 0, sw, sh)
+	// Use the virtual desktop so selections on a second monitor (which can have
+	// negative coordinates) are not clipped to the primary screen.
+	vx, vy := int(getSystemMetric(smXVirtual)), int(getSystemMetric(smYVirtual))
+	screen := image.Rect(vx, vy, vx+int(getSystemMetric(smCxVirtual)), vy+int(getSystemMetric(smCyVirtual)))
 	r := sel.Intersect(screen)
 	if r.Empty() {
 		return nil, fmt.Errorf("capture: selection out of bounds sel=%v screen=%v", sel, screen)

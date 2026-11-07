@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to create instead of the next patch (for example v1.1.0)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -29,8 +34,24 @@ jobs:
 
       - name: Determine next tag
         id: next_tag
+        env:
+          REQUESTED: ${{ github.event.inputs.version }}
         run: |
           git fetch --tags
+          requested="$REQUESTED"
+          if [ -n "$requested" ]; then
+            if ! echo "$requested" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "version must look like v1.2.3, got: $requested" >&2
+              exit 1
+            fi
+            if git rev-parse -q --verify "refs/tags/$requested" >/dev/null; then
+              echo "tag $requested already exists" >&2
+              exit 1
+            fi
+            echo "last_tag=" >> $GITHUB_OUTPUT
+            echo "next_tag=$requested" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           last_tag=$(git tag --list 'v*' --sort=-version:refname | head -n1)
           if [ -z "$last_tag" ]; then
             next="v1.0.0"

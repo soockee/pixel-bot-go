@@ -15,31 +15,39 @@ gofmt -l . && go vet ./... && go test ./...
 
 If these fail, stop; the end-to-end run adds nothing.
 
-## 2. Build into a scratch run directory
+## 2. Build and configure (everything on screen 2)
 
-The app writes `pixel_bot_logs.json` and reads `pixle_bot_config.json` (misspelled on purpose) from its working directory. Run from a scratch directory, not the repo.
+The user plays the real game on the main screen. Every window of a test run must open on screen 2 (`-screen 2`), never on screen 1. List the monitors first:
+
+```bash
+./pixel-bot-go.exe -list-screens      # e.g. [{"screen":2,"x":-1920,"y":148,"w":1920,"h":1080,...}]
+```
+
+The app writes `pixel_bot_logs.json` and reads `pixle_bot_config.json` (misspelled on purpose) from its working directory. Run from a scratch directory, not the repo. Selection coordinates are absolute and can be negative (screen 2 may sit left of the main screen). Place the fake game at `-pos 1350,50` (right side of screen 2, clear of the bot window) and select the area around it: screen origin plus (1330, 30), size 560x420.
 
 ```bash
 RUN="$SCRATCH/pixelbot-run"; mkdir -p "$RUN"
 go build -o "$RUN/pixel-bot-go.exe" . && go build -o "$RUN/fakegame.exe" ./cmd/fakegame
-cat > "$RUN/pixle_bot_config.json" <<'EOF2'
-{"debug": true, "selection_x": 30, "selection_y": 30, "selection_w": 560, "selection_h": 420,
+cd "$RUN"
+# OX, OY = x and y of screen 2 from -list-screens
+cat > pixle_bot_config.json <<EOF2
+{"debug": true, "screen": 2, "selection_x": $((OX+1330)), "selection_y": $((OY+30)), "selection_w": 560, "selection_h": 420,
  "cooldown_seconds": 3, "threshold": 0.80, "stop_on_score": 0.80}
 EOF2
 ```
 
-The selection rectangle (screen pixels) must cover the fake game window placed at `-pos 50,50` (window is 480x320 plus title bar). `debug: true` enables `/debug/state` on `localhost:6060` and detection score logs.
+`debug: true` enables `/debug/state` on `localhost:6060` and detection score logs. `-auto-start` is refused if the selection lies outside the configured screen, so a mistake cannot capture or click on the main screen. Dry-run is still mandatory for tests.
 
 ## 3. Launch headless (no clicking, no Administrator)
 
-Start the bot first, then the fake game so it becomes the foreground window the focus watcher waits for. Run from `$RUN`.
+Start the bot first, then the fake game so it becomes the foreground window the focus watcher waits for (it briefly takes focus from the game on screen 1; tell the user before running). Run from `$RUN`.
 
 ```bash
-(./pixel-bot-go.exe -dry-run -auto-window "Fake Game" -auto-start > bot.out 2>&1 &)
-sleep 2; (./fakegame.exe -pos 50,50 > fakegame.out 2>&1 &)
+(./pixel-bot-go.exe -dry-run -screen 2 -auto-window "Fake Game" -auto-start > bot.out 2>&1 &)
+sleep 2; (./fakegame.exe -screen 2 -pos 1350,50 > fakegame.out 2>&1 &)
 ```
 
-`-auto-window` preselects the target window title, `-auto-start` toggles capture 0.5 s after launch (refused without a saved selection), `-dry-run` logs input instead of sending it. The default fake scenario loops every 9.6 s, so wait 25 to 30 s for two or three cycles.
+`-auto-window` preselects the target window title, `-auto-start` toggles capture 0.5 s after launch, `-dry-run` logs input instead of sending it. The default fake scenario loops every 9.6 s, so wait 25 to 30 s for two or three cycles.
 
 ## 4. Stop
 

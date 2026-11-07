@@ -64,6 +64,8 @@ return (x,y,score,scale,found?)
 | Flag / variable                 | Effect                                                                                      |
 | ------------------------------- | ------------------------------------------------------------------------------------------- |
 | `-dry-run` / `PIXELBOT_DRY_RUN=1` | Log key presses, cursor moves and clicks as `dry-run action` instead of sending them; no Administrator needed |
+| `-screen N` / config `screen`   | Open windows and the selection overlay on monitor N (1 = primary, others left to right); 0 = default placement |
+| `-list-screens`                 | Print the monitors as JSON (`screen`, `x`, `y`, `w`, `h`, `primary`) and exit               |
 | `-auto-window "<title>"`        | Preselect the target window title (must match the window title exactly, case-insensitive)   |
 | `-auto-start`                   | Start capture 0.5 s after launch; refused unless `selection_x/y/w/h` are saved in the config |
 

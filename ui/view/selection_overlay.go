@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/soocke/pixel-bot-go/config"
+	"github.com/soocke/pixel-bot-go/domain/action"
 
 	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders
 	. "modernc.org/tk9.0"
@@ -49,8 +50,8 @@ func (v *selectionOverlay) OpenOrFocus() {
 	win := App.Toplevel(Borderwidth(2), Background("#008080"))
 	win.WmTitle("Selection Grid")
 	v.win = win
-	cx, cy := computeCenteredGeometry()
-	screenW, screenH := int(cx), int(cy)
+	screen := screenRect(v.cfg)
+	screenW, screenH := screen.Dx(), screen.Dy()
 	initW, initH := screenW*2/3, screenH*5/9
 	if initW < 1 {
 		initW = 1
@@ -58,7 +59,7 @@ func (v *selectionOverlay) OpenOrFocus() {
 	if initH < 1 {
 		initH = 1
 	}
-	x, y := (screenW-initW)/2, (screenH-initH)/2
+	x, y := screen.Min.X+(screenW-initW)/2, screen.Min.Y+(screenH-initH)/2
 	WmGeometry(win.Window, fmt.Sprintf("%dx%d+%d+%d", initW, initH, x, y))
 	WmAttributes(win.Window, "-topmost", 1)
 	WmAttributes(win.Window, "-toolwindow", true)
@@ -130,14 +131,19 @@ func (v *selectionOverlay) ActiveRect() *image.Rectangle {
 	return &r
 }
 
-// computeCenteredGeometry returns the screen width and height.
-// Currently returns static values; should be replaced with proper Tk winfo queries.
-func computeCenteredGeometry() (float64, float64) {
-	return 1920, 1080
+// screenRect returns the monitor the overlay should open on: the configured
+// screen if it exists, otherwise a default 1920x1080 area at the origin.
+func screenRect(cfg *config.Config) image.Rectangle {
+	if cfg != nil {
+		if b, ok := action.ScreenBounds(cfg.Screen); ok {
+			return b
+		}
+	}
+	return image.Rect(0, 0, 1920, 1080)
 }
 
 // geomReSel matches window geometry strings in the format "WIDTHxHEIGHT+X+Y"
-var geomReSel = regexp.MustCompile(`^(\d+)x(\d+)\+(-?\d+)\+(-?\d+)$`)
+var geomReSel = regexp.MustCompile(`^(\d+)x(\d+)[+-](-?\d+)[+-](-?\d+)$`)
 
 // parseGeometrySel parses a Tk geometry string and returns the corresponding rectangle.
 func parseGeometrySel(g string) (image.Rectangle, bool) {

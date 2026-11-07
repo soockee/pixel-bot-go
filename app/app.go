@@ -68,7 +68,13 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 
 	App.WmTitle(title)
 	WmProtocol(App, "WM_DELETE_WINDOW", a.exitHandler)
-	WmGeometry(App, fmt.Sprintf("%dx%d+100+100", width, height))
+	originX, originY := 0, 0
+	if b, ok := action.ScreenBounds(cfg.Screen); ok {
+		originX, originY = b.Min.X, b.Min.Y
+	} else if cfg.Screen > 0 {
+		logger.Warn("configured screen not found; using default placement", "screen", cfg.Screen)
+	}
+	WmGeometry(App, fmt.Sprintf("%dx%d+%d+%d", width, height, originX+100, originY+100))
 	// Initialize UI styles and selection overlay.
 	theme.InitStyles()
 	a.selectionView = view.NewSelectionOverlay(cfg, a.configPath, logger)
@@ -124,9 +130,15 @@ func (a *app) Run() (err error) {
 	if cfg != nil && cfg.AutoStart {
 		// Without a saved selection the capture falls back to the whole screen,
 		// and a false match there would click the desktop with nobody watching.
-		if a.selectionRect() == nil {
+		sel := a.selectionRect()
+		screen, onScreen := action.ScreenBounds(cfg.Screen)
+		switch {
+		case sel == nil:
 			a.logger.Error("auto-start refused: no saved selection (set selection_x/y/w/h in the config)")
-		} else {
+		case onScreen && !sel.In(screen):
+			// A test run configured for one monitor must never capture or click on another.
+			a.logger.Error("auto-start refused: selection is outside the configured screen", "selection", sel.String(), "screen", screen.String(), "screen_number", cfg.Screen)
+		default:
 			a.logger.Info("auto-start requested", "window", a.window())
 			TclAfter(500*time.Millisecond, func() { a.toggleCapture() })
 		}
