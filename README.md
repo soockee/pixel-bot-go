@@ -6,7 +6,7 @@ World of Warcraft fishing helper for Windows: watches a region, finds the bobber
 
 ## Demo
 
-[Watch the demo (MP4, ~47 s)](https://github.com/soockee/pixel-bot-go/releases/download/demo-video/fishing_demo_config.mp4)
+![Demo of Pixel Bot fishing in action](docs/img/fishing_demo.gif)
 
 ---
 
