@@ -4,9 +4,6 @@
 
 World of Warcraft fishing helper for Windows: watches a region, finds the bobber, reels when a bite is detected, repeats.
 
-## Demo
-
-
 ---
 
 ## Quick Start
