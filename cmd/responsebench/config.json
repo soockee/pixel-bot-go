@@ -1,0 +1,59 @@
+{
+  "bootstrap": { "seed": 20261107, "resamples": 10000 },
+  "splits": {
+    "dev": { "base_seed": 100000, "runs": 30 },
+    "eval": { "base_seed": 200000, "runs": 100 }
+  },
+  "environment": { "events": 100, "window_ms": 1000, "splash_ms": 20, "service_ms": 30, "attempt_timeout_ms": 250 },
+  "families": [
+    { "name": "sparse", "mean_gap_ms": 4000 },
+    { "name": "clustered", "mean_gap_ms": 6000, "burst_min": 3, "burst_max": 8, "burst_gap_ms": 100 },
+    { "name": "transient", "mean_gap_ms": 4000, "fail_gap_ms": 1500, "fail_mean_ms": 120 },
+    { "name": "timeouts", "mean_gap_ms": 4000, "hang_gap_ms": 3000, "hang_mean_ms": 150 },
+    { "name": "mixed", "mean_gap_ms": 6000, "burst_min": 3, "burst_max": 8, "burst_gap_ms": 100, "fail_gap_ms": 1500, "fail_mean_ms": 120, "hang_gap_ms": 3000, "hang_mean_ms": 150 }
+  ],
+  "shadow": {
+    "train": { "base_seed": 300000, "runs": 80 },
+    "calibration": { "base_seed": 400000, "runs": 80 },
+    "holdout_families": ["mixed"],
+    "false_alarm_rate": 0.05,
+    "tick_ms": 100,
+    "score_age_ms": 1000
+  },
+  "trace_feedback": {
+    "window_actions": 12,
+    "interval_tolerance_ms": 4,
+    "retry_window_ms": 250,
+    "retry_burst_count": 3,
+    "threshold": 0.75,
+    "pacing_hold_ms": 200,
+    "retry_hold_ms": 450
+  },
+  "selection": { "max_actions_per_event": 2.0 },
+  "frozen": ["fixed-25", "backoff-10-50-b50-c800"],
+  "candidates": [
+    { "name": "fixed-25", "kind": "fixed", "interval_ms": 25 },
+    { "name": "fixed-50", "kind": "fixed", "interval_ms": 50 },
+    { "name": "fixed-100", "kind": "fixed", "interval_ms": 100 },
+    { "name": "fixed-200", "kind": "fixed", "interval_ms": 200 },
+    { "name": "fixed-400", "kind": "fixed", "interval_ms": 400 },
+    { "name": "backoff-10-50-b50-c400", "kind": "backoff", "min_delay_ms": 10, "max_delay_ms": 50, "base_backoff_ms": 50, "max_backoff_ms": 400, "max_attempts": 6 },
+    { "name": "backoff-10-50-b50-c800", "kind": "backoff", "min_delay_ms": 10, "max_delay_ms": 50, "base_backoff_ms": 50, "max_backoff_ms": 800, "max_attempts": 6 },
+    { "name": "backoff-10-50-b100-c400", "kind": "backoff", "min_delay_ms": 10, "max_delay_ms": 50, "base_backoff_ms": 100, "max_backoff_ms": 400, "max_attempts": 6 },
+    { "name": "backoff-10-50-b100-c800", "kind": "backoff", "min_delay_ms": 10, "max_delay_ms": 50, "base_backoff_ms": 100, "max_backoff_ms": 800, "max_attempts": 6 },
+    { "name": "backoff-10-50-b200-c400", "kind": "backoff", "min_delay_ms": 10, "max_delay_ms": 50, "base_backoff_ms": 200, "max_backoff_ms": 400, "max_attempts": 6 },
+    { "name": "backoff-10-50-b200-c800", "kind": "backoff", "min_delay_ms": 10, "max_delay_ms": 50, "base_backoff_ms": 200, "max_backoff_ms": 800, "max_attempts": 6 },
+    { "name": "backoff-25-100-b50-c400", "kind": "backoff", "min_delay_ms": 25, "max_delay_ms": 100, "base_backoff_ms": 50, "max_backoff_ms": 400, "max_attempts": 6 },
+    { "name": "backoff-25-100-b50-c800", "kind": "backoff", "min_delay_ms": 25, "max_delay_ms": 100, "base_backoff_ms": 50, "max_backoff_ms": 800, "max_attempts": 6 },
+    { "name": "backoff-25-100-b100-c400", "kind": "backoff", "min_delay_ms": 25, "max_delay_ms": 100, "base_backoff_ms": 100, "max_backoff_ms": 400, "max_attempts": 6 },
+    { "name": "backoff-25-100-b100-c800", "kind": "backoff", "min_delay_ms": 25, "max_delay_ms": 100, "base_backoff_ms": 100, "max_backoff_ms": 800, "max_attempts": 6 },
+    { "name": "backoff-25-100-b200-c400", "kind": "backoff", "min_delay_ms": 25, "max_delay_ms": 100, "base_backoff_ms": 200, "max_backoff_ms": 400, "max_attempts": 6 },
+    { "name": "backoff-25-100-b200-c800", "kind": "backoff", "min_delay_ms": 25, "max_delay_ms": 100, "base_backoff_ms": 200, "max_backoff_ms": 800, "max_attempts": 6 },
+    { "name": "backoff-50-200-b50-c400", "kind": "backoff", "min_delay_ms": 50, "max_delay_ms": 200, "base_backoff_ms": 50, "max_backoff_ms": 400, "max_attempts": 6 },
+    { "name": "backoff-50-200-b50-c800", "kind": "backoff", "min_delay_ms": 50, "max_delay_ms": 200, "base_backoff_ms": 50, "max_backoff_ms": 800, "max_attempts": 6 },
+    { "name": "backoff-50-200-b100-c400", "kind": "backoff", "min_delay_ms": 50, "max_delay_ms": 200, "base_backoff_ms": 100, "max_backoff_ms": 400, "max_attempts": 6 },
+    { "name": "backoff-50-200-b100-c800", "kind": "backoff", "min_delay_ms": 50, "max_delay_ms": 200, "base_backoff_ms": 100, "max_backoff_ms": 800, "max_attempts": 6 },
+    { "name": "backoff-50-200-b200-c400", "kind": "backoff", "min_delay_ms": 50, "max_delay_ms": 200, "base_backoff_ms": 200, "max_backoff_ms": 400, "max_attempts": 6 },
+    { "name": "backoff-50-200-b200-c800", "kind": "backoff", "min_delay_ms": 50, "max_delay_ms": 200, "base_backoff_ms": 200, "max_backoff_ms": 800, "max_attempts": 6 }
+  ]
+}
