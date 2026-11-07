@@ -37,6 +37,7 @@ type RootView struct {
 	stateLabel       *TLabelWidget
 	windowSelect     *TComboboxWidget
 	windowTitles     []string
+	windowPicked     bool // the user or a flag chose the window
 	statusLabel      *LabelWidget
 	windowExplainLbl *TLabelWidget
 	captureLabel     *LabelWidget
@@ -75,6 +76,7 @@ func primaryButton(label string, pal theme.PaletteSnapshot, command func()) *But
 // Build constructs the layout.
 func (rv *RootView) Build(calls RootCallbacks) {
 	rv.calls = calls
+	rv.windowPicked = calls.Window() != ""
 	theme.InitStyles()
 	if rv.cfg.DarkMode {
 		theme.SetDark(true)
@@ -152,17 +154,28 @@ func (rv *RootView) Build(calls RootCallbacks) {
 	rv.applyPalette()
 }
 
+// defaultWindow is selected whenever it is open, until the user picks another.
+const defaultWindow = "World of Warcraft"
+
+// pickWindow returns the window to select. A window the user picked stays
+// selected even if it is not open yet.
+func pickWindow(titles []string, current string, picked bool) string {
+	switch {
+	case picked:
+		return current
+	case slices.Contains(titles, defaultWindow):
+		return defaultWindow
+	}
+	return titles[0]
+}
+
 // refreshWindows reloads the dropdown and keeps the selection in step with it.
-// A selected window that is not open yet stays selected.
 func (rv *RootView) refreshWindows() {
 	titles := rv.calls.ListWindows()
 	if len(titles) == 0 {
 		titles = []string{"<none>"}
 	}
-	current := rv.calls.Window()
-	if current == "" {
-		current = titles[0]
-	}
+	current := pickWindow(titles, rv.calls.Window(), rv.windowPicked)
 	if !slices.Contains(titles, current) {
 		titles = append(titles, current)
 	}
@@ -178,6 +191,7 @@ func (rv *RootView) windowChosen() {
 		rv.logger.Error("window selection parse error", "error", err)
 		return
 	}
+	rv.windowPicked = true
 	rv.calls.SetWindow(rv.windowTitles[idx])
 }
 
