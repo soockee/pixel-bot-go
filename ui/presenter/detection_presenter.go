@@ -88,6 +88,7 @@ type DetectionPresenter struct {
 	lastSearchSeq  uint64
 	lastMonitorSeq uint64
 	lastSearchTime time.Time
+	searchLogged   int // worker goroutine only; throttles detection.search misses
 	searchDelay    time.Duration
 }
 
@@ -289,7 +290,8 @@ func (p *DetectionPresenter) doSearch(task detectionTask, frame *image.RGBA, cfg
 		res.err = err
 		return res
 	}
-	if p.logger != nil {
+	p.searchLogged++
+	if p.logger != nil && (match.Found || p.searchLogged%10 == 0) {
 		p.logger.Debug("detection.search", "found", match.Found, "score", match.Score, "scale", match.Scale, "x", match.X, "y", match.Y, "frame_w", frame.Bounds().Dx(), "frame_h", frame.Bounds().Dy(), "dur_ms", res.duration.Milliseconds())
 	}
 	if !match.Found {

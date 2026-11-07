@@ -60,6 +60,15 @@ return (x,y,score,scale,found?)
 * Dark mode UI and adjustable selection area.
 * JSON config persistence and structured event logging.
 
+## Command-Line Flags
+| Flag / variable                 | Effect                                                                                      |
+| ------------------------------- | ------------------------------------------------------------------------------------------- |
+| `-dry-run` / `PIXELBOT_DRY_RUN=1` | Log key presses, cursor moves and clicks as `dry-run action` instead of sending them; no Administrator needed |
+| `-auto-window "<title>"`        | Preselect the target window title (must match the window title exactly, case-insensitive)   |
+| `-auto-start`                   | Start capture 0.5 s after launch; refused unless `selection_x/y/w/h` are saved in the config |
+
+With `"debug": true` in the config, `http://localhost:6060/debug/state` returns the live FSM state as JSON, and `detection.search` entries (found, score, scale, position; misses sampled 1 in 10) are written to the log. `go run ./cmd/fakegame` opens a fake fishing scene for testing without the game (`-scenario file.json`, `-pos x,y`, `-title`).
+
 ## Generated Files
 | File                    | Purpose                                  | Notes                                                   |
 | ----------------------- | ---------------------------------------- | ------------------------------------------------------- |

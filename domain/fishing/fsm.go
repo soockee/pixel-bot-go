@@ -4,6 +4,8 @@ import (
 	"image"
 	"log/slog"
 	"runtime/debug"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
@@ -12,7 +14,9 @@ import (
 // FishingFSM manages fishing state, timers, detectors and side-effect actions.
 // It runs an internal event loop on a goroutine and serializes state transitions.
 type FishingFSM struct {
-	state            FishingState
+	state            FishingState // owned by the loop goroutine; cur mirrors it for other goroutines
+	cur              atomic.Int32
+	coordMu          sync.Mutex // guards coordX/Y/Set writes against TargetCoordinates reads
 	logger           *slog.Logger
 	cfg              *config.Config
 	cooldownDuration time.Duration
@@ -37,6 +41,7 @@ func NewFSM(logger *slog.Logger, cfg *config.Config, actions ActionCallbacks, de
 		cooldown = time.Duration(cfg.CooldownSeconds) * time.Second
 	}
 	f := &FishingFSM{state: StateHalt, logger: logger, cfg: cfg, cooldownDuration: cooldown, events: make(chan interface{}, 64), actions: actions, detectorCtor: detectorCtor}
+	f.cur.Store(int32(StateHalt))
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
@@ -62,7 +67,9 @@ func (f *FishingFSM) loop() {
 				f.transition(StateMonitoring)
 			}
 		case evtTargetAcquiredAt:
+			f.coordMu.Lock()
 			f.coordX, f.coordY, f.coordSet = e.x, e.y, true
+			f.coordMu.Unlock()
 			if f.state == StateSearching {
 				f.transition(StateMonitoring)
 			}
@@ -72,7 +79,9 @@ func (f *FishingFSM) loop() {
 			}
 		case evtHalt:
 			f.cooldownUntil = time.Time{}
+			f.coordMu.Lock()
 			f.coordSet = false
+			f.coordMu.Unlock()
 			if f.biteDetector != nil {
 				f.biteDetector.Reset()
 			}
@@ -230,6 +239,7 @@ func (f *FishingFSM) transition(next FishingState) {
 	case StateHalt: // no-op
 	}
 	f.state = next
+	f.cur.Store(int32(next))
 	if f.state == StateSearching {
 		// start / restart search timer (force cast after 5s)
 		if f.searchTimer != nil {
@@ -264,7 +274,7 @@ func (f *FishingFSM) transition(next FishingState) {
 
 // Public API methods
 func (f *FishingFSM) AddListener(l FishingStateListener) { f.events <- evtAddListener{l: l} }
-func (f *FishingFSM) Current() FishingState              { return f.state }
+func (f *FishingFSM) Current() FishingState              { return FishingState(f.cur.Load()) }
 func (f *FishingFSM) EventTargetAcquired()               { f.events <- evtTargetAcquired{} }
 func (f *FishingFSM) EventTargetAcquiredAt(x, y int)     { f.events <- evtTargetAcquiredAt{x: x, y: y} }
 func (f *FishingFSM) EventTargetLost()                   { f.events <- evtTargetLost{} }
@@ -283,6 +293,8 @@ func (f *FishingFSM) ProcessMonitoringFrame(roi *image.RGBA, now time.Time) {
 	}
 }
 func (f *FishingFSM) TargetCoordinates() (int, int, bool) {
+	f.coordMu.Lock()
+	defer f.coordMu.Unlock()
 	if !f.coordSet {
 		return 0, 0, false
 	}

@@ -33,10 +33,22 @@ type app struct {
 	width, height  int
 	start          time.Time
 	afterID        string
+	selMu          sync.Mutex // guards selectedWindow (Tk thread writes, other goroutines read)
 	selectedWindow string
 	loop           *presenter.Loop
 	goWg           sync.WaitGroup
 	selectionView  view.SelectionOverlay
+}
+
+func (a *app) window() string {
+	a.selMu.Lock()
+	defer a.selMu.Unlock()
+	return a.selectedWindow
+}
+func (a *app) setWindow(title string) {
+	a.selMu.Lock()
+	a.selectedWindow = title
+	a.selMu.Unlock()
 }
 
 // Small getters used by presenters and UI wiring.
@@ -87,7 +99,7 @@ func (a *app) Run() (err error) {
 	a.container.CapturePresenter = presenter.NewCapturePresenter(a.container.Capture, a.container.CaptureSvc, a.container.FSM, a.container.RootView)
 
 	// Focus watcher runs separately while FSM awaits focus.
-	focusWatcher := presenter.NewFocusWatcher(a.container.FSM, a.logger, nil, func() string { return strings.TrimSpace(strings.ToLower(a.selectedWindow)) })
+	focusWatcher := presenter.NewFocusWatcher(a.container.FSM, a.logger, nil, func() string { return strings.TrimSpace(strings.ToLower(a.window())) })
 	a.loop = presenter.NewLoop(a.container.SessionPresenter, a.container.FSMPresenter, a.container.DetectionPresenter, a.ScheduleUpdate)
 
 	// Record start time and schedule first tick.
@@ -107,11 +119,17 @@ func (a *app) Run() (err error) {
 		debug.RegisterState(a.stateSnapshot)
 	}
 	if cfg != nil && cfg.AutoWindow != "" {
-		a.selectedWindow = cfg.AutoWindow
+		a.setWindow(cfg.AutoWindow)
 	}
 	if cfg != nil && cfg.AutoStart {
-		a.logger.Info("auto-start requested", "window", a.selectedWindow)
-		TclAfter(500*time.Millisecond, func() { a.toggleCapture() })
+		// Without a saved selection the capture falls back to the whole screen,
+		// and a false match there would click the desktop with nobody watching.
+		if a.selectionRect() == nil {
+			a.logger.Error("auto-start refused: no saved selection (set selection_x/y/w/h in the config)")
+		} else {
+			a.logger.Info("auto-start requested", "window", a.window())
+			TclAfter(500*time.Millisecond, func() { a.toggleCapture() })
+		}
 	}
 	a.ScheduleUpdate()
 	App.Wait()
@@ -130,7 +148,7 @@ func (a *app) layout() {
 		if a.selectionView != nil {
 			a.selectionView.OpenOrFocus()
 		}
-	}, a.exitHandler, func(title string) { a.selectedWindow = title })
+	}, a.exitHandler, a.setWindow)
 	a.container.UI = rv
 	// After view & selection overlay are ready, attach selection provider to capture service.
 	if a.container.CaptureSvc != nil {
@@ -200,7 +218,7 @@ func (a *app) stateSnapshot() map[string]any {
 	snap := map[string]any{
 		"fsm_state":       a.Current().String(),
 		"capture_running": a.captureRunning(),
-		"selected_window": a.selectedWindow,
+		"selected_window": a.window(),
 		"uptime_seconds":  time.Since(a.start).Seconds(),
 	}
 	if x, y, ok := a.TargetCoordinates(); ok {

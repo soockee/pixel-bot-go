@@ -238,6 +238,12 @@ func matchTemplateNCCGrayIntegralPre(frame *image.RGBA, pc *templatePrecomp, opt
 	if stride <= 0 {
 		stride = 1
 	}
+	// A coarse step larger than a quarter of the template's short side can step
+	// over the true position (the score there drops below noise), and refine
+	// then polishes the wrong spot. Keep the step small enough to land close.
+	if limit := max(1, min(w, h)/4); stride > limit {
+		stride = limit
+	}
 	for y := 0; y <= H-h; y += stride {
 		for x := 0; x <= W-w; x += stride {
 			sumF := integralSum(pre.integral, pre.W, x, y, x+w-1, y+h-1)
