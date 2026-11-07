@@ -9,6 +9,14 @@ import (
 // Fields may be loaded from a JSON file and overridden by command-line flags.
 type Config struct {
 	Debug bool `json:"debug"`
+	// DryRun logs input actions instead of injecting them. Set by the -dry-run
+	// flag or PIXELBOT_DRY_RUN=1; never persisted to the config file.
+	DryRun bool `json:"-"`
+	// AutoWindow preselects the target window title and AutoStart starts capture
+	// shortly after launch (headless runs). Set by flags; never persisted. The
+	// capture region comes from selection_x/y/w/h in the config file.
+	AutoWindow string `json:"-"`
+	AutoStart  bool   `json:"-"`
 	// Detection parameters
 	MinScale       float64 `json:"min_scale"`
 	MaxScale       float64 `json:"max_scale"`

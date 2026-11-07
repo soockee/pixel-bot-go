@@ -289,6 +289,9 @@ func (p *DetectionPresenter) doSearch(task detectionTask, frame *image.RGBA, cfg
 		res.err = err
 		return res
 	}
+	if p.logger != nil {
+		p.logger.Debug("detection.search", "found", match.Found, "score", match.Score, "scale", match.Scale, "x", match.X, "y", match.Y, "frame_w", frame.Bounds().Dx(), "frame_h", frame.Bounds().Dy(), "dur_ms", res.duration.Milliseconds())
+	}
 	if !match.Found {
 		return res
 	}

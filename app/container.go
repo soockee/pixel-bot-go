@@ -45,12 +45,17 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, width, height int, 
 	if img, err := assets.FishingTargetImage(); err == nil {
 		c.TargetImg = img
 	}
-	c.FSM = fishing.NewFSM(logger, cfg, fishing.ActionCallbacks{
+	callbacks := fishing.ActionCallbacks{
 		PressKey:   action.PressKey,
 		MoveCursor: action.MoveCursor,
 		ClickRight: action.ClickRight,
 		ParseVK:    action.ParseVK,
-	}, func(cfg *config.Config, l *slog.Logger) fishing.BiteDetectorContract {
+	}
+	if cfg.DryRun {
+		logger.Warn("dry-run enabled: input actions are logged, not injected")
+		callbacks.PressKey, callbacks.MoveCursor, callbacks.ClickRight = action.DryRun(logger)
+	}
+	c.FSM = fishing.NewFSM(logger, cfg, callbacks, func(cfg *config.Config, l *slog.Logger) fishing.BiteDetectorContract {
 		return fishing.NewBiteDetector(cfg, l)
 	})
 	// View

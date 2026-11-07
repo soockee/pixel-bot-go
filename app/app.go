@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
+	"github.com/soocke/pixel-bot-go/debug"
 	"github.com/soocke/pixel-bot-go/domain/action"
 	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/ui/presenter"
@@ -103,6 +104,14 @@ func (a *app) Run() (err error) {
 	if cfg != nil && cfg.Debug {
 		// debug.StartGoroutineLogger(2*time.Second, a.logger)
 		// debug.StartMemLogger(1*time.Second, a.logger)
+		debug.RegisterState(a.stateSnapshot)
+	}
+	if cfg != nil && cfg.AutoWindow != "" {
+		a.selectedWindow = cfg.AutoWindow
+	}
+	if cfg != nil && cfg.AutoStart {
+		a.logger.Info("auto-start requested", "window", a.selectedWindow)
+		TclAfter(500*time.Millisecond, func() { a.toggleCapture() })
 	}
 	a.ScheduleUpdate()
 	App.Wait()
@@ -184,4 +193,18 @@ func (a *app) ProcessMonitoringFrame(img *image.RGBA, now time.Time) {
 	if a.container.FSM != nil {
 		a.container.FSM.ProcessMonitoringFrame(img, now)
 	}
+}
+
+// stateSnapshot reports live state for the /debug/state endpoint (debug mode only).
+func (a *app) stateSnapshot() map[string]any {
+	snap := map[string]any{
+		"fsm_state":       a.Current().String(),
+		"capture_running": a.captureRunning(),
+		"selected_window": a.selectedWindow,
+		"uptime_seconds":  time.Since(a.start).Seconds(),
+	}
+	if x, y, ok := a.TargetCoordinates(); ok {
+		snap["target"] = map[string]int{"x": x, "y": y}
+	}
+	return snap
 }

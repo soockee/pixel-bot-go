@@ -249,7 +249,7 @@ func (f *FishingFSM) transition(next FishingState) {
 		})
 	}
 	if f.logger != nil {
-		f.logger.Debug("fishing state transition", "from", prev.String(), "to", next.String())
+		f.logger.Info("fishing state transition", "from", prev.String(), "to", next.String())
 	}
 	for _, l := range f.listeners {
 		l(prev, next)
