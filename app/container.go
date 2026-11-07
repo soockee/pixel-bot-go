@@ -1,12 +1,10 @@
 package app
 
 import (
-	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/soocke/pixel-bot-go/assets"
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/action"
 	"github.com/soocke/pixel-bot-go/domain/capture"
@@ -40,11 +38,7 @@ type TraceOptions struct {
 }
 
 // BuildContainer constructs and wires all components. It creates no Tk widgets.
-func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions) (*AppContainer, error) {
-	tmpl, err := assets.FishingTargetImage()
-	if err != nil {
-		return nil, fmt.Errorf("load bobber template: %w", err)
-	}
+func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions) *AppContainer {
 	c := &AppContainer{Config: cfg, Capture: &model.CaptureModel{}}
 	c.RootView = view.NewRootView(cfg, config.FilePath, logger)
 	c.Selection = view.NewSelectionOverlay(cfg, config.FilePath, logger)
@@ -72,7 +66,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions)
 	}
 	c.FSM = fishing.NewFSM(logger, cfg, callbacks)
 
-	newLocator := func(run config.Config) detect.Locator { return detect.NewNCCLocator(tmpl, run) }
+	newLocator := func(config.Config) detect.Locator { return detect.NewMarkerLocator() }
 	frames := capture.Source{Region: c.Selection.ActiveRect}
 	c.Engine = fishing.NewEngine(frames, c.FSM, newLocator, detect.NewMotionBiteDetector(logger), cfg, logger)
 
@@ -88,5 +82,5 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions)
 		c.CapturePresenter,
 		presenter.NewPreviewPresenter(c.Engine, c.RootView),
 	)
-	return c, nil
+	return c
 }

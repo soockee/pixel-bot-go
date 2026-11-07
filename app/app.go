@@ -25,12 +25,8 @@ type app struct {
 }
 
 // NewApp creates the main window and all components.
-func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Logger, trace TraceOptions) (*app, error) {
-	container, err := BuildContainer(cfg, logger, trace)
-	if err != nil {
-		return nil, err
-	}
-	a := &app{container: container, logger: logger}
+func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Logger, trace TraceOptions) *app {
+	a := &app{container: BuildContainer(cfg, logger, trace), logger: logger}
 
 	App.WmTitle(title)
 	WmProtocol(App, "WM_DELETE_WINDOW", a.exitHandler)
@@ -42,7 +38,7 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 	}
 	WmGeometry(App, fmt.Sprintf("%dx%d+%d+%d", width, height, originX+100, originY+100))
 	theme.InitStyles()
-	return a, nil
+	return a
 }
 
 // Run builds the UI, starts the update tick and blocks until the window is closed.

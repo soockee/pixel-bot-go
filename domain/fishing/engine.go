@@ -56,7 +56,7 @@ func (e *Engine) Start() {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel, e.done = cancel, make(chan struct{})
-	r := &run{engine: e, cfg: *e.cfg, locator: e.newLocator(*e.cfg)}
+	r := &run{engine: e, locator: e.newLocator(*e.cfg)}
 	go r.loop(ctx, e.done)
 }
 
@@ -77,8 +77,8 @@ func (e *Engine) Preview() *Preview { return e.preview.Load() }
 // run holds the state of one Start to Stop span. Only its goroutine touches it.
 type run struct {
 	engine     *Engine
-	cfg        config.Config
 	locator    detect.Locator
+	target     image.Rectangle // locked area in screen coordinates
 	lastSearch time.Time
 	searches   int
 	monitoring bool
@@ -134,25 +134,18 @@ func (r *run) search(frame capture.Frame) {
 			"frame_w", frame.Image.Bounds().Dx(), "frame_h", frame.Image.Bounds().Dy(), "dur_ms", time.Since(r.lastSearch).Milliseconds())
 	}
 	if found {
+		r.target = match.Box.Add(frame.Origin)
 		e.fsm.EventTargetAcquiredAt(frame.Origin.X+match.X, frame.Origin.Y+match.Y)
 	}
 }
 
 func (r *run) monitor(frame capture.Frame) *image.RGBA {
 	e := r.engine
-	x, y, ok := e.fsm.TargetCoordinates()
-	if !ok {
-		return nil
-	}
 	if !r.monitoring {
 		e.bite.Reset()
 		r.monitoring = true
 	}
-	roi, _, err := detect.ExtractROI(frame.Image, x-frame.Origin.X, y-frame.Origin.Y, r.cfg.ROISizePx)
-	if err != nil {
-		e.logger.Error("extract roi", "error", err)
-		return nil
-	}
+	roi := frame.Image.SubImage(r.target.Sub(frame.Origin)).(*image.RGBA)
 	if e.bite.Feed(roi, frame.CapturedAt) {
 		e.fsm.EventFishBite()
 	}

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Visual Response Lab is a Windows Go application for visual event and response experiments. It captures a screen region, locates the target via multi-scale normalized cross-correlation (NCC), and uses region-of-interest brightness statistics to trigger action callbacks. The local simulator supplies a scripted fishing scene for reproducible tests. See [README.md](README.md) and `docs/` (Diataxis: TUTORIALS, HOW_TO, REFERENCE, EXPLANATION).
+Visual Response Lab is a Windows Go application for visual event and response experiments. It captures a screen region, locates the target from the corner brackets an addon draws around it, and uses region-of-interest brightness statistics to trigger action callbacks. The local simulator supplies a scripted fishing scene for reproducible tests. See [README.md](README.md) and `docs/` (Diataxis: TUTORIALS, HOW_TO, REFERENCE, EXPLANATION).
 
 ## Stack
 
@@ -30,13 +30,13 @@ There is no Makefile. `.github/workflows/ci.yml` runs gofmt, vet, tests and the 
 | `app/` | `App` wrapper and `AppContainer` (`container.go`) that wires models, services, presenters and the root view |
 | `config/` | `Config` struct, `DefaultConfig`, `Validate`, `Load` (JSON) |
 | `domain/capture/` | `Source.Next` grabs one frame of the selected region; `Frame.Origin` is its screen position |
-| `domain/detect/` | `Locator` and `BiteDetector` interfaces, NCC template matching, motion bite detector, ROI and scaling helpers |
+| `domain/detect/` | `Locator` and `BiteDetector` interfaces, `MarkerLocator` (the app's locator), NCC template matching (evaluation only), motion bite detector |
 | `domain/fishing/` | `Engine` (`engine.go`, the capture and detection loop) and the FSM (`fsm.go`: states, deadline, input) |
 | `domain/action/` | Key press, cursor move, right click (Windows input injection), `Guard` (safety checks on real input), global stop hotkey |
 | `ui/model` `ui/presenter` `ui/view` | MVP-style UI: models hold state, presenters connect domain to views, views are Tk widgets |
 | `ui/images`, `ui/theme` | PNG encoding for Tk, theming |
 | `debug/` | `/debug/state` handler |
-| `assets/` | Embedded `fishing_target.png` template (`embed.go`) |
+| `assets/` | Embedded `fishing_target.png` template (`embed.go`), used by the simulator and NCC evaluation |
 | `cmd/detecteval/` | Measures a `Locator` and `BiteDetector` on recorded datasets, and writes `labels.json` from a session with `-label`; add candidates to its maps. See `docs/REFERENCE.md` |
 | `internal/dataset/` | Dataset format, labels and the frame loop |
 | `internal/recorder/` | `-record` sessions (frames plus mouse and key input in one window), the loopback dashboard and `-view` |
@@ -47,6 +47,7 @@ There is no Makefile. `.github/workflows/ci.yml` runs gofmt, vet, tests and the 
 - FSM lifecycle: `waiting_focus → searching → monitoring → reeling → cooldown → casting → searching`. A single event channel serializes transitions; timers decouple cadence from UI ticks. Add new event sources by feeding that channel rather than mutating state directly. Each state has at most one deadline (`arm`), a transition cancels it, and input actions run on the loop, so nothing pending can act after Stop or a focus change.
 - `fishing.Engine` runs the pipeline on one goroutine with no UI dependency: it grabs a frame, runs the detection the FSM state calls for, and sends the result to the FSM. The UI only reads `Engine.Preview` on its tick.
 - Algorithms plug in through `detect.Locator` and `detect.BiteDetector`, frames through `fishing.FrameSource`, and input through `fishing.ActionCallbacks`, so tests substitute fakes instead of touching Win32. Keep those seams when adding input, capture or detection behavior. Define other interfaces where they are consumed.
+- The bobber is whatever the addon marks: `detect.MarkerLocator` returns the box inside its corner brackets, the box centre is the click point, and the box is the area watched for a bite. Without the addon the bot finds nothing and halts after `max_failed_casts`.
 - Build all wiring in `app/container.go`; do not construct services inside presenters or views. Constructors require their dependencies, so do not add nil guards for them.
 
 ## Conventions
@@ -62,7 +63,7 @@ There is no Makefile. `.github/workflows/ci.yml` runs gofmt, vet, tests and the 
 - Logs: the app writes JSON slog entries to `pixel_bot_logs.json` (truncated each start). FSM transitions are logged at Info (`fishing state transition`, fields `from`/`to`), plus `cast action executed` and `reel action executed`.
 - Live state: with `"debug": true` in `pixle_bot_config.json`, `http://localhost:6060/debug/state` returns JSON (`fsm_state`, `capture_running`, `selected_window`, `target`, `uptime_seconds`, `time`) next to the pprof endpoints. Implemented in `debug/state.go`, registered in `app.Run`.
 - Replay tests: `domain/fishing/engine_test.go` runs rendered fake-game frames through the Engine, real matcher, real bite detector and FSM with recorded fake actions, without Tk. Extend it for new detection or FSM behavior. FSM and Engine tests use `testing/synctest`, so timers run on a fake clock.
-- Fake game: `go run ./cmd/fakegame [-scenario file.json] [-title "Fake Game"]` opens a window with a noisy scene, the real bobber template and scripted bites (default loop: empty 2s, bobber 4s, splash 0.6s, empty 3s). Each phase change prints a JSON line on stdout (`t`, `phase`, `bobber` rect), to correlate with `pixel_bot_logs.json`. Scene logic lives in `internal/fakegame` and is unit-tested against the real template matcher and bite detector. Scenario JSON fields: `width`, `height`, `bobber_x`, `bobber_y`, `bobber_scale`, `seed`, `loop`, `splash_lum`, `timeline` (`[{"phase":"empty|bobber|splash","ms":N}]`).
+- Fake game: `go run ./cmd/fakegame [-scenario file.json] [-title "Fake Game"]` opens a window with a noisy scene, the real bobber template with the addon's brackets and scripted bites (default loop: empty 2s, bobber 4s, splash 0.6s, empty 3s). Each phase change prints a JSON line on stdout (`t`, `phase`, `bobber` rect), to correlate with `pixel_bot_logs.json`. Scene logic lives in `internal/fakegame` and is unit-tested against the real template matcher and bite detector. Scenario JSON fields: `width`, `height`, `bobber_x`, `bobber_y`, `bobber_scale`, `seed`, `loop`, `splash_lum`, `timeline` (`[{"phase":"empty|bobber|splash","ms":N}]`).
 - Dry run: `pixel-bot-go.exe -dry-run` (or `PIXELBOT_DRY_RUN=1`) logs key presses, cursor moves and clicks as `dry-run action` entries instead of injecting them; no Administrator needed. `Config.DryRun` is `json:"-"` so it is never saved. Implemented in `domain/action/dryrun.go`, wired in `app/container.go`.
 - Headless run: `-auto-window "<title>" -auto-start` preselects the target window and starts capture 0.5 s after launch; the capture region comes from `selection_x/y/w/h` in `pixle_bot_config.json`. Search results are logged at Debug as `detection.search` (`found`, `score`, `scale`, `x`, `y`). Fake game window position: `-pos x,y`.
 - Focus: the focus watcher runs for the whole run, so a test stalls in `focus` (`waiting_focus`) if the fake game loses focus. Dry-run skips `action.Guard`.

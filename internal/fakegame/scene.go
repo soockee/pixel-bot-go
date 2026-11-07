@@ -10,6 +10,8 @@ import (
 	"math/rand"
 	"os"
 	"time"
+
+	"github.com/soocke/pixel-bot-go/domain/detect"
 )
 
 // Phase is what the fake game shows during a timeline segment.
@@ -123,6 +125,9 @@ func (r *Renderer) BobberRect() image.Rectangle {
 	return image.Rect(r.sc.BobberX, r.sc.BobberY, r.sc.BobberX+w, r.sc.BobberY+h)
 }
 
+// MarkerRect is the area the addon's brackets surround.
+func (r *Renderer) MarkerRect() image.Rectangle { return r.BobberRect().Inset(-24) }
+
 // Render returns a fresh frame for the phase.
 func (r *Renderer) Render(p Phase) *image.RGBA {
 	out := image.NewRGBA(r.bg.Bounds())
@@ -161,5 +166,6 @@ func (r *Renderer) Render(p Phase) *image.RGBA {
 			}
 		}
 	}
+	detect.DrawMarker(out, r.MarkerRect())
 	return out
 }

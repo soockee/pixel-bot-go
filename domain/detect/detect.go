@@ -6,9 +6,11 @@ import (
 	"time"
 )
 
-// Match is a located bobber. X and Y are its centre in frame coordinates.
+// Match is a located bobber. X and Y are the click point and Box is the area to
+// watch for a bite, both in frame coordinates.
 type Match struct {
 	X, Y  int
+	Box   image.Rectangle
 	Score float64
 	Scale float64
 }

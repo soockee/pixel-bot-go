@@ -18,7 +18,18 @@ Where:
 Normalization removes brightness bias; higher score means better similarity (range roughly -1..+1; negative/inverted ignored here).
 
 ---
-## Detection Goal
+## What Counts as the Bobber
+The bobber is whatever the addon marks with its four corner brackets, so other players' bobbers are ignored. `detect.MarkerLocator` looks for these in the capture:
+
+| Property | Value |
+| -------- | ----- |
+| Colour | About RGB 255, 178, 163, within 28 per channel |
+| Bracket | Two arms of at least 10 px from one outer corner, 3 px thick and 19 px long in the addon's default look |
+| Box | 30 to 400 px per side, with at least 3 of 4 corners visible |
+
+The box centre is the click point and the box is the area watched for a bite. The whole box must fit inside the selection. If the addon is off or its colour changes, nothing is found and the run halts after `max_failed_casts`. `roi_size_px` and the matching settings apply only to `detecteval -locator ncc`.
+
+## Template Matching (Evaluation Only)
 Locate template (small) within frame (large) returning (x,y,score,scale,found?). Score threshold gates action.
 
 ## Performance Techniques
@@ -152,7 +163,7 @@ Selection rule, applied to the dev split only: stay within `max_actions_per_even
 
 A cast covers the time the bobber is on screen. Leave out `bite_ms` if no bite came. `empty` lists spans with no bobber.
 
-`go run ./cmd/detecteval [-config file] [-locator ncc] [-bite motion] [-json] dir...` prints one column per dataset and a total:
+`go run ./cmd/detecteval [-config file] [-locator marker|ncc] [-bite motion] [-json] dir...` prints one column per dataset and a total:
 
 | Metric | Meaning |
 | ------ | ------- |

@@ -344,6 +344,8 @@ Phase 3 status: the Engine also took over the capture loop, so the capture servi
 - [ ] **T5.6** Build and evaluate B1 (bobber tracking).
 - [ ] **T5.7** Ship the best candidates and delete the rest. Keep only code that won. Record results here.
 
+The app now locates the bobber from the addon's corner brackets (`detect.MarkerLocator`), which replaces the template for the live locator and covers T5.4 and T5.5 unless the marker proves unreliable. Bite detection (T5.3, T5.6) still needs footage with the marker on.
+
 ### Phase 6: ML, Only If Targets Are Missed
 - [ ] **T6.1** Export labelled patches and ROI sequences from the dataset. Keep training code outside the release build.
 - [ ] **T6.2** Add pure-Go inference with embedded weights, with an output test against the training framework.

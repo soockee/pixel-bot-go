@@ -39,11 +39,10 @@ func newSceneEngine(t *testing.T, log *actionLog) (*Engine, *FishingFSM, *sceneF
 	}
 	r := fakegame.NewRenderer(fakegame.DefaultScenario(), tmpl)
 	cfg := testConfig()
-	cfg.Threshold = 0.8
 	frames := &sceneFrames{render: r.Render, origin: image.Pt(-1000, 200)}
 	frames.set(fakegame.PhaseBobber)
 	fsm := NewFSM(nil, cfg, recordingActions(log))
-	newLocator := func(c config.Config) detect.Locator { return detect.NewNCCLocator(tmpl, c) }
+	newLocator := func(config.Config) detect.Locator { return detect.NewMarkerLocator() }
 	engine := NewEngine(frames, fsm, newLocator, detect.NewMotionBiteDetector(nil), cfg, testLogger)
 	return engine, fsm, frames, r.BobberRect().Add(frames.origin)
 }

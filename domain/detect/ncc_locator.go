@@ -30,9 +30,13 @@ func NewNCCLocator(tmpl image.Image, cfg config.Config) *NCCLocator {
 func (l *NCCLocator) Locate(frame *image.RGBA) (Match, bool) {
 	l.pre.load(frame)
 	res := matchScales(&l.pre, l.templates, NCCOptions{Threshold: l.cfg.Threshold, Stride: l.cfg.Stride, Refine: l.cfg.Refine})
+	x := res.X + int(float64(l.size.X)*res.Scale)/2
+	y := res.Y + int(float64(l.size.Y)*res.Scale)/2
+	half := l.cfg.ROISizePx / 2
 	return Match{
-		X:     res.X + int(float64(l.size.X)*res.Scale)/2,
-		Y:     res.Y + int(float64(l.size.Y)*res.Scale)/2,
+		X:     x,
+		Y:     y,
+		Box:   image.Rect(x-half, y-half, x+half, y+half),
 		Score: res.Score,
 		Scale: res.Scale,
 	}, res.Found

@@ -98,6 +98,21 @@ func TestRunMeasuresTheRealDetectorsAndRepeats(t *testing.T) {
 	}
 }
 
+func TestMarkerLocatorFindsTheFakeBobber(t *testing.T) {
+	var out bytes.Buffer
+	if err := run("", "marker", "motion", true, []string{writeFakeDataset(t)}, &out); err != nil {
+		t.Fatal(err)
+	}
+	var rows []row
+	if err := json.Unmarshal(out.Bytes(), &rows); err != nil {
+		t.Fatal(err)
+	}
+	got := rows[len(rows)-1].Counts
+	if got.Locks != 2 || got.LocksOnBobber != 2 || got.FalseLocks != 0 {
+		t.Errorf("counts = %+v", got)
+	}
+}
+
 func TestPrintedTableShowsTargets(t *testing.T) {
 	var out bytes.Buffer
 	if err := run("", "ncc", "motion", false, []string{writeFakeDataset(t)}, &out); err != nil {

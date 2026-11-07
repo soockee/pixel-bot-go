@@ -14,6 +14,9 @@ Core goroutines/tasks typically active during operation:
 Use profiling endpoints to confirm counts remain stable; runaway worker spawning indicates misconfigured scale range.
 
 ---
+## Why the Bobber Comes from the Addon
+Real footage showed the template failing: the bobber is larger than the template, it changes with the camera, and other players' bobbers look the same. The addon already knows which object is ours and marks it, so reading its brackets is simpler and more reliable than recognising the object. It also gives the area to watch, which keeps the bite detector off the rest of the water. The cost is a dependency on the addon being on, with its colour unchanged.
+
 ## Detection Mental Model
 Imagine laying the template on every possible position on the frame (like a stencil) and asking “How similar is this patch?” Keep the highest score. Brute force plus shortcuts (stride, integral images, early stop, parallel scales) keeps it fast.
 

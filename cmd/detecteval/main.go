@@ -32,7 +32,8 @@ import (
 // Candidates under comparison. Add new detectors here.
 var (
 	locators = map[string]func(tmpl image.Image, cfg config.Config) detect.Locator{
-		"ncc": func(tmpl image.Image, cfg config.Config) detect.Locator { return detect.NewNCCLocator(tmpl, cfg) },
+		"marker": func(image.Image, config.Config) detect.Locator { return detect.NewMarkerLocator() },
+		"ncc":    func(tmpl image.Image, cfg config.Config) detect.Locator { return detect.NewNCCLocator(tmpl, cfg) },
 	}
 	biteDetectors = map[string]func() detect.BiteDetector{
 		"motion": func() detect.BiteDetector { return detect.NewMotionBiteDetector(slog.New(slog.DiscardHandler)) },
@@ -41,7 +42,7 @@ var (
 
 func main() {
 	configPath := flag.String("config", "", "config file (default: built-in defaults)")
-	locatorName := flag.String("locator", "ncc", "locator: "+strings.Join(slices.Sorted(maps.Keys(locators)), ", "))
+	locatorName := flag.String("locator", "marker", "locator: "+strings.Join(slices.Sorted(maps.Keys(locators)), ", "))
 	biteName := flag.String("bite", "motion", "bite detector: "+strings.Join(slices.Sorted(maps.Keys(biteDetectors)), ", "))
 	asJSON := flag.Bool("json", false, "print the counts as JSON, without timings")
 	label := flag.String("label", "", "write labels.json for this recorded session and exit")

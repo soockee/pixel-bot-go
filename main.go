@@ -129,12 +129,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	appInstance, err := app.NewApp("Visual Response Lab", 800, 600, cfg, logger, trace)
-	if err != nil {
-		logger.Error("app setup failed", "error", err)
-		os.Exit(1)
-	}
-	runErr := appInstance.Run()
+	runErr := app.NewApp("Visual Response Lab", 800, 600, cfg, logger, trace).Run()
 	if trace.Output != nil {
 		status := "complete"
 		if runErr != nil {
