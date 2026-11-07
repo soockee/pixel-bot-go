@@ -69,6 +69,12 @@ func (b binding) matches(e playtrace.Event) bool {
 	return strings.EqualFold(name, b.value)
 }
 
+// draggedBy reports a press that moved. That still casts, though a right button
+// drag only turns the camera, so reels do not use this.
+func (b binding) draggedBy(e playtrace.Event) bool {
+	return b.kind == "mouse" && e.Type == "drag" && e.Button == b.value
+}
+
 // AutoLabel builds labels from a session's input. A cast with no reel has no
 // known bobber position, so it is left out and described in the skipped list.
 func AutoLabel(dir string, opts AutoLabelOptions) (Labels, []string, error) {
@@ -91,7 +97,7 @@ func AutoLabel(dir string, opts AutoLabelOptions) (Labels, []string, error) {
 	err = readInput(dir, func(e playtrace.Event) error {
 		ms := e.ElapsedUS / 1000
 		switch {
-		case cast.matches(e):
+		case cast.matches(e) || cast.draggedBy(e):
 			if pending != nil {
 				skipped = append(skipped, fmt.Sprintf("cast at %d ms has no reel", *pending))
 			} else if ms-clearFrom >= minEmptyMS {

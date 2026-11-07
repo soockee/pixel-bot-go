@@ -87,6 +87,20 @@ func TestAutoLabelPairsCastsAndReels(t *testing.T) {
 	}
 }
 
+func TestCastPressThatMovedStillCounts(t *testing.T) {
+	cast := click(5000, "x1", 10, 10)
+	cast.Type = "drag"
+	camera := click(9000, "right", 1, 1)
+	camera.Type = "drag" // turns the camera, so it is not a reel
+	dir := writeSession(t, cast, camera, click(12000, "right", 500, 300))
+
+	got, skipped, err := AutoLabel(dir, testOptions)
+
+	if err != nil || len(skipped) != 0 || len(got.Casts) != 1 || got.Casts[0].EndMS != 12000 {
+		t.Errorf("got %+v skipped=%v err=%v", got, skipped, err)
+	}
+}
+
 func TestAutoLabelReadsKeyBindings(t *testing.T) {
 	dir := writeSession(t,
 		keyDown(1000, "F3", "", true), // a held key is not a cast
