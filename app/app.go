@@ -2,17 +2,12 @@ package app
 
 import (
 	"fmt"
-	"image"
 	"log/slog"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/debug"
 	"github.com/soocke/pixel-bot-go/domain/action"
-	"github.com/soocke/pixel-bot-go/domain/fishing"
-	"github.com/soocke/pixel-bot-go/ui/presenter"
 	"github.com/soocke/pixel-bot-go/ui/theme"
 	"github.com/soocke/pixel-bot-go/ui/view"
 
@@ -20,51 +15,22 @@ import (
 	. "modernc.org/tk9.0"
 )
 
-// The app constructs and wires concrete services (capture, presenters, UI).
-
-const (
-	tick = 33 * time.Millisecond
-)
+const tick = 33 * time.Millisecond
 
 type app struct {
-	container      *AppContainer
-	logger         *slog.Logger
-	configPath     string
-	width, height  int
-	start          time.Time
-	afterID        string
-	selMu          sync.Mutex // guards selectedWindow (Tk thread writes, other goroutines read)
-	selectedWindow string
-	loop           *presenter.Loop
-	goWg           sync.WaitGroup
-	selectionView  view.SelectionOverlay
+	container *AppContainer
+	logger    *slog.Logger
+	start     time.Time
+	afterID   string
 }
 
-func (a *app) window() string {
-	a.selMu.Lock()
-	defer a.selMu.Unlock()
-	return a.selectedWindow
-}
-func (a *app) setWindow(title string) {
-	a.selMu.Lock()
-	a.selectedWindow = title
-	a.selMu.Unlock()
-}
-
-// Small getters used by presenters and UI wiring.
-func (a *app) captureRunning() bool {
-	return a.container.CaptureSvc != nil && a.container.CaptureSvc.Running()
-}
-func (a *app) selectionRect() *image.Rectangle {
-	if a.selectionView != nil {
-		return a.selectionView.ActiveRect()
+// NewApp creates the main window and all components.
+func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Logger, trace TraceOptions) (*app, error) {
+	container, err := BuildContainer(cfg, logger, trace)
+	if err != nil {
+		return nil, err
 	}
-	return nil
-}
-
-func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Logger) *app {
-	container := BuildContainer(cfg, logger, width, height, "pixle_bot_config.json")
-	a := &app{container: container, logger: logger, configPath: "pixle_bot_config.json", width: width, height: height}
+	a := &app{container: container, logger: logger}
 
 	App.WmTitle(title)
 	WmProtocol(App, "WM_DELETE_WINDOW", a.exitHandler)
@@ -75,165 +41,122 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		logger.Warn("configured screen not found; using default placement", "screen", cfg.Screen)
 	}
 	WmGeometry(App, fmt.Sprintf("%dx%d+%d+%d", width, height, originX+100, originY+100))
-	// Initialize UI styles and selection overlay.
 	theme.InitStyles()
-	a.selectionView = view.NewSelectionOverlay(cfg, a.configPath, logger)
-	return a
+	return a, nil
 }
 
-// RootView satisfies the detection view interface.
-
-// Run sets up presenters, starts the update loop and blocks until the window is closed.
-func (a *app) Run() (err error) {
-	cfg := a.container.Config
-	a.layout()
-	a.container.RootView.SetConfigEditable(true)
-	// Wire presenters now that UI is ready.
-	a.container.SessionPresenter = presenter.NewSessionPresenter(a.container.Session, a.container.Capture, a.container.UI)
-	a.container.FSMPresenter = presenter.NewFSMPresenter(a.container.FSM, a.container.UI)
-	a.container.DetectionPresenter = presenter.NewDetectionPresenter(
-		func() bool { return a.container.Capture.Enabled() },
-		a.container.CaptureSvc,
-		a.container.FSM,
-		a.selectionView,
-		a.container.UI,
-		cfg,
-		a.container.TargetImg,
-		a.container.Detection,
-		a.logger,
-	)
-	a.container.CapturePresenter = presenter.NewCapturePresenter(a.container.Capture, a.container.CaptureSvc, a.container.FSM, a.container.RootView)
-
-	// Focus watcher runs separately while FSM awaits focus.
-	focusWatcher := presenter.NewFocusWatcher(a.container.FSM, a.logger, nil, func() string { return strings.TrimSpace(strings.ToLower(a.window())) })
-	a.loop = presenter.NewLoop(a.container.SessionPresenter, a.container.FSMPresenter, a.container.DetectionPresenter, a.ScheduleUpdate)
-
-	// Record start time and schedule first tick.
-	a.start = time.Now()
-	// Forward FSM state changes to presenter.
-	a.container.FSM.AddListener(func(prev, next fishing.FishingState) {
-		if a.container.FSMPresenter != nil {
-			a.container.FSMPresenter.OnState(next)
-		}
-		focusWatcher.OnState(prev, next)
+// Run builds the UI, starts the update tick and blocks until the window is closed.
+func (a *app) Run() error {
+	c := a.container
+	cfg := c.Config
+	if cfg.AutoWindow != "" {
+		c.Capture.SetWindow(cfg.AutoWindow)
+	}
+	c.RootView.Build(view.RootCallbacks{
+		ListWindows: func() []string {
+			titles, err := action.ListWindows()
+			if err != nil {
+				a.logger.Error("list windows failed", "error", err)
+			}
+			return titles
+		},
+		Window:        c.Capture.Window,
+		SetWindow:     c.Capture.SetWindow,
+		ToggleCapture: a.toggleCapture,
+		OpenSelection: c.Selection.OpenOrFocus,
+		Exit:          a.exitHandler,
 	})
+	a.watchStopKey()
 
-	// Start debug loggers when configured.
-	if cfg != nil && cfg.Debug {
-		// debug.StartGoroutineLogger(2*time.Second, a.logger)
-		// debug.StartMemLogger(1*time.Second, a.logger)
+	a.start = time.Now()
+	if cfg.Debug || a.hasTraceObserver() {
 		debug.RegisterState(a.stateSnapshot)
 	}
-	if cfg != nil && cfg.AutoWindow != "" {
-		a.setWindow(cfg.AutoWindow)
+	if cfg.AutoStart {
+		a.logger.Info("auto-start requested", "window", c.Capture.Window())
+		TclAfter(500*time.Millisecond, a.toggleCapture)
 	}
-	if cfg != nil && cfg.AutoStart {
-		// Without a saved selection the capture falls back to the whole screen,
-		// and a false match there would click the desktop with nobody watching.
-		sel := a.selectionRect()
-		screen, onScreen := action.ScreenBounds(cfg.Screen)
-		switch {
-		case sel == nil:
-			a.logger.Error("auto-start refused: no saved selection (set selection_x/y/w/h in the config)")
-		case onScreen && !sel.In(screen):
-			// A test run configured for one monitor must never capture or click on another.
-			a.logger.Error("auto-start refused: selection is outside the configured screen", "selection", sel.String(), "screen", screen.String(), "screen_number", cfg.Screen)
-		default:
-			a.logger.Info("auto-start requested", "window", a.window())
-			TclAfter(500*time.Millisecond, func() { a.toggleCapture() })
-		}
-	}
-	a.ScheduleUpdate()
+	a.scheduleTick()
 	App.Wait()
-
-	a.goWg.Wait()
 	return nil
-}
-
-func (a *app) layout() {
-	var titles []string
-	if list, err := action.ListWindows(); err == nil {
-		titles = list
-	}
-	rv := a.container.RootView
-	rv.Build(titles, func() { a.toggleCapture() }, func() {
-		if a.selectionView != nil {
-			a.selectionView.OpenOrFocus()
-		}
-	}, a.exitHandler, a.setWindow)
-	a.container.UI = rv
-	// After view & selection overlay are ready, attach selection provider to capture service.
-	if a.container.CaptureSvc != nil {
-		if selView := a.selectionView; selView != nil {
-			a.container.CaptureSvc.SetSelectionProvider(func() *image.Rectangle { return selView.ActiveRect() })
-		}
-	}
 }
 
 func (a *app) exitHandler() {
 	if a.afterID != "" {
 		TclAfterCancel(a.afterID)
 	}
-	if a.container.FSM != nil {
-		a.container.FSM.Close()
-	}
+	a.container.Engine.Stop()
+	a.container.FSM.Close()
 	Destroy(App)
 }
 
-func (a *app) ScheduleUpdate() {
+func (a *app) scheduleTick() {
 	a.afterID = TclAfter(tick, func() {
-		if a.loop != nil {
-			a.loop.Tick()
-		}
+		a.container.Loop.Tick()
+		a.scheduleTick()
 	})
 }
 
-// getSelectionRect proxies to selectionView (may be nil).
-// toggleCapture delegates to the capture presenter.
+// startProblem explains why capture must not start, or returns "".
+func (a *app) startProblem() string {
+	// A false match outside a chosen area would click whatever is there.
+	sel := a.container.Selection.ActiveRect()
+	if sel == nil {
+		return "no saved selection"
+	}
+	// A test run configured for one monitor must never capture or click on another.
+	if screen, ok := action.ScreenBounds(a.container.Config.Screen); ok && !sel.In(screen) {
+		return "selection is outside the configured screen"
+	}
+	return ""
+}
+
+// toggleCapture delegates to the capture presenter after checking that a start is safe.
 func (a *app) toggleCapture() {
-	if cp := a.container.CapturePresenter; cp != nil {
-		cp.Toggle()
+	if !a.container.Capture.Enabled() {
+		if problem := a.startProblem(); problem != "" {
+			a.logger.Error("start refused: " + problem)
+			a.container.RootView.SetStatus("Cannot start: " + problem)
+			return
+		}
+	}
+	a.container.RootView.SetStatus("Ready")
+	a.container.CapturePresenter.Toggle()
+}
+
+// watchStopKey registers the global stop hotkey. It goes straight to the FSM so
+// it still works if Tk stalls; the capture presenter then stops capture.
+func (a *app) watchStopKey() {
+	key := a.container.Config.StopKey
+	vk, ok := action.ParseVK(key)
+	if !ok {
+		a.logger.Error("unknown stop key", "key", key)
+		a.container.RootView.SetStatus("Stop hotkey unavailable: unknown key " + key)
+		return
+	}
+	if err := action.WatchHotkey(vk, a.container.FSM.EventHalt); err != nil {
+		a.logger.Error("stop hotkey unavailable", "key", key, "error", err)
+		a.container.RootView.SetStatus("Stop hotkey unavailable: " + key + " is in use")
 	}
 }
 
-// Inline goroutines use explicit panic recovery where needed.
-// State and preview behavior is provided by presenters.
-func (a *app) Running() bool                   { return a.captureRunning() }
-func (a *app) SelectionRect() *image.Rectangle { return a.selectionRect() }
-
-// Detection-related methods forward to the FSM.
-func (a *app) Current() fishing.FishingState {
-	if a.container.FSM != nil {
-		return a.container.FSM.Current()
-	}
-	return fishing.StateHalt
-}
-func (a *app) EventTargetAcquiredAt(x, y int) {
-	if a.container.FSM != nil {
-		a.container.FSM.EventTargetAcquiredAt(x, y)
-	}
-}
-func (a *app) TargetCoordinates() (int, int, bool) {
-	if a.container.FSM != nil {
-		return a.container.FSM.TargetCoordinates()
-	}
-	return 0, 0, false
-}
-func (a *app) ProcessMonitoringFrame(img *image.RGBA, now time.Time) {
-	if a.container.FSM != nil {
-		a.container.FSM.ProcessMonitoringFrame(img, now)
-	}
+func (a *app) hasTraceObserver() bool {
+	return a.container.trace != nil && a.container.trace.observer != nil
 }
 
 // stateSnapshot reports live state for the /debug/state endpoint (debug mode only).
 func (a *app) stateSnapshot() map[string]any {
+	c := a.container
 	snap := map[string]any{
-		"fsm_state":       a.Current().String(),
-		"capture_running": a.captureRunning(),
-		"selected_window": a.window(),
+		"fsm_state":       c.FSM.Current().String(),
+		"capture_running": c.Capture.Enabled(),
+		"selected_window": c.Capture.Window(),
 		"uptime_seconds":  time.Since(a.start).Seconds(),
 	}
-	if x, y, ok := a.TargetCoordinates(); ok {
+	if a.hasTraceObserver() {
+		snap["trace_observer"] = c.trace.snapshot()
+	}
+	if x, y, ok := c.FSM.TargetCoordinates(); ok {
 		snap["target"] = map[string]int{"x": x, "y": y}
 	}
 	return snap

@@ -1,6 +1,7 @@
 package presenter
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -8,72 +9,90 @@ import (
 )
 
 type mockFocusFSM struct {
-	state fishing.FishingState
-	fired int
+	state    atomic.Int32
+	acquired atomic.Int32
+	lost     atomic.Int32
 }
 
-func (m *mockFocusFSM) Current() fishing.FishingState { return m.state }
-func (m *mockFocusFSM) EventFocusAcquired()           { m.fired++; m.state = fishing.StateSearching }
+func (m *mockFocusFSM) set(s fishing.FishingState)    { m.state.Store(int32(s)) }
+func (m *mockFocusFSM) Current() fishing.FishingState { return fishing.FishingState(m.state.Load()) }
+func (m *mockFocusFSM) EventFocusAcquired() {
+	m.acquired.Add(1)
+	m.set(fishing.StateSearching)
+}
+func (m *mockFocusFSM) EventFocusLost() {
+	m.lost.Add(1)
+	m.set(fishing.StateWaitingFocus)
+}
 
-// TestFocusWatcher_FiresOnMatchChange verifies the watcher triggers the FSM
-// only when the foreground window title changes to a value that matches the
-// current selection while the FSM is in the waiting-for-focus state.
-func TestFocusWatcher_FiresOnMatchChange(t *testing.T) {
-	fsm := &mockFocusFSM{state: fishing.StateWaitingFocus}
-	titles := []string{"Other", "GameWindow"}
-	idx := 0
-	fg := func() (string, error) { return titles[idx], nil }
-	sel := func() string { return "gamewindow" }
-	w := NewFocusWatcher(fsm, nil, fg, sel)
+func newFastWatcher(fsm FocusFSM, focused *atomic.Bool) *FocusWatcher {
+	w := NewFocusWatcher(fsm, focused.Load)
+	w.interval = time.Millisecond
+	return w
+}
 
-	// Start watcher via state transition
-	w.OnState(fishing.StateSearching, fishing.StateWaitingFocus)
-	// Foreground Other (not match)
-	time.Sleep(300 * time.Millisecond)
-	if fsm.fired != 0 {
-		t.Fatalf("expected no fire, got %d", fsm.fired)
-	}
-	// Change to matching title
-	idx = 1
-	time.Sleep(300 * time.Millisecond)
-	if fsm.fired != 1 {
-		t.Fatalf("expected fire on match change, got %d", fsm.fired)
-	}
-	// Ensure it stopped
-	time.Sleep(300 * time.Millisecond)
-	if fsm.fired != 1 {
-		t.Fatalf("unexpected repeat fire")
+func waitFor(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for !cond() {
+		if time.Now().After(deadline) {
+			t.Fatalf("timeout waiting for %s", what)
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
-// TestFocusWatcher_ResetOnStateExit verifies the watcher resets when the FSM
-// leaves the waiting state and can fire again after re-entering with a matching
-// title.
-func TestFocusWatcher_ResetOnStateExit(t *testing.T) {
-	fsm := &mockFocusFSM{state: fishing.StateWaitingFocus}
-	title := "WinA"
-	fg := func() (string, error) { return title, nil }
-	sel := func() string { return "wina" }
-	w := NewFocusWatcher(fsm, nil, fg, sel)
-	w.OnState(fishing.StateSearching, fishing.StateWaitingFocus)
-	time.Sleep(300 * time.Millisecond)
-	if fsm.fired != 1 {
-		t.Fatalf("expected first fire, got %d", fsm.fired)
+func TestFocusWatcherFollowsFocusInBothDirections(t *testing.T) {
+	fsm := &mockFocusFSM{}
+	fsm.set(fishing.StateWaitingFocus)
+	var focused atomic.Bool
+	w := newFastWatcher(fsm, &focused)
+	w.OnState(fishing.StateHalt, fishing.StateWaitingFocus)
+	defer w.OnState(fishing.StateSearching, fishing.StateHalt)
+
+	time.Sleep(10 * time.Millisecond)
+	if fsm.acquired.Load() != 0 {
+		t.Fatal("focus acquired while the window was in the background")
 	}
-	// Leave waiting state (should stop watcher)
-	fsm.state = fishing.StateSearching
-	w.OnState(fishing.StateWaitingFocus, fishing.StateSearching)
-	// Re-enter waiting with different title then matching again
-	fsm.state = fishing.StateWaitingFocus
-	title = "Other"
-	w.OnState(fishing.StateSearching, fishing.StateWaitingFocus)
-	time.Sleep(300 * time.Millisecond) // no fire
-	if fsm.fired != 1 {
-		t.Fatalf("unexpected fire after re-enter with non-match")
+
+	focused.Store(true)
+	waitFor(t, "focus acquired", func() bool { return fsm.acquired.Load() == 1 })
+
+	focused.Store(false)
+	waitFor(t, "focus lost", func() bool { return fsm.lost.Load() == 1 })
+
+	focused.Store(true)
+	waitFor(t, "focus regained", func() bool { return fsm.acquired.Load() == 2 })
+}
+
+func TestFocusWatcherIgnoresFocusChangesInHalt(t *testing.T) {
+	fsm := &mockFocusFSM{}
+	fsm.set(fishing.StateHalt)
+	var focused atomic.Bool
+	focused.Store(true)
+	w := newFastWatcher(fsm, &focused)
+
+	w.poll()
+
+	if fsm.acquired.Load() != 0 || fsm.lost.Load() != 0 {
+		t.Error("watcher acted on a halted FSM")
 	}
-	title = "WinA"
-	time.Sleep(300 * time.Millisecond)
-	if fsm.fired != 2 {
-		t.Fatalf("expected second fire after reset, got %d", fsm.fired)
+}
+
+func TestFocusWatcherStopsOnHalt(t *testing.T) {
+	fsm := &mockFocusFSM{}
+	fsm.set(fishing.StateSearching)
+	var focused atomic.Bool
+	focused.Store(true)
+	w := newFastWatcher(fsm, &focused)
+	w.OnState(fishing.StateHalt, fishing.StateSearching)
+
+	w.OnState(fishing.StateSearching, fishing.StateHalt)
+	time.Sleep(5 * time.Millisecond) // lets a poll already running finish
+	focused.Store(false)
+	time.Sleep(10 * time.Millisecond)
+
+	if fsm.lost.Load() != 0 {
+		t.Error("watcher kept polling after halt")
 	}
 }

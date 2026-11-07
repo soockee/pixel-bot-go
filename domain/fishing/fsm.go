@@ -1,7 +1,7 @@
 package fishing
 
 import (
-	"image"
+	"context"
 	"log/slog"
 	"runtime/debug"
 	"sync"
@@ -11,287 +11,296 @@ import (
 	"github.com/soocke/pixel-bot-go/config"
 )
 
-// FishingFSM manages fishing state, timers, detectors and side-effect actions.
-// It runs an internal event loop on a goroutine and serializes state transitions.
+const (
+	searchTimeout  = 5 * time.Second        // recast when no bobber appears
+	reelClickDelay = 300 * time.Millisecond // gives the cursor time to settle on the bobber
+)
+
+// FishingFSM manages fishing state, its deadline and input actions. All of them
+// run on one goroutine, so a transition cancels anything the old state had pending.
 type FishingFSM struct {
-	state            FishingState // owned by the loop goroutine; cur mirrors it for other goroutines
-	cur              atomic.Int32
-	coordMu          sync.Mutex // guards coordX/Y/Set writes against TargetCoordinates reads
-	logger           *slog.Logger
-	cfg              *config.Config
-	cooldownDuration time.Duration
-	cooldownUntil    time.Time
-	searchTimer      *time.Timer
-	cooldownTimer    *time.Timer
-	coordX, coordY   int
-	coordSet         bool
-	biteDetector     BiteDetectorContract
-	closed           bool
-	actions          ActionCallbacks
-	detectorCtor     DetectorFactory
-	events           chan interface{}
-	listeners        []FishingStateListener
+	state       FishingState // owned by the loop goroutine; cur mirrors it for other goroutines
+	cur         atomic.Int32
+	coordMu     sync.Mutex // guards coordX/Y/Set writes against TargetCoordinates reads
+	coordX      int
+	coordY      int
+	coordSet    bool
+	logger      *slog.Logger
+	source      *config.Config // copied by the goroutine that starts a run, which owns it
+	cfg         config.Config  // loop-owned copy for the current run
+	timer       *time.Timer
+	gen         uint64 // identifies the live deadline
+	reelDone    func()
+	failedCasts int
+	sessionEnd  time.Time
+	actions     ActionCallbacks
+	events      chan any
+	done        <-chan struct{}
+	cancel      context.CancelFunc
+	listeners   []FishingStateListener
 }
 
-// NewFSM creates and starts a FishingFSM. The FSM starts in StateHalt.
-// If cfg is nil a default cooldown is used.
-func NewFSM(logger *slog.Logger, cfg *config.Config, actions ActionCallbacks, detectorCtor DetectorFactory) *FishingFSM {
-	cooldown := time.Second
-	if cfg != nil && cfg.CooldownSeconds > 0 {
-		cooldown = time.Duration(cfg.CooldownSeconds) * time.Second
+// NewFSM creates and starts a FishingFSM in StateHalt. A nil logger discards
+// logs and a nil cfg uses the defaults.
+func NewFSM(logger *slog.Logger, cfg *config.Config, actions ActionCallbacks) *FishingFSM {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
 	}
-	f := &FishingFSM{state: StateHalt, logger: logger, cfg: cfg, cooldownDuration: cooldown, events: make(chan interface{}, 64), actions: actions, detectorCtor: detectorCtor}
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	f := &FishingFSM{
+		state: StateHalt, logger: logger, source: cfg, cfg: *cfg, actions: actions,
+		events: make(chan any, 64), done: ctx.Done(), cancel: cancel,
+	}
 	f.cur.Store(int32(StateHalt))
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				stack := string(debug.Stack())
-				if logger != nil {
-					logger.Error("fsm panic", "error", r, "stack", stack)
-				}
-			}
-		}()
-		f.loop()
-	}()
+	go f.loop()
 	return f
 }
 
 func (f *FishingFSM) loop() {
-	for ev := range f.events {
-		switch e := ev.(type) {
-		case FishingStateListener: // unlikely direct send, ignore
-		case evtAddListener:
-			f.listeners = append(f.listeners, e.l)
-		case evtTargetAcquired:
-			if f.state == StateSearching {
-				f.transition(StateMonitoring)
-			}
-		case evtTargetAcquiredAt:
-			f.coordMu.Lock()
-			f.coordX, f.coordY, f.coordSet = e.x, e.y, true
-			f.coordMu.Unlock()
-			if f.state == StateSearching {
-				f.transition(StateMonitoring)
-			}
-		case evtTargetLost:
-			if f.state == StateMonitoring {
-				f.transition(StateCasting)
-			}
-		case evtHalt:
-			f.cooldownUntil = time.Time{}
-			f.coordMu.Lock()
-			f.coordSet = false
-			f.coordMu.Unlock()
-			if f.biteDetector != nil {
-				f.biteDetector.Reset()
-			}
+	defer func() {
+		if r := recover(); r != nil {
+			f.logger.Error("fsm panic; halting", "error", r, "stack", string(debug.Stack()))
+			f.cancel()
 			f.transition(StateHalt)
-		case evtFishBite:
-			if f.state == StateMonitoring {
-				f.transition(StateReeling)
-			}
-		case evtMonitoringFrame:
-			if f.state == StateMonitoring && f.biteDetector != nil && e.roi != nil {
-				if f.biteDetector.FeedFrame(e.roi, e.now) {
-					f.transition(StateReeling)
-				} else if f.biteDetector.TargetLostHeuristic() {
-					f.transition(StateCasting)
-				}
-			}
-		case evtFocusAcquired:
-			if f.state == StateWaitingFocus {
-				f.transition(StateSearching)
-			}
-		case evtAwaitFocus:
-			if f.state == StateHalt {
-				f.transition(StateWaitingFocus)
-			}
-		case evtForceCast:
-			if f.state != StateCasting {
-				f.transition(StateCasting)
-			}
-		case evtCancel:
-			f.cooldownUntil = time.Time{}
+		}
+	}()
+	for {
+		select {
+		case <-f.done:
+			f.disarm()
+			return
+		case ev := <-f.events:
+			f.handle(ev)
 		}
 	}
-	f.closed = true
+}
+
+func (f *FishingFSM) handle(ev any) {
+	switch e := ev.(type) {
+	case evtAddListener:
+		f.listeners = append(f.listeners, e.l)
+	case evtTargetAcquiredAt:
+		if f.state == StateSearching {
+			f.setCoords(e.x, e.y, true)
+			f.transition(StateMonitoring)
+		}
+	case evtTargetLost:
+		if f.state == StateMonitoring {
+			f.castFailed()
+		}
+	case evtHalt:
+		f.halt()
+	case evtFishBite:
+		if f.state == StateMonitoring {
+			f.transition(StateReeling)
+		}
+	case evtFocusAcquired:
+		if f.state == StateWaitingFocus {
+			f.transition(StateSearching)
+		}
+	case evtFocusLost:
+		if f.state != StateHalt {
+			f.transition(StateWaitingFocus)
+		}
+	case evtAwaitFocus:
+		if f.state == StateHalt {
+			f.cfg = e.cfg
+			f.failedCasts = 0
+			f.sessionEnd = time.Now().Add(time.Duration(f.cfg.MaxSessionMinutes) * time.Minute)
+			f.transition(StateWaitingFocus)
+		}
+	case evtForceCast:
+		if f.state == StateSearching || f.state == StateMonitoring || f.state == StateCooldown {
+			f.recast()
+		}
+	case evtDeadline:
+		if e.gen == f.gen {
+			f.deadlineReached()
+		}
+	}
 }
 
 // internal event types sent to the FSM loop
 type (
-	evtTargetAcquired   struct{}
 	evtTargetAcquiredAt struct{ x, y int }
 	evtTargetLost       struct{}
 	evtHalt             struct{}
 	evtFishBite         struct{}
 	evtFocusAcquired    struct{}
-	evtAwaitFocus       struct{}
+	evtFocusLost        struct{}
+	evtAwaitFocus       struct{ cfg config.Config }
 	evtForceCast        struct{}
 	evtAddListener      struct{ l FishingStateListener }
-	evtCancel           struct{}
-	evtMonitoringFrame  struct {
-		roi *image.RGBA
-		now time.Time
-	}
+	evtDeadline         struct{ gen uint64 }
 )
+
+// arm replaces the pending deadline with one d from now.
+func (f *FishingFSM) arm(d time.Duration) {
+	f.disarm()
+	gen := f.gen
+	f.timer = time.AfterFunc(d, func() { f.send(evtDeadline{gen}) })
+}
+
+// disarm drops the pending deadline. A timer that already fired has an old
+// generation, so its event is ignored.
+func (f *FishingFSM) disarm() {
+	f.gen++
+	if f.timer != nil {
+		f.timer.Stop()
+	}
+}
+
+func (f *FishingFSM) deadlineReached() {
+	switch f.state {
+	case StateSearching, StateMonitoring:
+		f.castFailed()
+	case StateReeling:
+		f.finishReel()
+	case StateCooldown:
+		f.recast()
+	}
+}
+
+// castFailed ends a cast that produced no reel, halting once too many fail in a row.
+func (f *FishingFSM) castFailed() {
+	f.failedCasts++
+	if f.failedCasts >= f.cfg.MaxFailedCasts {
+		f.logger.Warn("halting: too many failed casts", "limit", f.cfg.MaxFailedCasts)
+		f.halt()
+		return
+	}
+	f.recast()
+}
+
+func (f *FishingFSM) recast() {
+	if time.Now().After(f.sessionEnd) {
+		f.logger.Warn("halting: session limit reached", "minutes", f.cfg.MaxSessionMinutes)
+		f.halt()
+		return
+	}
+	f.transition(StateCasting)
+}
+
+func (f *FishingFSM) halt() {
+	f.setCoords(0, 0, false)
+	f.transition(StateHalt)
+}
+
+func (f *FishingFSM) setCoords(x, y int, set bool) {
+	f.coordMu.Lock()
+	defer f.coordMu.Unlock()
+	f.coordX, f.coordY, f.coordSet = x, y, set
+}
 
 func (f *FishingFSM) transition(next FishingState) {
 	prev := f.state
 	if prev == next {
 		return
 	}
-	// stop search timer when leaving StateSearching
-	if prev == StateSearching && next != StateSearching && f.searchTimer != nil {
-		f.searchTimer.Stop()
-		f.searchTimer = nil
-	}
-	// stop cooldown timer when leaving StateCooldown
-	if prev == StateCooldown && next != StateCooldown && f.cooldownTimer != nil {
-		f.cooldownTimer.Stop()
-		f.cooldownTimer = nil
-	}
-	switch next {
-	case StateCasting:
-		if f.cfg != nil && f.actions.PressKey != nil && f.actions.ParseVK != nil {
-			vk := f.actions.ParseVK(f.cfg.ReelKey)
-			go func() { defer recoverLog(f.logger, "cast goroutine panic"); f.actions.PressKey(vk) }()
-			if f.logger != nil {
-				f.logger.Info("cast action executed", "key", f.cfg.ReelKey)
-			}
-		}
-	case StateReeling:
-		if f.coordSet {
-			cx, cy := f.coordX, f.coordY
-			go func(x, y int) {
-				defer recoverLog(f.logger, "reel goroutine panic")
-				if f.actions.MoveCursor != nil {
-					f.actions.MoveCursor(x, y)
-				}
-				time.Sleep(300 * time.Millisecond)
-				if f.actions.ClickRight != nil {
-					f.actions.ClickRight()
-				}
-				if f.logger != nil {
-					f.logger.Info("reel action executed", "x", x, "y", y)
-				}
-			}(cx, cy)
-		} else if f.logger != nil {
-			f.logger.Info("reel action skipped - no target coords")
-		}
-		f.cooldownUntil = time.Now().Add(f.cooldownDuration + 500*time.Millisecond)
-		next = StateCooldown
-		// schedule cooldown timer (transition will not hit StateCooldown case after modifying next)
-		if f.cooldownTimer != nil {
-			f.cooldownTimer.Stop()
-		}
-		until := f.cooldownUntil
-		f.cooldownTimer = time.AfterFunc(time.Until(until), func() {
-			if f.state == StateCooldown && !f.closed {
-				select {
-				case f.events <- evtForceCast{}:
-				default:
-					if f.logger != nil {
-						f.logger.Debug("force cast event (cooldown) dropped (channel full)")
-					}
-				}
-			}
-		})
-	case StateCooldown:
-		if f.cooldownUntil.IsZero() {
-			f.cooldownUntil = time.Now().Add(f.cooldownDuration)
-		}
-		// start / restart cooldown timer
-		if f.cooldownTimer != nil {
-			f.cooldownTimer.Stop()
-		}
-		until := f.cooldownUntil
-		f.cooldownTimer = time.AfterFunc(time.Until(until), func() {
-			if f.state == StateCooldown && !f.closed {
-				select {
-				case f.events <- evtForceCast{}:
-				default:
-					if f.logger != nil {
-						f.logger.Debug("force cast event (cooldown) dropped (channel full)")
-					}
-				}
-			}
-		})
-	case StateMonitoring:
-		if f.coordSet && f.actions.MoveCursor != nil {
-			cx, cy := f.coordX, f.coordY
-			go func(x, y int) {
-				if f.actions.MoveCursor != nil {
-					f.actions.MoveCursor(x, y)
-				}
-				if f.logger != nil {
-					f.logger.Info("found blobber", "x", x, "y", y)
-				}
-			}(cx, cy)
-		}
-		if f.detectorCtor != nil {
-			f.biteDetector = f.detectorCtor(nil, f.logger)
-		} else {
-			f.biteDetector = NewBiteDetector(nil, f.logger)
-		}
-		if f.biteDetector != nil {
-			f.biteDetector.Reset()
-		}
-	case StateHalt: // no-op
-	}
+	f.disarm()
 	f.state = next
 	f.cur.Store(int32(next))
-	if f.state == StateSearching {
-		// start / restart search timer (force cast after 5s)
-		if f.searchTimer != nil {
-			f.searchTimer.Stop()
-		}
-		f.searchTimer = time.AfterFunc(5*time.Second, func() {
-			// only emit if still searching and not closed
-			if f.state == StateSearching && !f.closed {
-				select {
-				case f.events <- evtForceCast{}:
-				default:
-					if f.logger != nil {
-						f.logger.Debug("force cast event dropped (channel full)")
-					}
-				}
-			}
-		})
-	}
-	if f.logger != nil {
-		f.logger.Info("fishing state transition", "from", prev.String(), "to", next.String())
-	}
+	f.logger.Info("fishing state transition", "from", prev.String(), "to", next.String())
 	for _, l := range f.listeners {
 		l(prev, next)
 	}
-	// if casting, immediately transition to searching to resume scan cycle
-	if f.state == StateCasting {
-		f.transition(StateSearching)
+	switch next {
+	case StateSearching:
+		f.arm(searchTimeout)
+	case StateCasting:
+		if f.pressCast() {
+			f.transition(StateSearching)
+		} else {
+			f.halt()
+		}
+	case StateMonitoring:
+		f.startMonitoring()
+	case StateReeling:
+		f.startReel()
+	case StateCooldown:
+		f.arm(time.Duration(f.cfg.CooldownSeconds) * time.Second)
 	}
 }
 
-// Tick is retained for backward compatibility; timers drive transitions.
+// pressCast reports false when the configured key is unusable, so the wrong
+// key is never pressed.
+func (f *FishingFSM) pressCast() bool {
+	vk, ok := f.actions.ParseVK(f.cfg.CastKey)
+	if !ok {
+		f.logger.Error("halting: unknown cast key", "key", f.cfg.CastKey)
+		return false
+	}
+	var dispatched func()
+	if f.actions.ObserveCast != nil {
+		dispatched = f.actions.ObserveCast()
+	}
+	f.actions.PressKey(vk)
+	if dispatched != nil {
+		dispatched()
+	}
+	f.logger.Info("cast action executed", "key", f.cfg.CastKey)
+	return true
+}
+
+func (f *FishingFSM) startMonitoring() {
+	if f.coordSet {
+		f.actions.MoveCursor(f.coordX, f.coordY)
+		f.logger.Info("found blobber", "x", f.coordX, "y", f.coordY)
+	}
+	f.arm(time.Duration(f.cfg.MaxCastDurationSeconds) * time.Second)
+}
+
+func (f *FishingFSM) startReel() {
+	f.reelDone = nil
+	if !f.coordSet {
+		f.logger.Info("reel action skipped - no target coords")
+		f.transition(StateCooldown)
+		return
+	}
+	if f.actions.ObserveReel != nil {
+		f.reelDone = f.actions.ObserveReel()
+	}
+	f.actions.MoveCursor(f.coordX, f.coordY)
+	f.arm(reelClickDelay)
+}
+
+func (f *FishingFSM) finishReel() {
+	f.actions.ClickRight()
+	if f.reelDone != nil {
+		f.reelDone()
+	}
+	f.failedCasts = 0
+	f.logger.Info("reel action executed", "x", f.coordX, "y", f.coordY)
+	f.transition(StateCooldown)
+}
+
+// send queues an event, or drops it once the FSM has shut down.
+func (f *FishingFSM) send(ev any) {
+	select {
+	case f.events <- ev:
+	case <-f.done:
+	}
+}
 
 // Public API methods
-func (f *FishingFSM) AddListener(l FishingStateListener) { f.events <- evtAddListener{l: l} }
+func (f *FishingFSM) AddListener(l FishingStateListener) { f.send(evtAddListener{l: l}) }
 func (f *FishingFSM) Current() FishingState              { return FishingState(f.cur.Load()) }
-func (f *FishingFSM) EventTargetAcquired()               { f.events <- evtTargetAcquired{} }
-func (f *FishingFSM) EventTargetAcquiredAt(x, y int)     { f.events <- evtTargetAcquiredAt{x: x, y: y} }
-func (f *FishingFSM) EventTargetLost()                   { f.events <- evtTargetLost{} }
-func (f *FishingFSM) EventHalt()                         { f.events <- evtHalt{} }
-func (f *FishingFSM) EventFishBite()                     { f.events <- evtFishBite{} }
-func (f *FishingFSM) EventFocusAcquired()                { f.events <- evtFocusAcquired{} }
-func (f *FishingFSM) EventAwaitFocus()                   { f.events <- evtAwaitFocus{} }
-func (f *FishingFSM) ForceCast()                         { f.events <- evtForceCast{} }
-func (f *FishingFSM) Cancel()                            { f.events <- evtCancel{} }
+func (f *FishingFSM) EventTargetAcquiredAt(x, y int)     { f.send(evtTargetAcquiredAt{x: x, y: y}) }
+func (f *FishingFSM) EventTargetLost()                   { f.send(evtTargetLost{}) }
+func (f *FishingFSM) EventHalt()                         { f.send(evtHalt{}) }
+func (f *FishingFSM) EventFishBite()                     { f.send(evtFishBite{}) }
+func (f *FishingFSM) EventFocusAcquired()                { f.send(evtFocusAcquired{}) }
+func (f *FishingFSM) EventFocusLost()                    { f.send(evtFocusLost{}) }
+func (f *FishingFSM) ForceCast()                         { f.send(evtForceCast{}) }
 
-// Tick is deprecated and is a no-op (retained for backward compatibility).
-func (f *FishingFSM) Tick(now time.Time) {}
-func (f *FishingFSM) ProcessMonitoringFrame(roi *image.RGBA, now time.Time) {
-	if roi != nil {
-		f.events <- evtMonitoringFrame{roi: roi, now: now}
-	}
-}
+// EventAwaitFocus starts a run with a copy of the current config. Call it from
+// the goroutine that owns the config.
+func (f *FishingFSM) EventAwaitFocus() { f.send(evtAwaitFocus{cfg: *f.source}) }
+
+// TargetCoordinates returns the locked target, if any.
 func (f *FishingFSM) TargetCoordinates() (int, int, bool) {
 	f.coordMu.Lock()
 	defer f.coordMu.Unlock()
@@ -300,29 +309,6 @@ func (f *FishingFSM) TargetCoordinates() (int, int, bool) {
 	}
 	return f.coordX, f.coordY, true
 }
-func (f *FishingFSM) Close() {
-	if f.closed {
-		return
-	}
-	if f.searchTimer != nil {
-		f.searchTimer.Stop()
-		f.searchTimer = nil
-	}
-	if f.cooldownTimer != nil {
-		f.cooldownTimer.Stop()
-		f.cooldownTimer = nil
-	}
-	close(f.events)
-}
 
-// recoverLog recovers from a panic and logs the error if a logger is available.
-func recoverLog(logger *slog.Logger, msg string) {
-	if r := recover(); r != nil {
-		if logger != nil {
-			logger.Error(msg, "error", r)
-		}
-	}
-}
-
-// Ensure contract satisfaction
-var _ FishingFSMContract = (*FishingFSM)(nil)
+// Close stops the FSM. Later events are dropped, and calling it again is safe.
+func (f *FishingFSM) Close() { f.cancel() }

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fishing Recorder</title>
+  <link rel="stylesheet" href="/dashboard.css">
+  <script defer src="/dashboard.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">MANUAL PLAYTEST</p>
+        <h1>Fishing Recorder</h1>
+        <p class="intro" id="intro">Review cursor paths, camera drags, clicks, and keyboard shortcuts from one session.</p>
+      </div>
+      <p id="status" role="status" class="status">Connecting</p>
+    </header>
+    <dl class="metrics" data-manual>
+      <div><dt>Movement samples</dt><dd id="moves">0</dd></div>
+      <div><dt>Button presses</dt><dd id="presses">0</dd></div>
+      <div><dt>Capture segments</dt><dd id="segments">0</dd></div>
+      <div><dt>Recorded duration</dt><dd id="duration">0:00</dd></div>
+      <div><dt>Completed clicks</dt><dd id="clicks">0</dd></div>
+      <div><dt>Completed drags</dt><dd id="drags">0</dd></div>
+      <div><dt>Right-button drags</dt><dd id="right-drags">0</dd></div>
+      <div><dt>Key presses</dt><dd id="keys">0</dd></div>
+    </dl>
+
+    <dl class="metrics" id="semantic-metrics" hidden>
+      <div><dt>Casts dispatched</dt><dd id="casts">0</dd></div>
+      <div><dt>Bites available</dt><dd id="available-bites">0</dd></div>
+      <div><dt>Bites detected</dt><dd id="detected-bites">0</dd></div>
+      <div><dt>Reel attempts or dispatches</dt><dd id="reels">0</dd></div>
+    </dl>
+
+    <section class="panel" id="frame-panel" hidden>
+      <div class="section-head">
+        <div>
+          <h2>Latest frame</h2>
+          <p>What the capture saw most recently.</p>
+        </div>
+      </div>
+      <img id="frame" alt="Latest captured frame">
+    </section>
+
+    <section class="panel" data-manual>
+      <div class="section-head">
+        <div>
+          <h2>Cursor map</h2>
+          <p id="dimensions">Waiting for window dimensions</p>
+        </div>
+        <div class="layers" aria-label="Map layers">
+          <label><input id="heat-layer" type="checkbox" checked> Movement heatmap</label>
+          <label><input id="click-layer" type="checkbox" checked> Click locations</label>
+          <label><input id="path-layer" type="checkbox"> Recent path</label>
+        </div>
+      </div>
+      <canvas id="map" aria-label="Heatmap, click locations, and recent cursor path">Cursor map</canvas>
+      <div class="legend">
+        <span class="heat-key">Movement density</span>
+        <span class="left-key">Left</span>
+        <span class="right-key">Right</span>
+        <span class="middle-key">Middle</span>
+        <span class="side-key">Side buttons</span>
+      </div>
+      <p class="hint">Positions are normalized to the captured client area. Brighter heat shows more movement samples. Larger markers show more completed clicks in that area.</p>
+    </section>
+
+    <section class="panel" data-manual>
+      <div class="section-head">
+        <div>
+          <h2>Right-button camera motion</h2>
+          <p>Latest right-button hold in raw mouse counts. This view also works when the cursor stays fixed.</p>
+        </div>
+      </div>
+      <canvas id="camera" aria-label="Relative movement during the latest right-button hold">Camera motion</canvas>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <div>
+          <h2>Recent input</h2>
+          <p id="input-description">Completed gestures, shortcuts, and wheel input.</p>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th scope="col">Time</th><th scope="col">Input</th><th scope="col">Details</th></tr></thead>
+          <tbody id="input-log"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" data-manual>
+      <div class="section-head">
+        <div>
+          <h2>Recent activity</h2>
+          <p>Last 60 seconds of the trace. Teal bars show movement samples and coral dots show button presses.</p>
+        </div>
+      </div>
+      <canvas id="timeline" aria-label="Movement and click counts per second">Activity timeline</canvas>
+    </section>
+  </main>
+</body>
+</html>

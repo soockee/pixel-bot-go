@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	"github.com/soocke/pixel-bot-go/assets"
-	"github.com/soocke/pixel-bot-go/domain/capture"
+	"github.com/soocke/pixel-bot-go/config"
+	"github.com/soocke/pixel-bot-go/domain/detect"
 )
 
 // desktopFrame embeds the scene in a 560x420 frame with a smooth orange
@@ -30,17 +31,19 @@ func TestDetectorFindsBobberAtEveryAlignment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	locator := detect.NewNCCLocator(tmpl, *config.DefaultConfig())
 	misses := 0
 	for dy := 0; dy < 6; dy++ {
 		for dx := 0; dx < 6; dx++ {
 			sc := DefaultScenario()
 			sc.BobberX, sc.BobberY = 200+dx, 120+dy
 			frame := desktopFrame(NewRenderer(sc, tmpl).Render(PhaseBobber), 13, 31)
-			x, y, found, err := capture.DetectTemplate(frame, tmpl, nil)
-			wantX, wantY := 13+sc.BobberX, 31+sc.BobberY
-			if err != nil || !found || x < wantX-3 || x > wantX+3 || y < wantY-3 || y > wantY+3 {
+			m, found := locator.Locate(frame)
+			b := tmpl.Bounds()
+			wantX, wantY := 13+sc.BobberX+b.Dx()/2, 31+sc.BobberY+b.Dy()/2
+			if !found || m.X < wantX-3 || m.X > wantX+3 || m.Y < wantY-3 || m.Y > wantY+3 {
 				misses++
-				t.Errorf("bobber at (%d,%d): found=%v at (%d,%d)", wantX, wantY, found, x, y)
+				t.Errorf("bobber at (%d,%d): found=%v at (%d,%d)", wantX, wantY, found, m.X, m.Y)
 			}
 		}
 	}

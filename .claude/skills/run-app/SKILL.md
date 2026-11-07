@@ -1,11 +1,11 @@
 ---
 name: run-app
-description: Build and launch Pixel Bot together with the fake game window, drive a fishing cycle without sending input, and read the logs and /debug/state to judge behavior. Use when asked to run the app, verify a change end to end, or inspect runtime behavior.
+description: Build and launch Visual Response Lab with the local simulator, run a response cycle in dry-run mode, and inspect the logs and /debug/state. Use when asked to run the app, verify a change end to end, or inspect runtime behavior.
 ---
 
-# Run Pixel Bot against the fake game
+# Run Visual Response Lab with the simulator
 
-Pixel Bot is a Windows Tk app. Never run it against the real game from here. Use `cmd/fakegame` and `-dry-run` so no input is injected and Administrator is not needed.
+Visual Response Lab is a Windows Tk app. For these tests, use `cmd/fakegame` with the app in `-dry-run` mode to record intended actions without injecting input or requiring Administrator privileges.
 
 ## 1. Cheap checks first
 
@@ -17,7 +17,7 @@ If these fail, stop; the end-to-end run adds nothing.
 
 ## 2. Build and configure (everything on screen 2)
 
-The user plays the real game on the main screen. Every window of a test run must open on screen 2 (`-screen 2`), never on screen 1. List the monitors first:
+Open every test window on screen 2 (`-screen 2`) to keep the primary desktop separate. List the monitors first:
 
 ```bash
 ./pixel-bot-go.exe -list-screens      # e.g. [{"screen":2,"x":-1920,"y":148,"w":1920,"h":1080,...}]
@@ -32,7 +32,7 @@ cd "$RUN"
 # OX, OY = x and y of screen 2 from -list-screens
 cat > pixle_bot_config.json <<EOF2
 {"debug": true, "screen": 2, "selection_x": $((OX+1330)), "selection_y": $((OY+30)), "selection_w": 560, "selection_h": 420,
- "cooldown_seconds": 3, "threshold": 0.80, "stop_on_score": 0.80}
+ "cooldown_seconds": 3, "threshold": 0.80}
 EOF2
 ```
 
@@ -40,7 +40,7 @@ EOF2
 
 ## 3. Launch headless (no clicking, no Administrator)
 
-Start the bot first, then the fake game so it becomes the foreground window the focus watcher waits for (it briefly takes focus from the game on screen 1; tell the user before running). Run from `$RUN`.
+Start the bot first, then the fake game so it becomes the foreground window the focus watcher needs for the whole run (it briefly takes focus from the active window on screen 1; tell the user before running). Run from `$RUN`.
 
 ```bash
 (./pixel-bot-go.exe -dry-run -screen 2 -auto-window "Fake Game" -auto-start > bot.out 2>&1 &)
@@ -73,4 +73,4 @@ To merge logs with the fake game's UTC timestamps, note that `pixel_bot_logs.jso
 
 ## Limits
 
-The bot's real input path (`domain/action`) is not exercised in dry-run, and the fake game cannot validate behavior against the real client's rendering.
+Dry-run exercises the action recorder. Results from the simulator apply to its scripted scenes and rendering.

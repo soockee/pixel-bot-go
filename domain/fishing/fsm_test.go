@@ -1,161 +1,170 @@
 package fishing
 
 import (
-	"log/slog"
+	"slices"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
+
+	"github.com/soocke/pixel-bot-go/config"
 )
 
-// Functional transition tests.
-
-var discardLogger = slog.New(slog.NewTextHandler(&discardWriter{}, nil))
-
-type discardWriter struct{}
-
-func (d *discardWriter) Write(p []byte) (int, error) { return len(p), nil }
-
-// newTestFSM returns an FSM with no-op action callbacks for testing.
-func newTestFSM() *FishingFSM {
-	return NewFSM(discardLogger, nil, ActionCallbacks{
-		PressKey:   func(byte) {},
-		MoveCursor: func(int, int) {},
-		ClickRight: func() {},
-		ParseVK:    func(string) byte { return 0 },
-	}, nil)
+// actionLog records the side effects the FSM requests, in order.
+type actionLog struct {
+	mu     sync.Mutex
+	events []string
 }
 
-func TestFishingFSM_ReelingAdvancesToCooldown(t *testing.T) {
-	m := newTestFSM()
+func (a *actionLog) add(s string) { a.mu.Lock(); a.events = append(a.events, s); a.mu.Unlock() }
+func (a *actionLog) snapshot() []string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return slices.Clone(a.events)
+}
+
+// testConfig is the default config with a short cooldown.
+func testConfig() *config.Config {
+	cfg := config.DefaultConfig()
+	cfg.CooldownSeconds = 1
+	return cfg
+}
+
+func recordingActions(log *actionLog) ActionCallbacks {
+	return ActionCallbacks{
+		PressKey:   func(byte) { log.add("press") },
+		MoveCursor: func(x, y int) { log.add("move") },
+		ClickRight: func() { log.add("click") },
+		ParseVK:    func(string) (byte, bool) { return 0, true },
+	}
+}
+
+func newRecordingFSM(log *actionLog) *FishingFSM {
+	return NewFSM(nil, testConfig(), recordingActions(log))
+}
+
+// fsmTest runs body on a fake clock, so timers fire instantly and in order.
+func fsmTest(t *testing.T, body func(t *testing.T, m *FishingFSM, log *actionLog)) {
+	t.Helper()
+	synctest.Test(t, func(t *testing.T) {
+		log := &actionLog{}
+		m := newRecordingFSM(log)
+		defer m.Close()
+		body(t, m, log)
+	})
+}
+
+func wantState(t *testing.T, m *FishingFSM, want FishingState) {
+	t.Helper()
+	synctest.Wait()
+	if got := m.Current(); got != want {
+		t.Fatalf("state = %v, want %v", got, want)
+	}
+}
+
+func wantActions(t *testing.T, log *actionLog, want ...string) {
+	t.Helper()
+	synctest.Wait()
+	if got := log.snapshot(); !slices.Equal(got, want) {
+		t.Fatalf("actions = %v, want %v", got, want)
+	}
+}
+
+// startMonitoring drives an FSM from halt to monitoring with a target at (10,10).
+func startMonitoring(t *testing.T, m *FishingFSM) {
+	t.Helper()
 	m.EventAwaitFocus()
-	time.Sleep(10 * time.Millisecond)
 	m.EventFocusAcquired()
-	time.Sleep(10 * time.Millisecond)
 	m.EventTargetAcquiredAt(10, 10)
-	time.Sleep(10 * time.Millisecond)
-	if m.Current() != StateMonitoring {
-		t.Fatalf("expected monitoring state, got %v", m.Current())
-	}
-	m.EventFishBite()
-	time.Sleep(50 * time.Millisecond)
-	time.Sleep(200 * time.Millisecond)
-	if st := m.Current(); st != StateCooldown {
-		t.Fatalf("expected cooldown state after reeling, got %v", st)
-	}
+	wantState(t, m, StateMonitoring)
 }
 
-// waitForState waits up to timeout for the FSM to reach expected state.
-func waitForState(t *testing.T, m *FishingFSM, expected FishingState, timeout time.Duration) {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if m.Current() == expected {
-			return
+func TestFocusFlow(t *testing.T) {
+	fsmTest(t, func(t *testing.T, m *FishingFSM, _ *actionLog) {
+		m.EventAwaitFocus()
+		wantState(t, m, StateWaitingFocus)
+		m.EventFocusAcquired()
+		wantState(t, m, StateSearching)
+	})
+}
+
+func TestTargetLostRecasts(t *testing.T) {
+	fsmTest(t, func(t *testing.T, m *FishingFSM, log *actionLog) {
+		startMonitoring(t, m)
+		m.EventTargetLost()
+		wantState(t, m, StateSearching)
+		wantActions(t, log, "move", "press")
+	})
+}
+
+func TestForceCastFromMonitoring(t *testing.T) {
+	fsmTest(t, func(t *testing.T, m *FishingFSM, log *actionLog) {
+		startMonitoring(t, m)
+		m.ForceCast()
+		wantState(t, m, StateSearching)
+		wantActions(t, log, "move", "press")
+	})
+}
+
+func TestCooldownEndsWithACast(t *testing.T) {
+	fsmTest(t, func(t *testing.T, m *FishingFSM, log *actionLog) {
+		startMonitoring(t, m)
+		m.EventFishBite()
+		time.Sleep(reelClickDelay)
+		wantState(t, m, StateCooldown)
+		time.Sleep(time.Second)
+		wantState(t, m, StateSearching)
+		wantActions(t, log, "move", "move", "click", "press")
+	})
+}
+
+func TestSearchTimeoutCasts(t *testing.T) {
+	fsmTest(t, func(t *testing.T, m *FishingFSM, log *actionLog) {
+		m.EventAwaitFocus()
+		m.EventFocusAcquired()
+		wantActions(t, log)
+		time.Sleep(searchTimeout)
+		wantActions(t, log, "press")
+		wantState(t, m, StateSearching)
+	})
+}
+
+func TestMonitoringTimeoutCasts(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		cfg := testConfig()
+		cfg.MaxCastDurationSeconds = 30
+		log := &actionLog{}
+		m := NewFSM(nil, cfg, recordingActions(log))
+		defer m.Close()
+		startMonitoring(t, m)
+
+		time.Sleep(29 * time.Second)
+		wantState(t, m, StateMonitoring)
+		time.Sleep(time.Second)
+		wantState(t, m, StateSearching)
+		wantActions(t, log, "move", "press")
+	})
+}
+
+func TestBiteOutsideMonitoringIsIgnored(t *testing.T) {
+	fsmTest(t, func(t *testing.T, m *FishingFSM, _ *actionLog) {
+		m.EventAwaitFocus()
+		m.EventFishBite()
+		wantState(t, m, StateWaitingFocus)
+	})
+}
+
+// Listeners see every state, including the short casting state.
+func TestListenersSeeEveryTransition(t *testing.T) {
+	fsmTest(t, func(t *testing.T, m *FishingFSM, _ *actionLog) {
+		var seen []FishingState
+		m.AddListener(func(_, next FishingState) { seen = append(seen, next) })
+		startMonitoring(t, m)
+		m.EventTargetLost()
+		synctest.Wait()
+		want := []FishingState{StateWaitingFocus, StateSearching, StateMonitoring, StateCasting, StateSearching}
+		if !slices.Equal(seen, want) {
+			t.Errorf("seen = %v, want %v", seen, want)
 		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("timeout waiting for state %v (got %v)", expected, m.Current())
-}
-
-type transitionRecorder struct {
-	mu  sync.Mutex
-	seq []FishingState
-}
-
-// listener records transitions.
-func (r *transitionRecorder) listener(prev, next FishingState) {
-	r.mu.Lock()
-	r.seq = append(r.seq, next)
-	r.mu.Unlock()
-}
-
-func TestFishingFSM_FocusFlow(t *testing.T) {
-	m := newTestFSM()
-	r := &transitionRecorder{}
-	m.AddListener(r.listener)
-	m.EventAwaitFocus()
-	waitForState(t, m, StateWaitingFocus, 200*time.Millisecond)
-	m.EventFocusAcquired()
-	waitForState(t, m, StateSearching, 200*time.Millisecond)
-}
-
-func TestFishingFSM_TargetAcquisitionFlow(t *testing.T) {
-	m := newTestFSM()
-	m.EventAwaitFocus()
-	waitForState(t, m, StateWaitingFocus, 200*time.Millisecond)
-	m.EventFocusAcquired()
-	waitForState(t, m, StateSearching, 200*time.Millisecond)
-	m.EventTargetAcquiredAt(1, 2)
-	waitForState(t, m, StateMonitoring, 200*time.Millisecond)
-}
-
-func TestFishingFSM_TargetLostFlow(t *testing.T) {
-	m := newTestFSM()
-	m.EventAwaitFocus()
-	waitForState(t, m, StateWaitingFocus, 200*time.Millisecond)
-	m.EventFocusAcquired()
-	waitForState(t, m, StateSearching, 200*time.Millisecond)
-	m.EventTargetAcquired()
-	waitForState(t, m, StateMonitoring, 200*time.Millisecond)
-	m.EventTargetLost()
-	waitForState(t, m, StateSearching, 300*time.Millisecond)
-}
-
-func TestFishingFSM_ForceCastFromMonitoring(t *testing.T) {
-	m := newTestFSM()
-	m.EventAwaitFocus()
-	waitForState(t, m, StateWaitingFocus, 200*time.Millisecond)
-	m.EventFocusAcquired()
-	waitForState(t, m, StateSearching, 200*time.Millisecond)
-	m.EventTargetAcquiredAt(5, 5)
-	waitForState(t, m, StateMonitoring, 200*time.Millisecond)
-	m.ForceCast()
-	waitForState(t, m, StateSearching, 300*time.Millisecond)
-}
-
-func TestFishingFSM_CooldownExpiration(t *testing.T) {
-	m := newTestFSM()
-	m.EventAwaitFocus()
-	waitForState(t, m, StateWaitingFocus, 200*time.Millisecond)
-	m.EventFocusAcquired()
-	waitForState(t, m, StateSearching, 200*time.Millisecond)
-	m.EventTargetAcquiredAt(3, 4)
-	waitForState(t, m, StateMonitoring, 200*time.Millisecond)
-	m.EventFishBite()
-	waitForState(t, m, StateCooldown, 400*time.Millisecond)
-	// Expect automatic cast after cooldown.
-	waitForState(t, m, StateSearching, 3*time.Second)
-}
-
-func TestFishingFSM_SearchTimeoutTriggersCast(t *testing.T) {
-	m := newTestFSM()
-	r := &transitionRecorder{}
-	m.AddListener(r.listener)
-	m.EventAwaitFocus()
-	waitForState(t, m, StateWaitingFocus, 200*time.Millisecond)
-	m.EventFocusAcquired()
-	waitForState(t, m, StateSearching, 200*time.Millisecond)
-	deadline := time.Now().Add(6 * time.Second)
-	for time.Now().Before(deadline) {
-		r.mu.Lock()
-		for _, s := range r.seq {
-			if s == StateCasting {
-				r.mu.Unlock()
-				return
-			}
-		}
-		r.mu.Unlock()
-		time.Sleep(25 * time.Millisecond)
-	}
-	t.Fatalf("expected casting transition within search timeout; got sequence %v", r.seq)
-}
-
-func TestFishingFSM_InvalidEventNoTransition(t *testing.T) {
-	m := newTestFSM()
-	m.EventAwaitFocus()
-	waitForState(t, m, StateWaitingFocus, 200*time.Millisecond)
-	m.EventFishBite()
-	time.Sleep(50 * time.Millisecond)
-	if m.Current() != StateWaitingFocus {
-		t.Fatalf("unexpected change on invalid bite event: %v", m.Current())
-	}
+	})
 }

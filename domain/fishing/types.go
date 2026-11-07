@@ -1,13 +1,5 @@
 package fishing
 
-import (
-	"image"
-	"log/slog"
-	"time"
-
-	"github.com/soocke/pixel-bot-go/config"
-)
-
 // FishingState enumerates fishing FSM states.
 type FishingState int
 
@@ -47,51 +39,13 @@ type ActionCallbacks struct {
 	PressKey   func(vk byte)
 	MoveCursor func(x, y int)
 	ClickRight func()
-	ParseVK    func(key string) byte
+	ParseVK    func(key string) (byte, bool)
+
+	// ObserveCast and ObserveReel run when a cast or reel is scheduled.
+	// Each can return a callback to observe its eventual dispatch.
+	ObserveCast func() func()
+	ObserveReel func() func()
 }
 
 // FishingStateListener is invoked on state transitions.
 type FishingStateListener func(prev, next FishingState)
-
-// BiteDetectorContract is the interface for bite detectors.
-type BiteDetectorContract interface {
-	FeedFrame(*image.RGBA, time.Time) bool
-	TargetLostHeuristic() bool
-	Reset()
-}
-
-// DetectorFactory creates a BiteDetectorContract.
-type DetectorFactory func(*config.Config, *slog.Logger) BiteDetectorContract
-
-// Small interfaces used by consumers.
-type FishingStateSource interface{ Current() FishingState }
-type FishingMonitorFrame interface{ ProcessMonitoringFrame(*image.RGBA, time.Time) }
-type FishingTargetOps interface {
-	EventTargetAcquired()
-	EventTargetAcquiredAt(int, int)
-	EventTargetLost()
-	TargetCoordinates() (int, int, bool)
-}
-type FishingFocusControl interface {
-	EventAwaitFocus()
-	EventFocusAcquired()
-}
-type FishingLifecycle interface {
-	EventHalt()
-	Close()
-}
-type FishingCasting interface {
-	ForceCast()
-	Cancel()
-}
-
-// FishingFSMContract aggregates the FSM API.
-type FishingFSMContract interface {
-	FishingStateSource
-	FishingMonitorFrame
-	FishingTargetOps
-	FishingFocusControl
-	FishingLifecycle
-	FishingCasting
-	AddListener(FishingStateListener)
-}

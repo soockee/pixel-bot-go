@@ -20,9 +20,6 @@ func NewSessionModel() *SessionModel { return &SessionModel{} }
 // OnTick updates the model using the current capture state and timestamp.
 // Call periodically (for example, from a presenter tick).
 func (m *SessionModel) OnTick(capturing bool, now time.Time) {
-	if m == nil {
-		return
-	}
 	if capturing {
 		if !m.active { // transition off -> on
 			m.active = true
@@ -40,9 +37,6 @@ func (m *SessionModel) OnTick(capturing bool, now time.Time) {
 // Values returns the current session duration and the total accumulated duration.
 // The total includes the ongoing session when active.
 func (m *SessionModel) Values() (session, total time.Duration) {
-	if m == nil {
-		return 0, 0
-	}
 	session = m.lastSessionDuration
 	total = m.accumulated
 	if m.active {

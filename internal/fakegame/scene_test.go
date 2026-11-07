@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/soocke/pixel-bot-go/assets"
-	"github.com/soocke/pixel-bot-go/domain/capture"
-	"github.com/soocke/pixel-bot-go/domain/fishing"
+	"github.com/soocke/pixel-bot-go/config"
+	"github.com/soocke/pixel-bot-go/domain/detect"
 )
 
 func TestPhaseAt(t *testing.T) {
@@ -39,15 +39,16 @@ func TestDetectorFindsRenderedBobber(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := NewRenderer(DefaultScenario(), tmpl)
-	x, y, found, err := capture.DetectTemplate(r.Render(PhaseBobber), tmpl, nil)
-	if err != nil || !found {
-		t.Fatalf("bobber not found: found=%v err=%v", found, err)
+	locator := detect.NewNCCLocator(tmpl, *config.DefaultConfig())
+	m, found := locator.Locate(r.Render(PhaseBobber))
+	if !found {
+		t.Fatalf("bobber not found: %+v", m)
 	}
 	br := r.BobberRect()
-	if x < br.Min.X-20 || x > br.Max.X+20 || y < br.Min.Y-20 || y > br.Max.Y+20 {
-		t.Fatalf("match at (%d,%d) far from bobber %v", x, y, br)
+	if m.X < br.Min.X-20 || m.X > br.Max.X+20 || m.Y < br.Min.Y-20 || m.Y > br.Max.Y+20 {
+		t.Fatalf("match at (%d,%d) far from bobber %v", m.X, m.Y, br)
 	}
-	if _, _, found, _ := capture.DetectTemplate(r.Render(PhaseEmpty), tmpl, nil); found {
+	if _, found := locator.Locate(r.Render(PhaseEmpty)); found {
 		t.Fatalf("empty frame produced a false match")
 	}
 }
@@ -58,18 +59,18 @@ func TestBiteDetectorSeesSplashNotStatic(t *testing.T) {
 	r := NewRenderer(DefaultScenario(), tmpl)
 	br := r.BobberRect()
 	cx, cy := (br.Min.X+br.Max.X)/2, (br.Min.Y+br.Max.Y)/2
-	bd := fishing.NewBiteDetector(nil, nil)
+	bd := detect.NewMotionBiteDetector(nil)
 	bd.Reset()
 	start := time.Now()
 	crop := func(p Phase) *image.RGBA { return cropROI(r.Render(p), cx, cy, 80) }
 	for i := 0; i < 8; i++ {
-		if bd.FeedFrame(crop(PhaseBobber), start.Add(time.Duration(i)*50*time.Millisecond)) {
+		if bd.Feed(crop(PhaseBobber), start.Add(time.Duration(i)*50*time.Millisecond)) {
 			t.Fatalf("static frame %d triggered a bite", i)
 		}
 	}
 	hit := false
 	for i := 8; i < 11 && !hit; i++ {
-		hit = bd.FeedFrame(crop(PhaseSplash), start.Add(time.Duration(i)*50*time.Millisecond))
+		hit = bd.Feed(crop(PhaseSplash), start.Add(time.Duration(i)*50*time.Millisecond))
 	}
 	if !hit {
 		t.Fatalf("splash did not trigger the bite detector")

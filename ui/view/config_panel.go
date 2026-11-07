@@ -7,39 +7,33 @@ import (
 	"strings"
 
 	"github.com/soocke/pixel-bot-go/config"
+	"github.com/soocke/pixel-bot-go/domain/action"
 	"github.com/soocke/pixel-bot-go/ui/theme"
 
 	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders.
 	. "modernc.org/tk9.0"
 )
 
-// ConfigPanel encapsulates the configuration form widgets and apply logic.
-type ConfigPanel interface {
-	Build(startRow int, parent ...Widget) (endRow int)
-	SetEditable(enabled bool)
-	ApplyChanges()
-}
-
-type configPanel struct {
+// ConfigPanel is the configuration form and its apply logic.
+type ConfigPanel struct {
 	cfg      *config.Config
 	cfgPath  string
 	logger   *slog.Logger
+	status   func(string)
 	applyBtn *ButtonWidget
 	widgets  map[string]*TextWidget
+	labels   map[string]string
 }
 
-// NewConfigPanel creates a configuration panel bound to the provided config.
-func NewConfigPanel(cfg *config.Config, cfgPath string, logger *slog.Logger) ConfigPanel {
-	return &configPanel{cfg: cfg, cfgPath: cfgPath, logger: logger, widgets: make(map[string]*TextWidget)}
+// NewConfigPanel creates a panel bound to cfg. status shows the result of Apply.
+func NewConfigPanel(cfg *config.Config, cfgPath string, logger *slog.Logger, status func(string)) *ConfigPanel {
+	return &ConfigPanel{cfg: cfg, cfgPath: cfgPath, logger: logger, status: status, widgets: map[string]*TextWidget{}, labels: map[string]string{}}
 }
 
-func (v *configPanel) Build(startRow int, parent ...Widget) (row int) {
+// Build creates the form inside target.
+func (v *ConfigPanel) Build(target Widget) {
 	c := v.cfg
-	row = startRow
-	var target Widget = App
-	if len(parent) > 0 && parent[0] != nil {
-		target = parent[0]
-	}
+	row := 0
 	pal := theme.CurrentPalette()
 	makeRow := func(id, label, value string) {
 		lbl := Label(Txt(label), Anchor("w"), Background(pal.Surface), Foreground(pal.Text))
@@ -52,6 +46,7 @@ func (v *configPanel) Build(startRow int, parent ...Widget) (row int) {
 		w.Delete("1.0", END)
 		w.Insert("1.0", value)
 		v.widgets[id] = w
+		v.labels[id] = label
 		row++
 	}
 	makeRow("minScale", "Min Scale", fmt.Sprintf("%.2f", c.MinScale))
@@ -59,128 +54,103 @@ func (v *configPanel) Build(startRow int, parent ...Widget) (row int) {
 	makeRow("scaleStep", "Scale Step", fmt.Sprintf("%.3f", c.ScaleStep))
 	makeRow("threshold", "Threshold", fmt.Sprintf("%.3f", c.Threshold))
 	makeRow("stride", "Stride", fmt.Sprintf("%d", c.Stride))
-	makeRow("stopOnScore", "Stop On Score", fmt.Sprintf("%.3f", c.StopOnScore))
 	makeRow("refine", "Refine (true/false)", fmt.Sprintf("%t", c.Refine))
-	makeRow("returnBestEven", "Return Best Even (true/false)", fmt.Sprintf("%t", c.ReturnBestEven))
-	makeRow("reelKey", "Reel Key (e.g. F3 or R)", c.ReelKey)
+	makeRow("castKey", "Cast Key (e.g. F3 or R)", c.CastKey)
+	makeRow("stopKey", "Stop Hotkey (after restart)", c.StopKey)
+	makeRow("maxFailedCasts", "Max Failed Casts", fmt.Sprintf("%d", c.MaxFailedCasts))
+	makeRow("maxSessionMinutes", "Max Session Minutes", fmt.Sprintf("%d", c.MaxSessionMinutes))
 	makeRow("roiSizePx", "ROI Size Px", fmt.Sprintf("%d", c.ROISizePx))
 	makeRow("cooldownSeconds", "Cooldown Seconds", fmt.Sprintf("%d", c.CooldownSeconds))
 	makeRow("maxCastDurationSeconds", "Max Cast Duration Seconds", fmt.Sprintf("%d", c.MaxCastDurationSeconds))
-	makeRow("analysisScale", "Analysis Scale (0.2-1.0)", fmt.Sprintf("%.2f", c.AnalysisScale))
-	v.applyBtn = Button(Txt("Apply Changes"), Background(pal.Primary), Foreground("white"), Relief("raised"), Borderwidth(1), Command(func() { v.ApplyChanges() }))
+	v.applyBtn = Button(Txt("Apply Changes"), Background(pal.Primary), Foreground("white"), Relief("raised"), Borderwidth(1), Command(v.apply))
 	Grid(v.applyBtn, In(target), Row(row), Column(0), Columnspan(2), Sticky("we"), Padx("0.4m"), Pady("0.3m"))
-	row++
-	return row
 }
 
-func (v *configPanel) SetEditable(enabled bool) {
+// SetEditable enables or disables the form.
+func (v *ConfigPanel) SetEditable(enabled bool) {
 	state := "disabled"
 	if enabled {
 		state = "normal"
 	}
 	for _, w := range v.widgets {
-		if w != nil {
-			w.Configure(State(state))
-		}
+		w.Configure(State(state))
 	}
 	if v.applyBtn != nil {
 		v.applyBtn.Configure(State(state))
 	}
 }
 
-func (v *configPanel) text(w *TextWidget) string {
-	if w == nil {
-		return ""
-	}
-	parts := w.Get("1.0", END)
-	return strings.Join(parts, "")
-}
-
-func (v *configPanel) ApplyChanges() {
-	if v.cfg == nil {
-		return
-	}
-	cfg := *v.cfg // copy
-	assignFloat := func(id string, dst *float64) {
-		w := v.widgets[id]
-		if w == nil {
-			return
-		}
-		if f, ok := parseFloatField(strings.TrimSpace(v.text(w))); ok {
-			*dst = f
+// apply saves the form, or names the invalid fields and changes nothing.
+func (v *ConfigPanel) apply() {
+	cfg := *v.cfg
+	var invalid []string
+	field := func(id string, parse func(string) bool) {
+		if !parse(strings.TrimSpace(strings.Join(v.widgets[id].Get("1.0", END), ""))) {
+			invalid = append(invalid, v.labels[id])
 		}
 	}
-	assignInt := func(id string, dst *int) {
-		w := v.widgets[id]
-		if w == nil {
-			return
-		}
-		if i, ok := parseIntField(strings.TrimSpace(v.text(w))); ok {
-			*dst = i
-		}
+	float := func(id string, dst *float64) {
+		field(id, func(s string) bool { return parseInto(s, dst, parseFloat) })
 	}
-	assignBool := func(id string, dst *bool) {
-		w := v.widgets[id]
-		if w == nil {
-			return
-		}
-		if b, ok := parseBoolLoose(strings.TrimSpace(v.text(w))); ok {
-			*dst = b
-		}
+	integer := func(id string, dst *int) {
+		field(id, func(s string) bool { return parseInto(s, dst, strconv.Atoi) })
 	}
-	assignFloat("minScale", &cfg.MinScale)
-	assignFloat("maxScale", &cfg.MaxScale)
-	assignFloat("scaleStep", &cfg.ScaleStep)
-	assignFloat("threshold", &cfg.Threshold)
-	assignInt("stride", &cfg.Stride)
-	assignFloat("stopOnScore", &cfg.StopOnScore)
-	assignBool("refine", &cfg.Refine)
-	assignBool("returnBestEven", &cfg.ReturnBestEven)
-	assignInt("cooldownSeconds", &cfg.CooldownSeconds)
-	assignInt("maxCastDurationSeconds", &cfg.MaxCastDurationSeconds)
-	assignFloat("analysisScale", &cfg.AnalysisScale)
-	if w := v.widgets["reelKey"]; w != nil {
-		val := strings.TrimSpace(v.text(w))
-		if val != "" {
-			cfg.ReelKey = val
-		}
+	boolean := func(id string, dst *bool) {
+		field(id, func(s string) bool { return parseInto(s, dst, parseBool) })
 	}
-	if verr := cfg.Validate(); verr != nil {
+	key := func(id string, dst *string) {
+		field(id, func(s string) bool {
+			_, ok := action.ParseVK(s)
+			if ok {
+				*dst = s
+			}
+			return ok
+		})
+	}
+	float("minScale", &cfg.MinScale)
+	float("maxScale", &cfg.MaxScale)
+	float("scaleStep", &cfg.ScaleStep)
+	float("threshold", &cfg.Threshold)
+	integer("stride", &cfg.Stride)
+	boolean("refine", &cfg.Refine)
+	key("castKey", &cfg.CastKey)
+	key("stopKey", &cfg.StopKey)
+	integer("maxFailedCasts", &cfg.MaxFailedCasts)
+	integer("maxSessionMinutes", &cfg.MaxSessionMinutes)
+	integer("roiSizePx", &cfg.ROISizePx)
+	integer("cooldownSeconds", &cfg.CooldownSeconds)
+	integer("maxCastDurationSeconds", &cfg.MaxCastDurationSeconds)
+	if len(invalid) > 0 {
+		v.status("Not saved, invalid: " + strings.Join(invalid, ", "))
 		return
 	}
 	*v.cfg = cfg
 	if err := v.cfg.Save(v.cfgPath); err != nil {
-		if v.logger != nil {
-			v.logger.Error("config save failed", "error", err)
-		}
-	} else {
-		if v.logger != nil {
-			v.logger.Info("config saved", "path", v.cfgPath)
-		}
+		v.logger.Error("config save failed", "error", err)
+		v.status("Config not saved: " + err.Error())
+		return
 	}
+	v.logger.Info("config saved", "path", v.cfgPath)
+	v.status("Config saved")
 }
 
-func parseFloatField(s string) (float64, bool) {
-	f, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+func parseInto[T any](s string, dst *T, parse func(string) (T, error)) bool {
+	value, err := parse(s)
 	if err != nil {
-		return 0, false
+		return false
 	}
-	return f, true
+	*dst = value
+	return true
 }
-func parseIntField(s string) (int, bool) {
-	i, err := strconv.Atoi(strings.TrimSpace(s))
-	if err != nil {
-		return 0, false
-	}
-	return i, true
-}
-func parseBoolLoose(s string) (bool, bool) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
+
+func parseFloat(s string) (float64, error) { return strconv.ParseFloat(s, 64) }
+
+func parseBool(s string) (bool, error) {
+	switch strings.ToLower(s) {
 	case "true", "1", "yes", "y", "on", "t":
-		return true, true
+		return true, nil
 	case "false", "0", "no", "n", "off", "f":
-		return false, true
-	default:
-		return false, false
+		return false, nil
 	}
+	return false, strconv.ErrSyntax
 }

@@ -1,7 +1,9 @@
 package presenter
 
 import (
-	"github.com/soocke/pixel-bot-go/domain/capture"
+	"sync/atomic"
+
+	"github.com/soocke/pixel-bot-go/domain/fishing"
 )
 
 // CaptureModel provides access to the capture enabled state.
@@ -10,8 +12,8 @@ type CaptureModel interface {
 	SetEnabled(bool)
 }
 
-// LifecycleContract is the minimal lifecycle API used by the presenter.
-type LifecycleContract interface {
+// Lifecycle is the pipeline the presenter starts and stops.
+type Lifecycle interface {
 	Start()
 	Stop()
 }
@@ -23,61 +25,66 @@ type CaptureFSM interface {
 }
 
 // CaptureView updates UI elements affected by capture toggling.
-// The presenter does not manage state-label updates; that responsibility
-// belongs to the FSMPresenter.
 type CaptureView interface {
 	PreviewReset()
-	ConfigEditable(bool)
+	SetRunning(bool)
 }
 
 // CapturePresenter coordinates capture enable/disable actions between the
-// model, capture service, FSM and view.
+// model, pipeline, FSM and view.
 type CapturePresenter struct {
-	model   CaptureModel
-	service LifecycleContract
-	fsm     CaptureFSM
-	view    CaptureView
+	model    CaptureModel
+	pipeline Lifecycle
+	fsm      CaptureFSM
+	view     CaptureView
+	halted   atomic.Bool // the FSM halted; Tick stops capture on the Tk thread
 }
 
-func NewCapturePresenter(model CaptureModel, service capture.CaptureService, fsm CaptureFSM, view CaptureView) *CapturePresenter {
-	return &CapturePresenter{model: model, service: service, fsm: fsm, view: view}
+// NewCapturePresenter returns a CapturePresenter.
+func NewCapturePresenter(model CaptureModel, pipeline Lifecycle, fsm CaptureFSM, view CaptureView) *CapturePresenter {
+	return &CapturePresenter{model: model, pipeline: pipeline, fsm: fsm, view: view}
 }
 
-// Toggle flips enabled state, coordinating service, FSM and view.
-// Enable starts the capture service and triggers the FSM to await focus. Idempotent.
+// Enable starts the pipeline and makes the FSM wait for focus. Idempotent.
 func (c *CapturePresenter) Enable() {
-	if c == nil || c.model == nil || c.service == nil || c.view == nil || c.fsm == nil {
+	if c.model.Enabled() {
 		return
 	}
-	if c.model.Enabled() { // already enabled
-		return
-	}
-	c.service.Start()
+	c.pipeline.Start()
 	c.model.SetEnabled(true)
 	c.fsm.EventAwaitFocus()
-	c.view.ConfigEditable(false)
+	c.view.SetRunning(true)
 }
 
-// Disable stops the capture service and halts the FSM, resetting preview. Idempotent.
+// Disable stops the pipeline and halts the FSM, resetting the preview. Idempotent.
 func (c *CapturePresenter) Disable() {
-	if c == nil || c.model == nil || c.service == nil || c.view == nil || c.fsm == nil {
+	if !c.model.Enabled() {
 		return
 	}
-	if !c.model.Enabled() { // already disabled
-		return
-	}
-	c.service.Stop()
+	c.pipeline.Stop()
 	c.model.SetEnabled(false)
 	c.view.PreviewReset()
 	c.fsm.EventHalt()
-	c.view.ConfigEditable(true)
+	c.view.SetRunning(false)
+}
+
+// OnState records a halt from any source, such as the stop hotkey or a limit.
+// Register it as an FSM listener.
+func (c *CapturePresenter) OnState(_, next fishing.FishingState) {
+	if next == fishing.StateHalt {
+		c.halted.Store(true)
+	}
+}
+
+// Tick stops capture after the FSM halted on its own.
+func (c *CapturePresenter) Tick() {
+	if c.halted.Swap(false) {
+		c.Disable()
+	}
 }
 
 // Toggle flips enabled state delegating to Enable/Disable.
 func (c *CapturePresenter) Toggle() {
-	if c == nil || c.model == nil || c.service == nil || c.view == nil || c.fsm == nil {
-		return
-	}
 	if c.model.Enabled() {
 		c.Disable()
 		return

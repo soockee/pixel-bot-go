@@ -16,33 +16,27 @@ import (
 	. "modernc.org/tk9.0"
 )
 
-// SelectionOverlay manages the optional selection window allowing the user
-// to constrain screen capture to a rectangle.
-type SelectionOverlay interface {
-	OpenOrFocus()
-	Clear()
-	ActiveRect() *image.Rectangle
-}
-
-type selectionOverlay struct {
+// SelectionOverlay manages the selection window that sets the capture rectangle.
+type SelectionOverlay struct {
 	logger    *slog.Logger
 	cfg       *config.Config
 	cfgPath   string
-	selection atomic.Value // stores image.Rectangle
+	selection atomic.Pointer[image.Rectangle]
 	win       *ToplevelWidget
 }
 
-// NewSelectionOverlay creates a new overlay manager.
-func NewSelectionOverlay(cfg *config.Config, cfgPath string, logger *slog.Logger) SelectionOverlay {
-	v := &selectionOverlay{logger: logger, cfg: cfg, cfgPath: cfgPath}
-	if cfg != nil && cfg.SelectionW > 0 && cfg.SelectionH > 0 {
+// NewSelectionOverlay creates a new overlay manager with the saved selection.
+func NewSelectionOverlay(cfg *config.Config, cfgPath string, logger *slog.Logger) *SelectionOverlay {
+	v := &SelectionOverlay{logger: logger, cfg: cfg, cfgPath: cfgPath}
+	if cfg.SelectionW > 0 && cfg.SelectionH > 0 {
 		rect := image.Rect(cfg.SelectionX, cfg.SelectionY, cfg.SelectionX+cfg.SelectionW, cfg.SelectionY+cfg.SelectionH)
-		v.selection.Store(rect)
+		v.selection.Store(&rect)
 	}
 	return v
 }
 
-func (v *selectionOverlay) OpenOrFocus() {
+// OpenOrFocus opens the selection window unless it is already open.
+func (v *SelectionOverlay) OpenOrFocus() {
 	if v.win != nil {
 		WmGeometry(v.win.Window)
 		return
@@ -52,13 +46,7 @@ func (v *selectionOverlay) OpenOrFocus() {
 	v.win = win
 	screen := screenRect(v.cfg)
 	screenW, screenH := screen.Dx(), screen.Dy()
-	initW, initH := screenW*2/3, screenH*5/9
-	if initW < 1 {
-		initW = 1
-	}
-	if initH < 1 {
-		initH = 1
-	}
+	initW, initH := max(screenW*2/3, 1), max(screenH*5/9, 1)
 	x, y := screen.Min.X+(screenW-initW)/2, screen.Min.Y+(screenH-initH)/2
 	WmGeometry(win.Window, fmt.Sprintf("%dx%d+%d+%d", initW, initH, x, y))
 	WmAttributes(win.Window, "-topmost", 1)
@@ -78,77 +66,64 @@ func (v *selectionOverlay) OpenOrFocus() {
 	Grid(controls, Row(1), Column(0), Columnspan(3), Sticky("we"))
 	confirm := win.Button(Txt("Confirm [Enter]"), Command(v.confirm))
 	Grid(confirm, In(controls), Row(0), Column(0), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
-	cancel := win.Button(Txt("Cancel [Esc]"), Command(v.cancel))
+	cancel := win.Button(Txt("Cancel [Esc]"), Command(v.destroy))
 	Grid(cancel, In(controls), Row(0), Column(1), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
-	clear := win.Button(Txt("Clear"), Command(v.Clear))
+	clear := win.Button(Txt("Clear"), Command(v.clear))
 	Grid(clear, In(controls), Row(0), Column(2), Sticky("we"), Padx("0.2m"), Pady("0.2m"))
 	Bind(win, "<Return>", Command(v.confirm))
-	Bind(win, "<Escape>", Command(v.cancel))
+	Bind(win, "<Escape>", Command(v.destroy))
 }
 
-func (v *selectionOverlay) Clear() {
-	v.selection.Store(image.Rectangle{})
-	if v.cfg != nil {
-		v.cfg.SelectionW, v.cfg.SelectionH = 0, 0
-		_ = v.cfg.Save(v.cfgPath)
-	}
+func (v *SelectionOverlay) clear() {
+	v.selection.Store(nil)
+	v.cfg.SelectionW, v.cfg.SelectionH = 0, 0
+	v.save()
 }
 
-func (v *selectionOverlay) confirm() {
+func (v *SelectionOverlay) confirm() {
 	if v.win == nil {
 		return
 	}
-	geom := WmGeometry(v.win.Window)
-	if rect, ok := parseGeometrySel(geom); ok {
-		v.selection.Store(rect)
-		if v.cfg != nil {
-			v.cfg.SelectionX, v.cfg.SelectionY = rect.Min.X, rect.Min.Y
-			v.cfg.SelectionW, v.cfg.SelectionH = rect.Dx(), rect.Dy()
-			_ = v.cfg.Save(v.cfgPath)
-		}
+	if rect, ok := parseGeometry(WmGeometry(v.win.Window)); ok {
+		v.selection.Store(&rect)
+		v.cfg.SelectionX, v.cfg.SelectionY = rect.Min.X, rect.Min.Y
+		v.cfg.SelectionW, v.cfg.SelectionH = rect.Dx(), rect.Dy()
+		v.save()
 	}
 	v.destroy()
 }
 
-func (v *selectionOverlay) cancel() { v.destroy() }
+func (v *SelectionOverlay) save() {
+	if err := v.cfg.Save(v.cfgPath); err != nil {
+		v.logger.Error("save selection failed", "error", err)
+	}
+}
 
-func (v *selectionOverlay) destroy() {
+func (v *SelectionOverlay) destroy() {
 	if v.win != nil {
 		Destroy(v.win)
 		v.win = nil
 	}
 }
 
-func (v *selectionOverlay) ActiveRect() *image.Rectangle {
-	rv := v.selection.Load()
-	if rv == nil {
-		return nil
-	}
-	r, ok := rv.(image.Rectangle)
-	if !ok || r == (image.Rectangle{}) {
-		return nil
-	}
-	return &r
-}
+// ActiveRect returns the selected rectangle, or nil. Safe from any goroutine.
+func (v *SelectionOverlay) ActiveRect() *image.Rectangle { return v.selection.Load() }
 
 // screenRect returns the monitor the overlay should open on: the configured
 // screen if it exists, otherwise a default 1920x1080 area at the origin.
 func screenRect(cfg *config.Config) image.Rectangle {
-	if cfg != nil {
-		if b, ok := action.ScreenBounds(cfg.Screen); ok {
-			return b
-		}
+	if b, ok := action.ScreenBounds(cfg.Screen); ok {
+		return b
 	}
 	return image.Rect(0, 0, 1920, 1080)
 }
 
-// geomReSel matches window geometry strings in the format "WIDTHxHEIGHT+X+Y"
-var geomReSel = regexp.MustCompile(`^(\d+)x(\d+)[+-](-?\d+)[+-](-?\d+)$`)
+// geometryRe matches window geometry strings in the format "WIDTHxHEIGHT+X+Y".
+var geometryRe = regexp.MustCompile(`^(\d+)x(\d+)[+-](-?\d+)[+-](-?\d+)$`)
 
-// parseGeometrySel parses a Tk geometry string and returns the corresponding rectangle.
-func parseGeometrySel(g string) (image.Rectangle, bool) {
-	g = strings.TrimSpace(g)
-	m := geomReSel.FindStringSubmatch(g)
+// parseGeometry parses a Tk geometry string into a rectangle.
+func parseGeometry(g string) (image.Rectangle, bool) {
+	m := geometryRe.FindStringSubmatch(strings.TrimSpace(g))
 	if len(m) != 5 {
 		return image.Rectangle{}, false
 	}

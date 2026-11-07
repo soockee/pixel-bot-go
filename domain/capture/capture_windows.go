@@ -3,22 +3,21 @@
 package capture
 
 // Windows screen capture using per-frame GDI allocations.
-// Each Grab/GrabSelection creates a temporary DIB, BitBlt's the screen
-// into it, converts BGRA->RGBA into a heap-owned *image.RGBA, and frees
-// GDI resources.
+// Each Next creates a temporary DIB, BitBlt's the screen into it, converts
+// BGRA->RGBA into a heap-owned *image.RGBA, and frees GDI resources.
 
 import (
 	"errors"
 	"fmt"
 	"image"
-	"syscall"
+	"time"
 	"unsafe"
+
+	"golang.org/x/sys/windows"
 )
 
 // Win32 constants
 const (
-	smCxScreen   = 0
-	smCyScreen   = 1
 	smXVirtual   = 76 // SM_XVIRTUALSCREEN: left of the whole multi-monitor desktop
 	smYVirtual   = 77
 	smCxVirtual  = 78
@@ -30,9 +29,8 @@ const (
 
 // Win32 DLL procs (lazy loaded)
 var (
-	user32                 = syscall.NewLazyDLL("user32.dll")
-	gdi32                  = syscall.NewLazyDLL("gdi32.dll")
-	kernel32               = syscall.NewLazyDLL("kernel32.dll")
+	user32                 = windows.NewLazySystemDLL("user32.dll")
+	gdi32                  = windows.NewLazySystemDLL("gdi32.dll")
 	procGetDC              = user32.NewProc("GetDC")
 	procReleaseDC          = user32.NewProc("ReleaseDC")
 	procGetSystemMetrics   = user32.NewProc("GetSystemMetrics")
@@ -42,7 +40,6 @@ var (
 	procBitBlt             = gdi32.NewProc("BitBlt")
 	procCreateDIBSection   = gdi32.NewProc("CreateDIBSection")
 	procDeleteObject       = gdi32.NewProc("DeleteObject")
-	procGetLastError       = kernel32.NewProc("GetLastError")
 )
 
 // BITMAPINFO structures (Win32 layout).
@@ -65,53 +62,42 @@ type bitmapInfo struct {
 	_      [4]byte // one RGBQUAD placeholder (unused for 32-bit)
 }
 
-// Per-frame allocation; no persistent globals.
-
-// Grab captures the full screen and returns a newly allocated RGBA image.
-func Grab() (*image.RGBA, error) {
-	w := int(getSystemMetric(smCxScreen))
-	h := int(getSystemMetric(smCyScreen))
-	if w <= 0 || h <= 0 {
-		return nil, fmt.Errorf("capture: invalid screen size w=%d h=%d", w, h)
+// Next captures the current region, clipped to the virtual desktop. A region
+// on a second monitor can have negative coordinates.
+func (s Source) Next() (Frame, error) {
+	sel := s.Region()
+	if sel == nil || sel.Empty() {
+		return Frame{}, errors.New("capture: no region selected")
 	}
-	return captureRect(image.Rect(0, 0, w, h))
-}
-
-// GrabSelection captures sel (clipped to screen bounds) and returns an RGBA image.
-func GrabSelection(sel image.Rectangle) (*image.RGBA, error) {
-	if sel.Empty() {
-		return nil, errors.New("capture: empty selection")
-	}
-	// Use the virtual desktop so selections on a second monitor (which can have
-	// negative coordinates) are not clipped to the primary screen.
 	vx, vy := int(getSystemMetric(smXVirtual)), int(getSystemMetric(smYVirtual))
 	screen := image.Rect(vx, vy, vx+int(getSystemMetric(smCxVirtual)), vy+int(getSystemMetric(smCyVirtual)))
 	r := sel.Intersect(screen)
 	if r.Empty() {
-		return nil, fmt.Errorf("capture: selection out of bounds sel=%v screen=%v", sel, screen)
+		return Frame{}, fmt.Errorf("capture: selection out of bounds sel=%v screen=%v", sel, screen)
 	}
-	return captureRect(r)
+	img, err := captureRect(r)
+	if err != nil {
+		return Frame{}, err
+	}
+	return Frame{Image: img, Origin: r.Min, CapturedAt: time.Now()}, nil
 }
 
 // captureRect performs BitBlt into a top-down DIB section and returns a
 // newly allocated *image.RGBA containing the captured pixels.
 func captureRect(r image.Rectangle) (*image.RGBA, error) {
 	w, h := r.Dx(), r.Dy()
-	if w <= 0 || h <= 0 {
-		return nil, fmt.Errorf("capture: invalid rect %v", r)
-	}
 
 	// Acquire screen DC.
-	screenDC, _, _ := procGetDC.Call(0)
+	screenDC, _, err := procGetDC.Call(0)
 	if screenDC == 0 {
-		return nil, fmt.Errorf("capture: GetDC failed winerr=%d", getLastError())
+		return nil, fmt.Errorf("capture: GetDC failed: %w", err)
 	}
 	defer procReleaseDC.Call(0, screenDC)
 
 	// Create compatible memory DC.
-	memDC, _, _ := procCreateCompatibleDC.Call(screenDC)
+	memDC, _, err := procCreateCompatibleDC.Call(screenDC)
 	if memDC == 0 {
-		return nil, fmt.Errorf("capture: CreateCompatibleDC failed winerr=%d", getLastError())
+		return nil, fmt.Errorf("capture: CreateCompatibleDC failed: %w", err)
 	}
 	defer procDeleteDC.Call(memDC)
 
@@ -126,27 +112,27 @@ func captureRect(r image.Rectangle) (*image.RGBA, error) {
 	bi.Header.BiSizeImage = uint32(w * h * 4)
 
 	var bitsPtr unsafe.Pointer
-	bmp, _, _ := procCreateDIBSection.Call(memDC, uintptr(unsafe.Pointer(&bi)), dibRGBColors, uintptr(unsafe.Pointer(&bitsPtr)), 0, 0)
+	bmp, _, err := procCreateDIBSection.Call(memDC, uintptr(unsafe.Pointer(&bi)), dibRGBColors, uintptr(unsafe.Pointer(&bitsPtr)), 0, 0)
 	if bmp == 0 {
-		return nil, fmt.Errorf("capture: CreateDIBSection failed winerr=%d", getLastError())
+		return nil, fmt.Errorf("capture: CreateDIBSection failed: %w", err)
 	}
 	defer procDeleteObject.Call(bmp)
 
 	// Select bitmap into DC.
-	prev, _, _ := procSelectObject.Call(memDC, bmp)
+	prev, _, err := procSelectObject.Call(memDC, bmp)
 	if prev == 0 || prev == ^uintptr(0) { // failure or GDI_ERROR
-		return nil, fmt.Errorf("capture: SelectObject failed winerr=%d", getLastError())
+		return nil, fmt.Errorf("capture: SelectObject failed: %w", err)
 	}
 
 	// BitBlt into memory DC at requested offset.
-	ok, _, _ := procBitBlt.Call(memDC, 0, 0, uintptr(w), uintptr(h), screenDC, uintptr(r.Min.X), uintptr(r.Min.Y), srccopy)
+	ok, _, err := procBitBlt.Call(memDC, 0, 0, uintptr(w), uintptr(h), screenDC, uintptr(r.Min.X), uintptr(r.Min.Y), srccopy)
 	if ok == 0 {
-		return nil, fmt.Errorf("capture: BitBlt failed x=%d y=%d w=%d h=%d winerr=%d", r.Min.X, r.Min.Y, w, h, getLastError())
+		return nil, fmt.Errorf("capture: BitBlt failed for %v: %w", r, err)
 	}
 
 	// Copy & convert BGRA in DIB to RGBA in Go heap slice.
 	pixLen := w * h * 4
-	src := (*[1 << 30]byte)(bitsPtr)[:pixLen:pixLen]
+	src := unsafe.Slice((*byte)(bitsPtr), pixLen)
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
 	// dst.Pix layout already contiguous stride = w*4
 	for i := 0; i < pixLen; i += 4 {
@@ -165,9 +151,4 @@ func captureRect(r image.Rectangle) (*image.RGBA, error) {
 func getSystemMetric(idx int) int32 {
 	v, _, _ := procGetSystemMetrics.Call(uintptr(idx))
 	return int32(v)
-}
-
-func getLastError() uint32 {
-	v, _, _ := procGetLastError.Call()
-	return uint32(v)
 }

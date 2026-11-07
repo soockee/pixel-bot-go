@@ -36,3 +36,12 @@ pixel_bot_logs.json
 
 # Locally installed Claude skills not part of this repo
 .claude/skills/unslop/
+
+# Response benchmark output (large raw traces)
+responsebench-results/
+
+# Recorded detector datasets
+datasets/
+
+# Local manual-play mouse traces
+fishing-recordings/

@@ -2,126 +2,124 @@ package action
 
 import (
 	"errors"
+	"log/slog"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
-	"unicode/utf16"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
+var (
+	user32           = windows.NewLazySystemDLL("user32.dll")
+	procSendInput    = user32.NewProc("SendInput")
+	procSetCursorPos = user32.NewProc("SetCursorPos")
+	procGetCursorPos = user32.NewProc("GetCursorPos")
+	procGetWindowTxt = user32.NewProc("GetWindowTextW")
+	procIsVisible    = user32.NewProc("IsWindowVisible")
+)
+
+const (
+	inputMouse    = 0
+	inputKeyboard = 1
+	keyEventUp    = 0x0002
+	mouseRightDn  = 0x0008
+	mouseRightUp  = 0x0010
+)
+
+// keyboardInput and mouseInput are the two forms of the Win32 INPUT struct. Its
+// union starts at offset 8 on 64-bit Windows.
+type keyboardInput struct {
+	kind      uint32
+	_         uint32
+	vk, scan  uint16
+	flags     uint32
+	time      uint32
+	extraInfo uintptr
+	_         [8]byte // pads to the size of the union's largest member
+}
+
+type mouseInput struct {
+	kind      uint32
+	_         uint32
+	dx, dy    int32
+	data      uint32
+	flags     uint32
+	time      uint32
+	extraInfo uintptr
+}
+
+func sendInput[T keyboardInput | mouseInput](in T) {
+	if n, _, err := procSendInput.Call(1, uintptr(unsafe.Pointer(&in)), unsafe.Sizeof(in)); n != 1 {
+		slog.Error("SendInput failed", "error", err)
+	}
+}
+
 // ClickRight sends a right mouse button click (down then up).
-// Windows implementation using the Win32 API.
 func ClickRight() {
-	user32 := windows.NewLazySystemDLL("user32.dll")
-	mouseEvent := user32.NewProc("mouse_event")
-	const MOUSEEVENTF_RIGHTDOWN = 0x0008
-	const MOUSEEVENTF_RIGHTUP = 0x0010
-	_, _, _ = mouseEvent.Call(MOUSEEVENTF_RIGHTDOWN, 0, 0, 0, 0)
+	sendInput(mouseInput{kind: inputMouse, flags: mouseRightDn})
 	time.Sleep(30 * time.Millisecond)
-	_, _, _ = mouseEvent.Call(MOUSEEVENTF_RIGHTUP, 0, 0, 0, 0)
+	sendInput(mouseInput{kind: inputMouse, flags: mouseRightUp})
 }
 
 // MoveCursor moves the OS mouse pointer to (x, y).
-// Windows implementation using SetCursorPos.
 func MoveCursor(x, y int) {
-	user32 := windows.NewLazySystemDLL("user32.dll")
-	setCursorPos := user32.NewProc("SetCursorPos")
-	_, _, _ = setCursorPos.Call(uintptr(x), uintptr(y))
+	if r, _, err := procSetCursorPos.Call(uintptr(x), uintptr(y)); r == 0 {
+		slog.Error("SetCursorPos failed", "error", err)
+	}
 }
 
-// PressKey sends a key down followed by a key up for the provided virtual-key code.
-// Uses keybd_event on Windows.
+// CursorPos returns the current position of the OS mouse pointer.
+func CursorPos() (x, y int, ok bool) {
+	var p struct{ X, Y int32 }
+	r, _, _ := procGetCursorPos.Call(uintptr(unsafe.Pointer(&p)))
+	return int(p.X), int(p.Y), r != 0
+}
+
+// PressKey sends a key down followed by a key up for the virtual-key code.
 func PressKey(vk byte) {
-	user32 := windows.NewLazySystemDLL("user32.dll")
-	keybdEvent := user32.NewProc("keybd_event")
-	const KEYEVENTF_KEYUP = 0x0002
-	// key down
-	_, _, _ = keybdEvent.Call(uintptr(vk), 0, 0, 0)
-	// small sleep to emulate human press duration
+	sendInput(keyboardInput{kind: inputKeyboard, vk: uint16(vk)})
 	time.Sleep(40 * time.Millisecond)
-	// key up
-	_, _, _ = keybdEvent.Call(uintptr(vk), 0, KEYEVENTF_KEYUP, 0)
+	sendInput(keyboardInput{kind: inputKeyboard, vk: uint16(vk), flags: keyEventUp})
 }
 
-// ParseVK converts a key token (e.g. "F3", "R") into a Windows virtual-key code.
-// Recognizes F1..F12 and single letters A..Z. Unknown tokens return VK_F3.
-func ParseVK(key string) byte {
+// ParseVK converts a key name (F1 to F12, or a single letter) into a Windows
+// virtual-key code. It reports false for any other name.
+func ParseVK(key string) (byte, bool) {
 	k := strings.ToUpper(strings.TrimSpace(key))
-	if len(k) == 2 && k[0] == 'F' { // F1-F9
-		n := int(k[1] - '0')
-		if n >= 1 && n <= 9 {
-			return byte(0x70 + (n - 1)) // VK_F1=0x70
-		}
-	}
-	if len(k) == 3 && k[0] == 'F' { // F10-F12
-		switch k {
-		case "F10":
-			return 0x79
-		case "F11":
-			return 0x7A
-		case "F12":
-			return 0x7B
-		}
-	}
-	if len(k) == 2 && k[0] == 'F' { // F10-F19 (optional) -> ignore beyond F12 for now
-		// fallthrough
-	}
 	if len(k) == 1 && k[0] >= 'A' && k[0] <= 'Z' {
-		return k[0] // 'A'..'Z' match VK codes
+		return k[0], true // 'A'..'Z' match their VK codes
 	}
-	// Default fallback F3
-	return 0x72
+	if num, ok := strings.CutPrefix(k, "F"); ok {
+		if n, err := strconv.ParseUint(num, 10, 8); err == nil && n >= 1 && n <= 12 {
+			return byte(0x70 + n - 1), true // VK_F1 = 0x70
+		}
+	}
+	return 0, false
+}
+
+func windowTitle(hwnd uintptr) string {
+	buf := make([]uint16, 256)
+	n, _, _ := procGetWindowTxt.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	return strings.TrimSpace(windows.UTF16ToString(buf[:n]))
 }
 
 // ListWindows returns titles of top-level visible windows.
 // Empty titles are skipped.
 func ListWindows() ([]string, error) {
-	user32 := windows.NewLazySystemDLL("user32.dll")
-	enumWindows := user32.NewProc("EnumWindows")
-	getWindowTextW := user32.NewProc("GetWindowTextW")
-	isWindowVisible := user32.NewProc("IsWindowVisible")
-
 	var titles []string
-	cb := syscall.NewCallback(func(hwnd uintptr, lparam uintptr) uintptr {
-		// Skip invisible windows
-		vis, _, _ := isWindowVisible.Call(hwnd)
-		if vis == 0 {
-			return 1 // continue
-		}
-		// Retrieve window text
-		// First get length (approx) by allocating buffer
-		const maxChars = 256
-		buf := make([]uint16, maxChars)
-		r, _, _ := getWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
-		if r > 0 {
-			// Trim at first zero
-			var end int
-			for i, v := range buf {
-				if v == 0 {
-					end = i
-					break
-				}
-			}
-			if end == 0 {
-				end = int(r)
-			}
-			s := utf16.Decode(buf[:end])
-			title := strings.TrimSpace(string(s))
-			if title != "" {
+	cb := syscall.NewCallback(func(hwnd, _ uintptr) uintptr {
+		if visible, _, _ := procIsVisible.Call(hwnd); visible != 0 {
+			if title := windowTitle(hwnd); title != "" {
 				titles = append(titles, title)
 			}
 		}
 		return 1 // continue enumeration
 	})
-
-	// Execute enumeration
-	if r, _, callErr := enumWindows.Call(cb, 0); r == 0 {
-		if callErr != nil {
-			err := callErr
-			return nil, err
-		}
+	if err := windows.EnumWindows(cb, nil); err != nil {
+		return nil, err
 	}
 	return titles, nil
 }
@@ -129,30 +127,9 @@ func ListWindows() ([]string, error) {
 // ForegroundWindowTitle returns the title of the current foreground window.
 // If no foreground window is available an error is returned.
 func ForegroundWindowTitle() (string, error) {
-	user32 := windows.NewLazySystemDLL("user32.dll")
-	getForegroundWindow := user32.NewProc("GetForegroundWindow")
-	getWindowTextW := user32.NewProc("GetWindowTextW")
-	hwnd, _, _ := getForegroundWindow.Call()
+	hwnd := windows.GetForegroundWindow()
 	if hwnd == 0 {
-		err := errors.New("no foreground window")
-		return "", err
+		return "", errors.New("no foreground window")
 	}
-	const maxChars = 256
-	buf := make([]uint16, maxChars)
-	r, _, _ := getWindowTextW.Call(hwnd, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
-	if r == 0 {
-		return "", nil
-	}
-	var end int
-	for i, v := range buf {
-		if v == 0 {
-			end = i
-			break
-		}
-	}
-	if end == 0 {
-		end = int(r)
-	}
-	s := utf16.Decode(buf[:end])
-	return strings.TrimSpace(string(s)), nil
+	return windowTitle(uintptr(hwnd)), nil
 }

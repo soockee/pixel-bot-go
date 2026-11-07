@@ -3,15 +3,15 @@
 Hands-on walkthroughs to achieve common first wins. Derived from existing detection and debugging material.
 
 ---
-## 1. First Successful Fishing Cycle
-1. Launch app; ensure game window visible.
-2. (Optional) Set a Selection Area around bobber region.
+## 1. First Simulator Run
+1. Launch the simulator with `go run ./cmd/fakegame` and the desktop app with `go run . -dry-run`. Keep the simulator window visible.
+2. Select a capture region around the simulator target.
 3. Start capture; watch state: `waiting_focus → searching`.
 4. When `monitoring` appears, a match was found; observe ROI stability.
-5. Wait for bite (cursor moves & reels) then cooldown → automatic recast.
+5. Wait for a splash and check the log for the recorded reel and recast actions.
 6. Adjust `Threshold` only if false triggers occur or misses persist.
 
-Outcome: One full automatic cast → bite → reel → recast loop.
+Compare the timestamps for one full response cycle with the simulator event log.
 
 ## 2. Speed Tuning Without Losing Accuracy
 1. Start with stride 2–4, refine ON.
@@ -45,7 +45,7 @@ Outcome: One full automatic cast → bite → reel → recast loop.
 | ------------------ | ------------------------------------------------- |
 | No matches         | Lower `Threshold`, verify scale range covers size |
 | Many false matches | Raise `Threshold`, keep refine enabled            |
-| Slow scan          | Increase `Stride`, narrow scales                  |
+| Slow scan          | Narrow the selection and scales                   |
 | Memory pressure    | Reduce scale count; profile heap                  |
 
 ---

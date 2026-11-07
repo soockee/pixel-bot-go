@@ -16,22 +16,19 @@ type SessionView interface {
 
 // SessionPresenter formats session and total durations from the model to the view.
 type SessionPresenter struct {
-	sess *model.SessionModel
-	cap  CaptureEnabledModel
-	view SessionView
+	sess    *model.SessionModel
+	capture CaptureEnabledModel
+	view    SessionView
 }
 
 // NewSessionPresenter returns a new SessionPresenter.
-func NewSessionPresenter(sess *model.SessionModel, cap CaptureEnabledModel, view SessionView) *SessionPresenter {
-	return &SessionPresenter{sess: sess, cap: cap, view: view}
+func NewSessionPresenter(sess *model.SessionModel, capture CaptureEnabledModel, view SessionView) *SessionPresenter {
+	return &SessionPresenter{sess: sess, capture: capture, view: view}
 }
 
-// Tick updates the presenter: advance the session model and push values to the view.
+// Tick advances the session model and pushes its values to the view.
 func (p *SessionPresenter) Tick(now time.Time) {
-	if p == nil || p.sess == nil || p.cap == nil || p.view == nil {
-		return
-	}
-	p.sess.OnTick(p.cap.Enabled(), now)
+	p.sess.OnTick(p.capture.Enabled(), now)
 	s, t := p.sess.Values()
 	p.view.SetSession(s, t)
 }

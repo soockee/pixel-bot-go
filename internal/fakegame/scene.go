@@ -1,5 +1,5 @@
-// Package fakegame renders a synthetic "game window" for end-to-end tests of
-// Pixel Bot: a noisy background, an optional bobber template and a splash.
+// Package fakegame renders synthetic scenes for end-to-end tests. Scenes
+// contain a noisy background, an optional target template, and a scripted splash.
 package fakegame
 
 import (

@@ -5,6 +5,10 @@ import (
 	"os"
 )
 
+// FilePath is the config file, relative to the working directory. The
+// misspelling is kept so existing files keep loading.
+const FilePath = "pixle_bot_config.json"
+
 // Config holds runtime configuration for detection and app behavior.
 // Fields may be loaded from a JSON file and overridden by command-line flags.
 type Config struct {
@@ -21,14 +25,12 @@ type Config struct {
 	AutoWindow string `json:"-"`
 	AutoStart  bool   `json:"-"`
 	// Detection parameters
-	MinScale       float64 `json:"min_scale"`
-	MaxScale       float64 `json:"max_scale"`
-	ScaleStep      float64 `json:"scale_step"`
-	Threshold      float64 `json:"threshold"`
-	Stride         int     `json:"stride"`
-	Refine         bool    `json:"refine"`
-	StopOnScore    float64 `json:"stop_on_score"`
-	ReturnBestEven bool    `json:"return_best_even"`
+	MinScale  float64 `json:"min_scale"`
+	MaxScale  float64 `json:"max_scale"`
+	ScaleStep float64 `json:"scale_step"`
+	Threshold float64 `json:"threshold"`
+	Stride    int     `json:"stride"`
+	Refine    bool    `json:"refine"`
 
 	// Selection rectangle persistence (Phase2)
 	SelectionX int `json:"selection_x"`
@@ -36,8 +38,14 @@ type Config struct {
 	SelectionW int `json:"selection_w"`
 	SelectionH int `json:"selection_h"`
 
-	// Reel key configuration (e.g. "F3" or "R")
-	ReelKey string `json:"reel_key"`
+	// CastKey is the key that casts (e.g. "F3" or "R").
+	CastKey string `json:"cast_key"`
+	// StopKey is the global hotkey that halts the bot. Read at startup.
+	StopKey string `json:"stop_key"`
+	// MaxFailedCasts halts the bot after this many casts in a row end without a reel.
+	MaxFailedCasts int `json:"max_failed_casts"`
+	// MaxSessionMinutes halts the bot at the first cast after this long.
+	MaxSessionMinutes int `json:"max_session_minutes"`
 
 	// Bite detection configuration (only actively used fields retained).
 	ROISizePx int `json:"roi_size_px"` // square ROI side length in pixels
@@ -47,105 +55,67 @@ type Config struct {
 	// CooldownSeconds defines how long to wait after reeling before attempting the next cast.
 	CooldownSeconds int `json:"cooldown_seconds"`
 
-	// AnalysisScale optionally downsizes frames before expensive template matching.
-	// Range (0.2 - 1.0]. 1.0 means disabled. Smaller values reduce CPU at the cost of precision.
-	AnalysisScale float64 `json:"analysis_scale"`
-
 	// DarkMode persists user preference for dark theme across sessions.
 	DarkMode bool `json:"dark_mode"`
 }
 
-// Accessor helpers to satisfy fishing.ConfigLite without exposing struct embedding.
-
 // DefaultConfig returns a Config populated with standard defaults.
 func DefaultConfig() *Config {
 	return &Config{
-		Debug:                  false,
-		MinScale:               0.90, // from pixle_bot_config.json
-		MaxScale:               1.20, // from pixle_bot_config.json
-		ScaleStep:              0.05, // from pixle_bot_config.json
-		Threshold:              0.73, // from pixle_bot_config.json
-		Stride:                 6,    // from pixle_bot_config.json
+		MinScale:               0.90,
+		MaxScale:               1.20,
+		ScaleStep:              0.05,
+		Threshold:              0.73,
+		Stride:                 6,
 		Refine:                 true,
-		StopOnScore:            0.80, // from pixle_bot_config.json
-		ReturnBestEven:         true,
-		SelectionX:             0, // persisted selection defaults
-		SelectionY:             0,
-		SelectionW:             0,
-		SelectionH:             0,
-		ReelKey:                "F3",
+		CastKey:                "F3",
+		StopKey:                "F10",
+		MaxFailedCasts:         5,
+		MaxSessionMinutes:      60,
 		ROISizePx:              80,
-		MaxCastDurationSeconds: 16,
-		CooldownSeconds:        8, // from pixle_bot_config.json
-		AnalysisScale:          1.0,
-		DarkMode:               true, // from pixle_bot_config.json
+		MaxCastDurationSeconds: 30,
+		CooldownSeconds:        8,
+		DarkMode:               true,
 	}
 }
 
 // Validate clamps/normalizes values to safe ranges.
 func (c *Config) Validate() error {
+	d := DefaultConfig()
 	if c.MinScale <= 0 {
-		c.MinScale = 0.60
+		c.MinScale = d.MinScale
 	}
-	if c.MaxScale <= 0 || c.MaxScale < c.MinScale {
-		c.MaxScale = c.MinScale + 0.80
+	if c.MaxScale < c.MinScale {
+		c.MaxScale = c.MinScale + d.MaxScale - d.MinScale
 	}
 	if c.ScaleStep <= 0 {
-		c.ScaleStep = 0.05
+		c.ScaleStep = d.ScaleStep
 	}
-	if c.ScaleStep > (c.MaxScale - c.MinScale) {
-		c.ScaleStep = (c.MaxScale - c.MinScale) / 4
+	if span := c.MaxScale - c.MinScale; span > 0 && c.ScaleStep > span {
+		c.ScaleStep = span / 4
 	}
 	if c.Threshold <= 0 || c.Threshold > 1 {
-		c.Threshold = 0.80
+		c.Threshold = d.Threshold
 	}
 	if c.Stride <= 0 {
-		c.Stride = 4
+		c.Stride = d.Stride
 	}
-	if c.StopOnScore < 0 || c.StopOnScore > 1 {
-		c.StopOnScore = 0.95
+	if c.CastKey == "" {
+		c.CastKey = d.CastKey
 	}
-	if c.ReelKey == "" {
-		c.ReelKey = "F3"
+	if c.StopKey == "" {
+		c.StopKey = d.StopKey
 	}
-	// Bite detection validation & sane clamps
-	if c.ROISizePx < 32 {
-		c.ROISizePx = 32
+	if c.MaxFailedCasts <= 0 {
+		c.MaxFailedCasts = d.MaxFailedCasts
 	}
-	if c.ROISizePx > 256 { // keep ROI modest for performance
-		c.ROISizePx = 256
+	if c.MaxSessionMinutes <= 0 {
+		c.MaxSessionMinutes = d.MaxSessionMinutes
 	}
-
-	if c.MaxCastDurationSeconds < 5 { // extremely short casts are unlikely; enforce reasonable floor
-		c.MaxCastDurationSeconds = 5
-	}
-	if c.MaxCastDurationSeconds > 180 { // safety upper bound (3 minutes) though typical is ~30s
-		c.MaxCastDurationSeconds = 180
-	}
-
-	// Cooldown seconds sanity (allow zero -> default minimal, clamp upper bound for safety)
-	if c.CooldownSeconds <= 0 {
-		c.CooldownSeconds = 1
-	}
-	if c.CooldownSeconds > 60 { // more than a minute likely unnecessary
-		c.CooldownSeconds = 60
-	}
-
-	if c.Screen < 0 {
-		c.Screen = 0
-	}
-
-	// AnalysisScale validation
-	if c.AnalysisScale <= 0 {
-		c.AnalysisScale = 1.0
-	}
-	if c.AnalysisScale < 0.2 {
-		c.AnalysisScale = 0.2
-	}
-	if c.AnalysisScale > 1.0 {
-		c.AnalysisScale = 1.0
-	}
-
+	c.ROISizePx = min(max(c.ROISizePx, 32), 256) // keep the ROI modest for performance
+	c.MaxCastDurationSeconds = min(max(c.MaxCastDurationSeconds, 5), 180)
+	c.CooldownSeconds = min(max(c.CooldownSeconds, 1), 60)
+	c.Screen = max(c.Screen, 0)
 	return nil
 }
 
@@ -153,17 +123,23 @@ func (c *Config) Validate() error {
 // exist it returns DefaultConfig(). On JSON error it returns defaults with the error.
 func Load(path string) (*Config, error) {
 	cfg := DefaultConfig()
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return cfg, nil
 		}
 		return cfg, err
 	}
-	defer f.Close()
-	dec := json.NewDecoder(f)
-	if err := dec.Decode(cfg); err != nil {
+	if err := json.Unmarshal(data, cfg); err != nil {
 		return cfg, err
+	}
+	// Files saved before the rename keep their key; a silent F3 could press the wrong one.
+	var saved struct {
+		CastKey string `json:"cast_key"`
+		ReelKey string `json:"reel_key"`
+	}
+	if err := json.Unmarshal(data, &saved); err == nil && saved.CastKey == "" && saved.ReelKey != "" {
+		cfg.CastKey = saved.ReelKey
 	}
 	_ = cfg.Validate()
 	return cfg, nil

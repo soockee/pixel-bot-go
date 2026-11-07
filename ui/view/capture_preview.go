@@ -9,110 +9,51 @@ import (
 	. "modernc.org/tk9.0"
 )
 
-// CapturePreview abstracts the capture frame (full/selection) and detection ROI preview.
-// It owns two LabelWidgets and provides methods to update or reset them.
-type CapturePreview interface {
-	UpdateCapture(img image.Image)
-	UpdateDetection(img image.Image)
-	Reset()
+const placeholderW, placeholderH = 400, 225
+
+// CapturePreview shows the captured frame and the region around the bobber.
+type CapturePreview struct {
+	captureLabel   *LabelWidget
+	detectionLabel *LabelWidget
+	roiSize        int
+	targetW        int
+	targetH        int
+	capturePhoto   *Img
+	detectionPhoto *Img
 }
 
-type capturePreview struct {
-	captureLabel       *LabelWidget
-	detectionLabel     *LabelWidget
-	targetW            int
-	targetH            int
-	prevCapturePhoto   *Img // last Tk photo image instance for capture
-	prevDetectionPhoto *Img // last Tk photo image instance for detection
+func newCapturePreview(capture, detection *LabelWidget, roiSize int) *CapturePreview {
+	v := &CapturePreview{captureLabel: capture, detectionLabel: detection, roiSize: roiSize, targetW: 800, targetH: 450}
+	v.Reset()
+	return v
 }
 
-// Internal state tracks current preview photos so we can dispose old images
-// before replacing them, preventing accumulation of off-screen image data.
-
-// NewCapturePreview creates the preview labels, grids them and returns the view.
-// Layout: capture spans columns 0-3; detection ROI sits at column 4 of the provided row.
-func NewCapturePreview(row int) CapturePreview {
-	placeholder := image.NewRGBA(image.Rect(0, 0, 200, 120))
-	pngBytes := images.EncodePNG(placeholder)
-	capPhoto := NewPhoto(Data(pngBytes))
-	detPhoto := NewPhoto(Data(pngBytes))
-	capture := Label(Image(capPhoto), Borderwidth(1), Relief("sunken"))
-	detection := Label(Image(detPhoto), Borderwidth(1), Relief("sunken"))
-	Grid(capture, Row(row), Column(0), Columnspan(4), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
-	Grid(detection, Row(row), Column(4), Columnspan(1), Sticky("we"), Padx("0.4m"), Pady("0.4m"))
-	return &capturePreview{captureLabel: capture, detectionLabel: detection, prevCapturePhoto: capPhoto, prevDetectionPhoto: detPhoto}
+// show replaces the label's photo, deleting the old one so its pixels are freed.
+func show(label *LabelWidget, photo **Img, img image.Image) {
+	if *photo != nil {
+		(*photo).Delete()
+	}
+	*photo = NewPhoto(Data(images.EncodePNG(img)))
+	label.Configure(Image(*photo))
 }
 
-const (
-	// Max preview dimensions (reduced to shrink on-screen footprint).
-	// Adjust if you need higher detail; scaling is proportional.
-	maxPreviewW = 400
-	maxPreviewH = 225
-)
-
-func (v *capturePreview) UpdateCapture(img image.Image) {
-	if v.captureLabel == nil || img == nil {
-		return
-	}
-	// Determine target size (fallback to max constants if unset).
-	w, h := v.targetW, v.targetH
-	if w <= 0 || h <= 0 {
-		w, h = maxPreviewW, maxPreviewH
-	}
-	// Scale for display only; allocate a fresh scaled image each call.
-	scaled := images.ScaleToFit(img, w, h)
-	pngBytes := images.EncodePNG(scaled)
-	// Replace previous photo to avoid retaining obsolete pixel buffers.
-	if v.prevCapturePhoto != nil {
-		v.prevCapturePhoto.Delete()
-	}
-	newPhoto := NewPhoto(Data(pngBytes))
-	v.prevCapturePhoto = newPhoto
-	v.captureLabel.Configure(Image(newPhoto))
+// UpdateCapture shows a frame scaled to the preview size.
+func (v *CapturePreview) UpdateCapture(img *image.RGBA) {
+	show(v.captureLabel, &v.capturePhoto, images.ScaleToFit(img, v.targetW, v.targetH))
 }
 
-func (v *capturePreview) UpdateDetection(img image.Image) {
-	if v.detectionLabel == nil || img == nil {
-		return
-	}
-	pngBytes := images.EncodePNG(img)
-	if v.prevDetectionPhoto != nil {
-		v.prevDetectionPhoto.Delete()
-	}
-	newPhoto := NewPhoto(Data(pngBytes))
-	v.prevDetectionPhoto = newPhoto
-	v.detectionLabel.Configure(Image(newPhoto))
+// UpdateDetection shows the region around the bobber.
+func (v *CapturePreview) UpdateDetection(img *image.RGBA) {
+	show(v.detectionLabel, &v.detectionPhoto, img)
 }
 
-func (v *capturePreview) Reset() {
-	placeholder := image.NewRGBA(image.Rect(0, 0, 200, 120))
-	pngBytes := images.EncodePNG(placeholder)
-	if v.captureLabel != nil {
-		if v.prevCapturePhoto != nil {
-			v.prevCapturePhoto.Delete()
-		}
-		v.prevCapturePhoto = NewPhoto(Data(pngBytes))
-		v.captureLabel.Configure(Image(v.prevCapturePhoto))
-	}
-	if v.detectionLabel != nil {
-		if v.prevDetectionPhoto != nil {
-			v.prevDetectionPhoto.Delete()
-		}
-		v.prevDetectionPhoto = NewPhoto(Data(pngBytes))
-		v.detectionLabel.Configure(Image(v.prevDetectionPhoto))
-	}
+// Reset shows empty placeholders.
+func (v *CapturePreview) Reset() {
+	show(v.captureLabel, &v.capturePhoto, image.NewRGBA(image.Rect(0, 0, placeholderW, placeholderH)))
+	show(v.detectionLabel, &v.detectionPhoto, image.NewRGBA(image.Rect(0, 0, v.roiSize, v.roiSize)))
 }
 
 // setTargetSize updates desired scaling dimensions used by UpdateCapture.
-func (v *capturePreview) setTargetSize(w, h int) {
-	if v == nil {
-		return
-	}
-	if w < 50 {
-		w = 50
-	}
-	if h < 50 {
-		h = 50
-	}
-	v.targetW, v.targetH = w, h
+func (v *CapturePreview) setTargetSize(w, h int) {
+	v.targetW, v.targetH = max(w, 50), max(h, 50)
 }

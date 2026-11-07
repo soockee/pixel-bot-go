@@ -1,6 +1,6 @@
 package theme
 
-// Centralized theming and styling initialization for the pixel bot UI.
+// Centralized theming and styling initialization for the desktop UI.
 // Provides palette constants and InitStyles to activate a base theme and
 // configure semantic widget styles.
 
