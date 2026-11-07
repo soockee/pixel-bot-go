@@ -33,3 +33,6 @@ pixel_bot_logs.json
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Locally installed Claude skills not part of this repo
+.claude/skills/unslop/
