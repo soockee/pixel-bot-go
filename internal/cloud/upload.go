@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -89,7 +88,7 @@ func recordingFiles(dir string) ([]file, error) {
 }
 
 // Upload sends the finished recording in dir, named by its folder, and calls
-// progress with the files done so far. Files already uploaded count as done,
+// progress, one call at a time, with the files done so far. Files already uploaded count as done,
 // so a failed upload can simply be started again.
 func (s *Session) Upload(ctx context.Context, dir string, progress func(done, total int)) error {
 	files, err := recordingFiles(dir)
@@ -99,14 +98,23 @@ func (s *Session) Upload(ctx context.Context, dir string, progress func(done, to
 	if len(files) == 0 {
 		return fmt.Errorf("%s has no recording files", filepath.Base(dir))
 	}
-	var done atomic.Int64
+	// Workers finish files concurrently; the lock keeps progress calls one at
+	// a time and in order.
+	var mu sync.Mutex
+	done := 0
+	fileDone := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		done++
+		progress(done, len(files))
+	}
 	for start := 0; start < len(files); start += batchSize {
 		batch := files[start:min(start+batchSize, len(files))]
 		uploads, err := s.sign(ctx, filepath.Base(dir), batch)
 		if err != nil {
 			return err
 		}
-		if err := s.putAll(ctx, batch, uploads, func() { progress(int(done.Add(1)), len(files)) }); err != nil {
+		if err := s.putAll(ctx, batch, uploads, fileDone); err != nil {
 			return err
 		}
 	}
