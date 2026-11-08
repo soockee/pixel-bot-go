@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"image"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -122,9 +123,12 @@ func (c *AppContainer) prepareRecording() (presenter.RecordJob, error) {
 	if problem := c.startProblem(); problem != "" {
 		return presenter.RecordJob{}, errors.New(problem)
 	}
+	// A recording keeps the area it started with, so frame pixels and the saved
+	// window offset mean the same thing for the whole session.
+	region := *c.Selection.ActiveRect()
 	session := recorder.Session{
 		Dir:    filepath.Join(c.Config.RecordDir, time.Now().Format("20060102-150405")),
-		Frames: c.frames(),
+		Frames: capture.Source{Region: func() *image.Rectangle { return &region }},
 		Window: c.Capture.Window(),
 		Listen: recorder.DefaultListen,
 		Keys:   c.Config.RecordKeys,
