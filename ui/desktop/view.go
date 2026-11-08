@@ -27,6 +27,7 @@ func (v *View) State() State { return v.state }
 
 // Flush sends the state if it changed since the last Flush.
 func (v *View) Flush() {
+	v.state.Setup, v.state.SetupDone = setupSteps(v.state)
 	if v.state == v.sent {
 		return
 	}
@@ -88,6 +89,9 @@ func (v *View) PreviewReset() {
 
 // SetWindow shows the target window title.
 func (v *View) SetWindow(title string) { v.state.Window = title }
+
+// SetGameFound shows whether the selected window is open.
+func (v *View) SetGameFound(found bool) { v.state.GameFound = found }
 
 // SetAccount shows the signed-in account and what its role may do; an empty
 // email means signed out.

@@ -12,5 +12,6 @@ export type {
     Rect,
     Settings,
     SettingsForm,
+    SetupStep,
     State
 } from "./models.js";

@@ -77,6 +77,28 @@ export interface SettingsForm {
 }
 
 /**
+ * SetupStep is one thing the bot needs before it can fish.
+ */
+export interface SetupStep {
+    /**
+     * "game", "addon" or "account"; "" for an unused slot
+     */
+    "id": string;
+    "title": string;
+    "done": boolean;
+
+    /**
+     * what to do or what is wrong; a reminder when Done
+     */
+    "detail": string;
+
+    /**
+     * the label of the button that does it, "" when there is nothing to click
+     */
+    "action": string;
+}
+
+/**
  * State is everything the main window shows.
  */
 export interface State {
@@ -217,6 +239,21 @@ export interface State {
      * a check runs
      */
     "checking": boolean;
+
+    /**
+     * the selected window is open
+     */
+    "gameFound": boolean;
+
+    /**
+     * what the bot still needs, see setupSteps
+     */
+    "setup": SetupStep[];
+
+    /**
+     * nothing is missing, or this is a dry run
+     */
+    "setupDone": boolean;
 
     /**
      * Bobber Marker in the game: "missing", "outdated", "current", or "" when the game was not found

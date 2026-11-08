@@ -92,6 +92,24 @@ func (s *Service) SetWindow(title string) {
 	})
 }
 
+// CheckGame looks for the game window, for the setup steps. Unless the person
+// chose a window, it selects the game as soon as it opens, so starting the game
+// after Go Fish needs no click. The frontend calls it now and then.
+func (s *Service) CheckGame() {
+	titles := s.cmds.ListWindows()
+	_ = s.do(func() {
+		current := s.view.State().Window
+		if !s.picked && !s.cmds.Running() && current != defaultWindow && slices.Contains(titles, defaultWindow) {
+			s.cmds.SetWindow(defaultWindow)
+			current = defaultWindow
+		}
+		s.view.SetGameFound(slices.Contains(titles, current))
+		if s.cmds.CheckAddon != nil {
+			s.cmds.CheckAddon() // the game's folder comes from its window
+		}
+	})
+}
+
 // ToggleCapture starts or stops the run.
 func (s *Service) ToggleCapture() { _ = s.do(s.cmds.ToggleCapture) }
 

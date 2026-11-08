@@ -27,6 +27,15 @@ export function CheckAddon(): $CancellablePromise<void> {
 }
 
 /**
+ * CheckGame looks for the game window, for the setup steps. Unless the person
+ * chose a window, it selects the game as soon as it opens, so starting the game
+ * after Go Fish needs no click. The frontend calls it now and then.
+ */
+export function CheckGame(): $CancellablePromise<void> {
+    return $Call.ByID(2303969795);
+}
+
+/**
  * CheckUpdate looks for a newer release now; the result arrives in State.
  */
 export function CheckUpdate(): $CancellablePromise<void> {

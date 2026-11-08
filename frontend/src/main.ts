@@ -6,6 +6,7 @@ import { $, keyLabel, storage } from "./dom";
 import { setupLive } from "./live";
 import { setupRecorder } from "./recorder";
 import { setupSettings } from "./settings";
+import { setupWizard } from "./setup";
 import { setupUpdates } from "./updates";
 
 type Tab = "live" | "recorder" | "settings";
@@ -62,6 +63,7 @@ signIn.addEventListener("click", () => {
 $("update").addEventListener("click", () => void Service.Update().catch(() => undefined));
 
 const live = setupLive();
+const wizard = setupWizard();
 const settings = setupSettings();
 const updates = setupUpdates();
 let theme = "";
@@ -78,6 +80,7 @@ onState((s: State) => {
     show(wanted);
   }
   live(s);
+  wizard(s);
   if (recorderShown) recorder.onState(s);
   settings(s);
   updates(s);
