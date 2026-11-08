@@ -10,8 +10,13 @@ import (
 	"github.com/soocke/pixel-bot-go/internal/update"
 )
 
+// updateEvery is how often a release build asks GitHub for a newer release;
+// unauthenticated API calls are limited to 60 an hour per address.
+const updateEvery = time.Hour
+
 // checkUpdate removes the build a previous update replaced and looks for a
-// newer release. Local builds, whose version is not a release tag, skip it.
+// newer release now and every updateEvery. Local builds, whose version is not
+// a release tag, skip it.
 func (a *app) checkUpdate() {
 	exe, err := os.Executable()
 	if err != nil {
@@ -26,23 +31,35 @@ func (a *app) checkUpdate() {
 		return
 	}
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		r, err := a.updates.Latest(ctx)
-		if err != nil {
-			a.logger.Warn("update check failed", "error", err)
-			return
+		for {
+			a.findUpdate()
+			time.Sleep(updateEvery)
 		}
-		if !update.Newer(r.Tag, update.Version) {
-			a.logger.Info("up to date", "version", update.Version, "latest", r.Tag)
-			return
+	}()
+}
+
+// findUpdate offers the latest release when it is newer than this build.
+func (a *app) findUpdate() {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	r, err := a.updates.Latest(ctx)
+	if err != nil {
+		a.logger.Warn("update check failed", "error", err)
+		return
+	}
+	if !update.Newer(r.Tag, update.Version) {
+		a.logger.Debug("up to date", "version", update.Version, "latest", r.Tag)
+		return
+	}
+	a.loop.Do(func() {
+		st := a.container.View.State()
+		if st.Updating || st.Update == r.Tag {
+			return // already offered, or an update is installing
 		}
 		a.logger.Info("update available", "version", update.Version, "latest", r.Tag)
-		a.loop.Do(func() {
-			a.release = r
-			a.container.View.SetUpdate(r.Tag, false)
-		})
-	}()
+		a.release = r
+		a.container.View.SetUpdate(r.Tag, false)
+	})
 }
 
 // updateProblem says why an update cannot start now, or "" when it can. It
