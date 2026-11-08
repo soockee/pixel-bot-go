@@ -20,7 +20,7 @@ const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] 
       { key: "castKey", label: "Cast key", hint: "Click to set the key or mouse side button you use to cast Fishing in game.", kind: "key" },
       { key: "reelMethod", label: "Reel method", hint: "Right-click the bobber, or use the game's Interact key without moving the cursor.", kind: "reelMethod" },
       { key: "interactKey", label: "Interact key", hint: "Set the same binding as in the game before selecting Interact key as your reel method.", kind: "key" },
-      { key: "esp32Port", label: "ESP32 port", hint: "With Interact key selected, enter the paired board's COM port. Clear to use Windows input.", kind: "text" },
+      { key: "esp32Port", label: "ESP32 port", hint: "With Interact key selected, enter auto to find the paired board, or its COM port. Clear to use Windows input.", kind: "text" },
       { key: "stopKey", label: "Stop key", hint: "Stops fishing from anywhere, applies after a restart", kind: "key" },
     ],
   },
