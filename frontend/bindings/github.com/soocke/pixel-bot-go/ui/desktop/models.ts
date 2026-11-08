@@ -49,6 +49,7 @@ export interface Settings {
     "biteDetector": string;
     "recordDir": string;
     "recordKeys": boolean;
+    "shareRecordings": boolean;
     "roiSizePx": number;
     "cooldownSeconds": number;
     "maxCastDurationSeconds": number;
@@ -135,6 +136,11 @@ export interface State {
      * show the developer views
      */
     "debug": boolean;
+
+    /**
+     * show the Recorder: debug mode or Share recordings
+     */
+    "recorder": boolean;
 
     /**
      * sign-in is configured; without it fishing needs no role

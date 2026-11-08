@@ -26,6 +26,7 @@ type Settings struct {
 	BiteDetector           string  `json:"biteDetector"`
 	RecordDir              string  `json:"recordDir"`
 	RecordKeys             bool    `json:"recordKeys"`
+	ShareRecordings        bool    `json:"shareRecordings"`
 	ROISizePx              int     `json:"roiSizePx"`
 	CooldownSeconds        int     `json:"cooldownSeconds"`
 	MaxCastDurationSeconds int     `json:"maxCastDurationSeconds"`
@@ -44,7 +45,7 @@ func settingsOf(c *config.Config) Settings {
 		MinScale: c.MinScale, MaxScale: c.MaxScale, ScaleStep: c.ScaleStep, Threshold: c.Threshold,
 		Stride: c.Stride, Refine: c.Refine, CastKey: c.CastKey, StopKey: c.StopKey,
 		MaxFailedCasts: c.MaxFailedCasts, MaxSessionMinutes: c.MaxSessionMinutes,
-		Locator: c.Locator, BiteDetector: c.BiteDetector, RecordDir: c.RecordDir, RecordKeys: c.RecordKeys,
+		Locator: c.Locator, BiteDetector: c.BiteDetector, RecordDir: c.RecordDir, RecordKeys: c.RecordKeys, ShareRecordings: c.ShareRecordings,
 		ROISizePx: c.ROISizePx, CooldownSeconds: c.CooldownSeconds, MaxCastDurationSeconds: c.MaxCastDurationSeconds,
 	}
 }
@@ -75,7 +76,7 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	c.Stride, c.Refine, c.CastKey, c.StopKey = s.Stride, s.Refine, s.CastKey, s.StopKey
 	c.MaxFailedCasts, c.MaxSessionMinutes = s.MaxFailedCasts, s.MaxSessionMinutes
 	c.Locator, c.BiteDetector = s.Locator, s.BiteDetector
-	c.RecordDir, c.RecordKeys = strings.TrimSpace(s.RecordDir), s.RecordKeys
+	c.RecordDir, c.RecordKeys, c.ShareRecordings = strings.TrimSpace(s.RecordDir), s.RecordKeys, s.ShareRecordings
 	c.ROISizePx, c.CooldownSeconds, c.MaxCastDurationSeconds = s.ROISizePx, s.CooldownSeconds, s.MaxCastDurationSeconds
 	return c, c.Validate()
 }

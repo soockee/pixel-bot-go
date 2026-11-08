@@ -1,5 +1,6 @@
 // Main window: tabs and the status bar. Fishing is the app; the Recorder tab
-// and the detection settings are developer tools, shown only in debug mode.
+// is shown when the person shares recordings or in debug mode; the detection
+// settings are developer tools, shown only in debug mode.
 import { onState, Service, type State } from "./api";
 import { $, keyLabel, storage } from "./dom";
 import { setupLive } from "./live";
@@ -11,10 +12,10 @@ type Tab = "live" | "recorder" | "settings";
 const tabs: Tab[] = ["live", "recorder", "settings"];
 let wanted: Tab = tabs.includes(storage.get("tab") as Tab) ? (storage.get("tab") as Tab) : "live";
 let current: Tab = "live";
-let debug = false;
+let recorderShown = false;
 
 const recorder = setupRecorder(() => current === "recorder");
-const visible = () => tabs.filter((t) => t !== "recorder" || debug);
+const visible = () => tabs.filter((t) => t !== "recorder" || recorderShown);
 
 // show shows tab, or Fishing while tab is hidden; the choice is kept for later.
 function show(tab: Tab) {
@@ -71,12 +72,12 @@ onState((s: State) => {
     document.documentElement.dataset.theme = theme;
     recorder.shown(); // canvases read the theme colours
   }
-  if (s.debug !== debug) {
-    debug = s.debug;
+  if (s.recorder !== recorderShown) {
+    recorderShown = s.recorder;
     show(wanted);
   }
   live(s);
-  if (debug) recorder.onState(s);
+  if (recorderShown) recorder.onState(s);
   settings(s);
   updates(s);
 

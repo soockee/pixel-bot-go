@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	"image/color"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -57,6 +58,30 @@ func TestSettingsApply(t *testing.T) {
 	if _, err := bad.apply(base); err == nil ||
 		!strings.Contains(err.Error(), "Stop key, Locator, Recording folder") {
 		t.Errorf("invalid settings: err = %v", err)
+	}
+}
+
+func TestShareRecordingsShowsTheRecorder(t *testing.T) {
+	cfg := config.DefaultConfig()
+	view := NewView(NewFrames(), func(State) {})
+	loop := NewLoop(func() {})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go loop.Run(ctx, time.Hour)
+	s := NewService(loop, view, Commands{Running: func() bool { return false }}, nil, cfg,
+		filepath.Join(t.TempDir(), "config.json"), slog.New(slog.DiscardHandler))
+
+	values := settingsOf(cfg)
+	values.ShareRecordings = true
+	if _, err := s.SaveSettings(values); err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.ShareRecordings || !s.State().Recorder {
+		t.Fatalf("saved %v, recorder shown %v; want both", cfg.ShareRecordings, s.State().Recorder)
+	}
+	values.ShareRecordings = false
+	if _, err := s.SaveSettings(values); err != nil || s.State().Recorder {
+		t.Fatalf("switched off: err %v, recorder shown %v", err, s.State().Recorder)
 	}
 }
 

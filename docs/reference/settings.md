@@ -13,8 +13,9 @@ order: 1
 | Pause after a catch | 8 s | Wait before the next cast. 1 to 60 seconds. |
 | Cast length | 30 s | Cast again when nothing bites within this time. 5 to 180 seconds. |
 | Dark theme | on | Dark or light colours. |
+| Share recordings | off | Shows the Recorder tab, to record yourself fishing and send it in. See [Record and share a session](../how-to/share-recordings.md). |
 
-With the Recorder turned on (see [Record and share a session](../how-to/share-recordings.md)) Settings also shows:
+With **Share recordings** on, Settings also shows:
 
 | Setting | Default | What it does |
 | --- | --- | --- |

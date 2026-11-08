@@ -109,6 +109,7 @@ func (a *app) Run() error {
 		a.setWindow(cfg.AutoWindow)
 	}
 	c.View.SetInfo(cfg.DryRun, cfg.Debug, cfg.StopKey, cfg.DarkMode)
+	c.View.SetRecorder(cfg.RecorderShown())
 	c.View.SetStatus("Ready")
 	c.View.SetVersion(update.Version)
 	a.watchStopKey()

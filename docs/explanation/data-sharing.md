@@ -16,7 +16,7 @@ Nothing about your fishing. The pictures it looks at, the casts and the catches 
 
 ## What a shared recording holds
 
-Recording is off unless you turn on the Recorder, start a recording and later click Upload. See [Record and share a session](../how-to/share-recordings.md). A recording holds:
+Recording is off unless you switch on **Share recordings** in Settings, start a recording, and later click **Upload**. See [Record and share a session](../how-to/share-recordings.md). A recording holds:
 
 - pictures of the **game window only**, about ten a second, never the rest of your screen;
 - your **mouse**: where it is and what you click, while it is over the game;

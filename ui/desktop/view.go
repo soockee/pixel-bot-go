@@ -123,6 +123,9 @@ func unix(t time.Time) int64 {
 	return t.Unix()
 }
 
+// SetRecorder shows or hides the Recorder.
+func (v *View) SetRecorder(shown bool) { v.state.Recorder = shown }
+
 // SetVersion shows the running build's version.
 func (v *View) SetVersion(version string) { v.state.Version = version }
 

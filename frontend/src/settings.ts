@@ -11,8 +11,9 @@ type Field = { key: Key; label: string; hint: string } & (
   | { kind: "slider"; min: number; max: number; step: number; unit?: string }
 );
 
-/** User groups come first; dev groups (detection tuning) show only in debug mode. */
-const groups: { title: string; dev?: boolean; fields: Field[] }[] = [
+/** User groups come first; dev groups (detection tuning) show only in debug
+ * mode, recorder groups while the Recorder is shown. */
+const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] = [
   {
     title: "Keys",
     fields: [
@@ -30,8 +31,22 @@ const groups: { title: string; dev?: boolean; fields: Field[] }[] = [
     ],
   },
   {
+    title: "Data sharing",
+    fields: [
+      { key: "shareRecordings", label: "Share recordings", hint: "Shows the Recorder, to record yourself fishing and send it in to improve detection. Nothing is sent until you click Upload.", kind: "switch" },
+    ],
+  },
+  {
+    title: "Recording",
+    show: "recorder",
+    fields: [
+      { key: "recordDir", label: "Recording folder", hint: "Each recording gets a new folder in here", kind: "text" },
+      { key: "recordKeys", label: "Record keys", hint: "Record keys as well as the mouse, including what you type in chat", kind: "switch" },
+    ],
+  },
+  {
     title: "Detection",
-    dev: true,
+    show: "debug",
     fields: [
       { key: "locator", label: "Locator", hint: "Finds the bobber in the game window", kind: "locator" },
       { key: "biteDetector", label: "Bite detector", hint: "Decides when a fish bites", kind: "biteDetector" },
@@ -40,7 +55,7 @@ const groups: { title: string; dev?: boolean; fields: Field[] }[] = [
   },
   {
     title: "Template search",
-    dev: true,
+    show: "debug",
     fields: [
       { key: "minScale", label: "Min scale", hint: "Smallest template size tried", kind: "slider", min: 0.5, max: 2, step: 0.05 },
       { key: "maxScale", label: "Max scale", hint: "Largest template size tried", kind: "slider", min: 0.5, max: 2, step: 0.05 },
@@ -48,14 +63,6 @@ const groups: { title: string; dev?: boolean; fields: Field[] }[] = [
       { key: "threshold", label: "Threshold", hint: "Match score needed", kind: "slider", min: 0.5, max: 0.99, step: 0.01 },
       { key: "stride", label: "Stride", hint: "Pixels between search positions", kind: "slider", min: 1, max: 16, step: 1, unit: "px" },
       { key: "refine", label: "Refine", hint: "Search around the best match at every pixel", kind: "switch" },
-    ],
-  },
-  {
-    title: "Recording",
-    dev: true,
-    fields: [
-      { key: "recordDir", label: "Recording folder", hint: "Each recording gets a new folder in here", kind: "text" },
-      { key: "recordKeys", label: "Record keys", hint: "Record keys as well as the mouse", kind: "switch" },
     ],
   },
 ];
@@ -85,10 +92,10 @@ interface Control {
 export function setupSettings(): (s: State) => void {
   const form = $<HTMLFormElement>("settings");
   const controls = new Map<Key, Control>();
-  const devSections: HTMLElement[] = [];
+  const gated: { fs: HTMLElement; show: "debug" | "recorder" }[] = [];
   const message = h("p", "Changes save as you make them", "settings-status");
   let running = false;
-  let debug = false;
+  let shown = { debug: false, recorder: false };
   let saving = Promise.resolve();
   let savedValues: Settings | undefined;
 
@@ -283,8 +290,8 @@ export function setupSettings(): (s: State) => void {
     const sections = groups.map((g) => {
       const fs = h("fieldset");
       fs.append(h("legend", g.title));
-      if (g.dev) devSections.push(fs);
-      fs.hidden = Boolean(g.dev) && !debug;
+      if (g.show) gated.push({ fs, show: g.show });
+      fs.hidden = Boolean(g.show) && !shown[g.show!];
       for (const f of g.fields) {
         const c = control(f, data);
         c.set(data.values[f.key]);
@@ -304,9 +311,9 @@ export function setupSettings(): (s: State) => void {
 
   return (s) => {
     dark.checked = s.dark;
-    if (s.debug !== debug) {
-      debug = s.debug;
-      for (const fs of devSections) fs.hidden = !debug;
+    if (s.debug !== shown.debug || s.recorder !== shown.recorder) {
+      shown = { debug: s.debug, recorder: s.recorder };
+      for (const g of gated) g.fs.hidden = !shown[g.show];
     }
     if (s.running === running) return;
     running = s.running;

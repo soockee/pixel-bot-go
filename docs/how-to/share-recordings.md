@@ -6,14 +6,9 @@ order: 5
 
 Recordings help make Go Fish's bobber and bite detection better. Sharing is optional and off by default: nothing is recorded or sent unless you do the steps below. Read [Accounts and data sharing](../explanation/data-sharing.md) first, so you know what a recording holds and where it goes.
 
-## Turn on the Recorder
+## Turn on sharing
 
-The Recorder is hidden by default.
-
-1. Close Go Fish.
-2. In the folder with the Go Fish exe, open `pixle_bot_config.json` in Notepad. If there is no such file yet, create it.
-3. Change `"debug": false` to `"debug": true` and save. In a new file, write just `{"debug": true}`.
-4. Start Go Fish. A **Recorder** tab appears.
+Open **Settings** and switch on **Share recordings** under **Data sharing**. A **Recorder** tab appears. Switch it off again to hide it; recordings you already made stay on your PC.
 
 ## Record
 
@@ -22,7 +17,7 @@ The Recorder is hidden by default.
 3. Switch to the game and fish by hand as usual: cast, wait, click the bobber when it splashes. A few minutes in one spot is plenty; different places and times of day help most.
 4. Press **F10**, or click **Stop recording**.
 
-While it records, Go Fish saves a picture of the game window about ten times a second, your mouse, your keys while the game is in front, and the game's sound. Keys include what you type in chat. If you'd rather not record keys, switch off **Record keys** under **Settings → Recording** first.
+While it records, Go Fish saves a picture of the game window about ten times a second, your mouse, your keys while the game is in front, and the game's sound. Keys include what you type in chat. If you'd rather not record keys, switch off **Record keys** under **Settings → Recording** first. That group appears once sharing is on.
 
 Recordings stay on your PC, in the `datasets` folder next to Go Fish, until you share them.
 

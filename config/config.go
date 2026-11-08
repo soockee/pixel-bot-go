@@ -48,6 +48,9 @@ type Config struct {
 	RecordDir string `json:"record_dir"`
 	// RecordKeys records keys in the selected window as well as the mouse.
 	RecordKeys bool `json:"record_keys"`
+	// ShareRecordings shows the Recorder, so a person can record sessions and
+	// upload them. Off by default; debug mode shows the Recorder too.
+	ShareRecordings bool `json:"share_recordings"`
 	// CloudURL is the vrl-recordings upload service, and OAuthClientID and
 	// OAuthClientSecret its Desktop OAuth client (not confidential for
 	// installed apps). Empty values fall back to the ones release builds carry
@@ -93,6 +96,9 @@ func DefaultConfig() *Config {
 }
 
 // Validate clamps/normalizes values to safe ranges.
+// RecorderShown reports whether the window offers the Recorder.
+func (c *Config) RecorderShown() bool { return c.Debug || c.ShareRecordings }
+
 func (c *Config) Validate() error {
 	d := DefaultConfig()
 	if c.MinScale <= 0 {

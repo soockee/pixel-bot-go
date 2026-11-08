@@ -123,6 +123,7 @@ func (s *Service) SaveSettings(values Settings) (saved Settings, err error) {
 			return
 		}
 		*s.cfg = next
+		s.view.SetRecorder(next.RecorderShown())
 		s.logger.Info("config saved", "path", s.cfgPath)
 		s.view.SetStatus("Settings saved")
 		saved = settingsOf(s.cfg)
