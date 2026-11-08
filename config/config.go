@@ -106,6 +106,13 @@ type Config struct {
 
 	// DarkMode persists user preference for dark theme across sessions.
 	DarkMode bool `json:"dark_mode"`
+
+	// OverlayX and OverlayY place the overlay's status pill on the game window,
+	// each as a share of the free space: 0 puts it against the left or top edge,
+	// 1 against the right or bottom edge, 0.5 in the middle. The place holds when
+	// the window changes size, and no place leaves the pill outside the window.
+	OverlayX float64 `json:"overlay_x"`
+	OverlayY float64 `json:"overlay_y"`
 }
 
 // DefaultConfig returns a Config populated with standard defaults.
@@ -134,6 +141,8 @@ func DefaultConfig() *Config {
 		MaxCastDurationSeconds: 30,
 		CooldownSeconds:        8,
 		DarkMode:               true,
+		OverlayX:               0.5,
+		OverlayY:               0.01,
 	}
 }
 
@@ -169,6 +178,12 @@ func (c *Config) Validate() error {
 	}
 	c.InteractKey = strings.TrimSpace(c.InteractKey)
 	c.ESP32Port = strings.ToUpper(strings.TrimSpace(c.ESP32Port))
+	if c.OverlayX < 0 || c.OverlayX > 1 {
+		c.OverlayX = d.OverlayX
+	}
+	if c.OverlayY < 0 || c.OverlayY > 1 {
+		c.OverlayY = d.OverlayY
+	}
 	if c.StopKey == "" {
 		c.StopKey = d.StopKey
 	}

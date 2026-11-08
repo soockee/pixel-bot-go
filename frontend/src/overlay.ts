@@ -1,5 +1,6 @@
 // Overlay: lies over the game during a run and shows how it goes, so the
-// player never has to leave the game. Go places it and it takes no clicks.
+// player never has to leave the game. Go places it and it takes no clicks,
+// except while the person places it: then it is only the pill, to be dragged.
 import { onState } from "./api";
 import { $, keyLabel } from "./dom";
 import { cycle } from "./live";
@@ -11,7 +12,17 @@ const status = $("hud-status");
 const box = $("box");
 
 onState((s) => {
-  document.body.hidden = !s.running;
+  const root = document.documentElement.style;
+  root.setProperty("--x", String(s.overlayX));
+  root.setProperty("--y", String(s.overlayY));
+  document.body.classList.toggle("moving", s.overlayMove);
+  document.body.classList.toggle("low", s.overlayY > 0.5);
+  document.body.hidden = !s.running && !s.overlayMove;
+  if (s.overlayMove) {
+    step.textContent = "Drag to place the overlay";
+    status.hidden = box.hidden = true;
+    return;
+  }
   if (!s.running) return;
   step.textContent = cycle.find(([key]) => key === s.fsm)?.[2] ?? "Starting";
   catches.textContent = `${s.reels} ${s.reels === 1 ? "catch" : "catches"}`;

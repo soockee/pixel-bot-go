@@ -136,6 +136,11 @@ func (v *View) SetAddon(dir, status string) { v.state.AddonDir, v.state.Addon = 
 // SetAddonVersion shows the version of the addon the app carries.
 func (v *View) SetAddonVersion(version string) { v.state.AddonVersion = version }
 
+// SetOverlay shows where the overlay pill sits, and whether it is being moved.
+func (v *View) SetOverlay(x, y float64, moving bool) {
+	v.state.OverlayX, v.state.OverlayY, v.state.OverlayMove = x, y, moving
+}
+
 // SetVersion shows the running build's version.
 func (v *View) SetVersion(version string) { v.state.Version = version }
 

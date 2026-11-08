@@ -20,6 +20,7 @@ order: 1
 | Casts without a bite | 5 | Go Fish stops after this many casts in a row without a catch. 1 to 20. |
 | Pause after a catch | 8 s | Wait before the next cast. 1 to 60 seconds. |
 | Cast length | 30 s | Cast again when nothing bites within this time. 5 to 180 seconds. |
+| Move overlay | Top centre | A button, not a setting you type: drag the pill that shows a run over the game, then click **Done** to keep its place. See [Change keys and limits](../how-to/settings.md#move-the-overlay). |
 | Dark theme | on | Dark or light colours. |
 | Share recordings | off | Shows the Recorder tab, to record yourself fishing and send it in. See [Record and share a session](../how-to/share-recordings.md). |
 

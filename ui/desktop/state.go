@@ -63,5 +63,8 @@ type State struct {
 	Addon          string                `json:"addon"`          // Bobber Marker in the game: "missing", "outdated", "current", or "" when the game was not found
 	AddonDir       string                `json:"addonDir"`       // where the addon is or goes
 	AddonVersion   string                `json:"addonVersion"`   // the version the app carries
+	OverlayX       float64               `json:"overlayX"`       // where the overlay pill sits across the game window: 0 is the left edge, 1 the right
+	OverlayY       float64               `json:"overlayY"`       // where the overlay pill sits down the game window: 0 is the top edge, 1 the bottom
+	OverlayMove    bool                  `json:"overlayMove"`    // the overlay is being placed: it takes the mouse and shows only the pill
 	Version        string                `json:"version"`        // the running build's release tag, "dev" for local builds
 }

@@ -30,7 +30,7 @@ There is no Makefile. Without a frontend build the window is empty (`frontend/di
 | Path | Role |
 |------|------|
 | `main.go`, `logger.go` | Entry point; loads `pixle_bot_config.json` (sic, the filename is misspelled on purpose, keep it), sets up slog, optional pprof on `localhost:6060` when `debug` is true |
-| `app/` | Wails application and window (`app.go`), and `AppContainer` (`container.go`) that wires models, presenters and the desktop adapter |
+| `app/` | Wails application and window (`app.go`), and `AppContainer` (`container.go`) that wires models, presenters and the desktop adapter. `overlay.go` is the transparent, click-through status window over the game, hidden from screen capture and parked off screen unless a run goes; Settings → Overlay → Move overlay shrinks it to a draggable pill (`overlay_place.go` holds the placement maths) and saves its place as `overlay_x`, `overlay_y` |
 | `config/` | `Config` struct, `DefaultConfig`, `Validate`, `Load` (JSON) |
 | `domain/capture/` | `Source.Next` grabs one frame of the selected region; `Frame.Origin` is its screen position |
 | `domain/detect/` | `Locator` and `BiteDetector` interfaces, `MarkerLocator` (the app's locator), NCC template matching (evaluation only), motion bite detector |

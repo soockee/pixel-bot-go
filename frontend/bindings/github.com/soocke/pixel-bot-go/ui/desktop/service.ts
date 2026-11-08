@@ -57,6 +57,14 @@ export function InstallAddon(): $CancellablePromise<void> {
 }
 
 /**
+ * MoveOverlay starts placing the overlay, where the person drags it over the
+ * game, or ends it and keeps the place. A run in progress refuses it.
+ */
+export function MoveOverlay(on: boolean): $CancellablePromise<void> {
+    return $Call.ByID(1353822630, on);
+}
+
+/**
  * RecordingEvents reads the input trace of recording name from offset on.
  */
 export function RecordingEvents(name: string, offset: number): $CancellablePromise<recorder$0.EventPage> {

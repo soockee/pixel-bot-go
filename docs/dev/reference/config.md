@@ -26,6 +26,7 @@ order: 2
 | BiteDetector (`bite_detector`) | Technique that recognises a bite        | `motion` by default, `histogram` (colour histogram against the calm bobber), `splash`, or `splash_sound` (splash plus the bite sound; listens to the selected window's process) |
 | RecordDir (`record_dir`)    | Folder for new recordings                   | Default `datasets`                     |
 | RecordKeys (`record_keys`)  | Record keys as well as the mouse            | Default true                           |
+| OverlayX / OverlayY (`overlay_x`, `overlay_y`) | Where the overlay pill sits on the game window, each a share of the free space: 0 is the left or top edge, 1 the right or bottom edge | Default 0.5 and 0.01, the top centre; outside 0 to 1 resets to the default. Written by Settings → Overlay → Move overlay (`app/overlay.go`); not a settings form field. The pill is 380 by 44 px in both overlay modes (`app/overlay_place.go`, `frontend/src/overlay.css`) |
 | ShareRecordings (`share_recordings`) | Shows the Recorder tab and the Recording settings without debug mode | Default false; Settings → Data sharing |
 | CloudURL (`cloud_url`)      | Upload service URL | Empty uses the one release builds carry; empty in both turns sign-in off |
 | OAuthClientID / OAuthClientSecret (`oauth_client_id`, `oauth_client_secret`) | Google Desktop OAuth client the app signs in with | Not confidential for desktop apps; empty client ID uses the release build's client; empty in both turns sign-in off |

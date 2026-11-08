@@ -5,6 +5,7 @@ import (
 	"image"
 	"log/slog"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -29,22 +30,25 @@ const (
 func init() { application.RegisterEvent[desktop.State](desktop.StateEvent) }
 
 type app struct {
-	container    *AppContainer
-	logger       *slog.Logger
-	start        time.Time
-	loop         *desktop.Loop
-	wails        *application.App
-	main         *application.WebviewWindow
-	overlay      *application.WebviewWindow
-	overlayArea  image.Rectangle // the game area the overlay covers, empty while parked; used on the loop
-	overlayReady bool            // passThrough set the overlay's styles; used on the main thread
-	cloud        *cloud.Client   // nil while sign-in is not configured
-	session      *cloud.Session  // the signed-in account, nil when signed out; used on the loop
-	updates      *update.Client
-	release      update.Release // the latest release found, zero before the first check; used on the loop
-	restart      string         // the executable to start once the app quit, after an update
-	schedule     *playSchedule
-	scheduleStop atomic.Bool // set by the global hotkey outside the UI loop
+	container     *AppContainer
+	logger        *slog.Logger
+	start         time.Time
+	loop          *desktop.Loop
+	wails         *application.App
+	main          *application.WebviewWindow
+	overlay       *application.WebviewWindow
+	overlayPlaced overlayPlacement // what the overlay window was last set to; used on the loop
+	overlayMove   bool             // the person is placing the overlay; used on the loop
+	overlayReady  bool             // passThrough set the overlay's styles; used on the main thread
+	pillMu        sync.Mutex       // guards pill, which the main thread writes and the loop reads
+	pill          image.Rectangle  // the overlay window while it is moved, wherever the person left it
+	cloud         *cloud.Client    // nil while sign-in is not configured
+	session       *cloud.Session   // the signed-in account, nil when signed out; used on the loop
+	updates       *update.Client
+	release       update.Release // the latest release found, zero before the first check; used on the loop
+	restart       string         // the executable to start once the app quit, after an update
+	schedule      *playSchedule
+	scheduleStop  atomic.Bool // set by the global hotkey outside the UI loop
 }
 
 // NewApp builds the components and the window.
@@ -76,6 +80,7 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		ReleaseNotes:  a.releaseNotes,
 		CheckAddon:    a.checkAddon,
 		InstallAddon:  a.installAddon,
+		MoveOverlay:   a.setOverlayMove,
 	}, c.Recordings, cfg, config.FilePath, logger)
 
 	assets := http.NewServeMux()
@@ -120,6 +125,7 @@ func (a *app) Run() error {
 		a.setWindow(cfg.AutoWindow)
 	}
 	c.View.SetInfo(cfg.DryRun, cfg.Debug, cfg.StopKey, cfg.DarkMode)
+	c.View.SetOverlay(cfg.OverlayX, cfg.OverlayY, false)
 	c.View.SetRecorder(cfg.RecorderShown())
 	c.View.SetAddonVersion(addon.Version())
 	a.checkAddon()
@@ -169,6 +175,9 @@ func (a *app) tick() {
 	c := a.container
 	c.Loop.Tick()
 	a.tickSchedule(time.Now())
+	if a.overlayMove && c.Capture.Enabled() {
+		_ = a.setOverlayMove(false) // a run owns the overlay; keep the place the person chose
+	}
 	a.followGame()
 	run := c.FSM.Stats()
 	c.View.SetRun(run.Casts, run.Reels, run.FailedInRow, c.Config.MaxFailedCasts, c.Config.MaxSessionMinutes)

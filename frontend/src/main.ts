@@ -4,6 +4,7 @@
 import { onState, Service, type State } from "./api";
 import { $, keyLabel, storage } from "./dom";
 import { setupLive } from "./live";
+import { setupMoveOverlay } from "./move-overlay";
 import { setupRecorder } from "./recorder";
 import { setupSettings } from "./settings";
 import { setupWizard } from "./setup";
@@ -64,6 +65,7 @@ $("update").addEventListener("click", () => void Service.Update().catch(() => un
 
 const live = setupLive();
 const wizard = setupWizard();
+const moveOverlay = setupMoveOverlay();
 const settings = setupSettings();
 const updates = setupUpdates();
 let theme = "";
@@ -81,6 +83,7 @@ onState((s: State) => {
   }
   live(s);
   wizard(s);
+  moveOverlay(s);
   if (recorderShown) recorder.onState(s);
   settings(s);
   updates(s);

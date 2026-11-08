@@ -2,6 +2,15 @@
 :root {
   --accent: #f0a63a;
   --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  /* The pill's size; app/overlay_place.go has the same, which the moved window uses. */
+  --pill-w: 380px;
+  --pill-h: 44px;
+  /* Where the pill sits: a share of the free space, 0 at the left or top edge
+     and 1 at the right or bottom edge. Set from the saved place (State.overlayX). */
+  --x: 0.5;
+  --y: 0.01;
+  --pill-left: calc(var(--x) * (100% - var(--pill-w)));
+  --pill-top: calc(var(--y) * (100% - var(--pill-h)));
 }
 html, body {
   margin: 0;
@@ -15,27 +24,37 @@ html, body {
 body[hidden] { display: none; }
 .hud {
   position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: var(--pill-left);
+  top: var(--pill-top);
+  width: var(--pill-w);
+  height: var(--pill-h);
+  box-sizing: border-box;
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 0 12px;
   border-radius: 999px;
   background: rgba(18, 19, 20, 0.78);
   white-space: nowrap;
 }
 .hud-status {
   position: absolute;
-  top: 44px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: var(--pill-left);
+  top: calc(var(--pill-top) + var(--pill-h) + 6px);
+  width: var(--pill-w);
+  box-sizing: border-box;
   margin: 0;
   padding: 4px 10px;
   border-radius: 6px;
   background: rgba(18, 19, 20, 0.78);
   color: var(--accent);
+  text-align: center;
+}
+/* A pill low on the window leaves no room below it: the status goes above. */
+body.low .hud-status {
+  top: auto;
+  bottom: calc(100% - var(--pill-top) + 6px);
 }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
 .sep, .muted { color: #a2a5ab; }
@@ -46,3 +65,14 @@ body[hidden] { display: none; }
   border: 2px solid var(--accent);
   border-radius: 4px;
 }
+
+/* While the person places it, the window is only the pill: drag it anywhere. */
+body.moving .hud {
+  inset: 0;
+  width: auto;
+  height: auto;
+  border: 2px dashed var(--accent);
+  cursor: move;
+  --wails-draggable: drag;
+}
+body.moving .sep, body.moving #hud-catches, body.moving #hud-stop { display: none; }

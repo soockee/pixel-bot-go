@@ -30,6 +30,17 @@ Go Fish samples a new play duration and a new break duration for each cycle. The
 - **Pause after a catch**: how long it waits before casting again.
 - **Cast length**: if nothing bites within this time, it casts again.
 
+## Move the overlay
+
+While Go Fish fishes, a small pill sits over the top of the game and shows what it is doing, how many fish it has caught and which key stops it. If it is in your way, move it:
+
+1. Start the game, so Go Fish has a window to put it on. Don't start fishing.
+2. In **Settings**, under **Overlay**, click **Move overlay**. The pill appears over the game with a dashed outline.
+3. Drag it where you want it in the game.
+4. Click **Done** in Go Fish.
+
+Go Fish keeps the place, as a share of the game window, so it holds when you change the window size or resolution. The pill can't be dragged out of the window. While you move it the pill takes the mouse, but only the pill does: the rest of the game stays clickable. Once you are done, or when you start fishing, it takes no clicks again. It never shows up in the picture Go Fish looks at.
+
 ## Appearance
 
 - **Dark theme**: switch between dark and light.

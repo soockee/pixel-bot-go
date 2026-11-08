@@ -271,6 +271,21 @@ export interface State {
     "addonVersion": string;
 
     /**
+     * where the overlay pill sits across the game window: 0 is the left edge, 1 the right
+     */
+    "overlayX": number;
+
+    /**
+     * where the overlay pill sits down the game window: 0 is the top edge, 1 the bottom
+     */
+    "overlayY": number;
+
+    /**
+     * the overlay is being placed: it takes the mouse and shows only the pill
+     */
+    "overlayMove": boolean;
+
+    /**
      * the running build's release tag, "dev" for local builds
      */
     "version": string;

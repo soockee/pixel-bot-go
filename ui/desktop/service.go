@@ -29,6 +29,8 @@ type Commands struct {
 	ReleaseNotes func()
 	CheckAddon   func()
 	InstallAddon func() error
+	// MoveOverlay starts or ends placing the overlay; ending saves its place.
+	MoveOverlay func(on bool) error
 }
 
 // Service is what the frontend calls. Every method runs on the UI loop, so
@@ -214,6 +216,21 @@ func (s *Service) CheckAddon() { _ = s.do(s.cmds.CheckAddon) }
 // InstallAddon installs or updates the Bobber Marker addon in the game.
 func (s *Service) InstallAddon() (err error) {
 	if doErr := s.do(func() { err = s.cmds.InstallAddon() }); doErr != nil {
+		return doErr
+	}
+	return err
+}
+
+// MoveOverlay starts placing the overlay, where the person drags it over the
+// game, or ends it and keeps the place. A run in progress refuses it.
+func (s *Service) MoveOverlay(on bool) (err error) {
+	if doErr := s.do(func() {
+		if on && s.cmds.Running() {
+			err = errors.New("stop the run to place the overlay")
+			return
+		}
+		err = s.cmds.MoveOverlay(on)
+	}); doErr != nil {
 		return doErr
 	}
 	return err
