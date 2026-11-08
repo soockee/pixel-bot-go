@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Go Fish is a Windows Go application for visual event and response experiments. It captures a screen region, locates the target from the corner brackets an addon draws around it, and uses region-of-interest brightness statistics to trigger action callbacks. The local simulator supplies a scripted fishing scene for reproducible tests. See [README.md](README.md) and `docs/` (Diataxis: TUTORIALS, HOW_TO, REFERENCE, EXPLANATION).
+Go Fish is a Windows Go application for visual event and response experiments. It captures a screen region, locates the target from the corner brackets an addon draws around it, and uses region-of-interest brightness statistics to trigger action callbacks. The local simulator supplies a scripted fishing scene for reproducible tests. See [README.md](README.md) and `docs/` (Diataxis: tutorials, how-to, reference, explanation; published at https://soockee.github.io/pixel-bot-go/).
 
 ## Stack
 
@@ -44,10 +44,10 @@ There is no Makefile. Without a frontend build the window is empty (`frontend/di
 | `debug/` | `/debug/state` handler |
 | `addon/BobberMarker/` | WoW: Forever addon (Lua) that draws the magenta brackets `MarkerLocator` finds, only while fishing. No Lua tooling in the repo; check it in the client |
 | `assets/` | Embedded `fishing_target.png` template (`embed.go`), used by the simulator and NCC evaluation |
-| `cmd/detecteval/` | Compares every registered `Locator` and `BiteDetector` on recorded datasets, writes `labels.json` from a session with `-label`, and exports each cast's watched area with `-export`. See `docs/REFERENCE.md` |
+| `cmd/detecteval/` | Compares every registered `Locator` and `BiteDetector` on recorded datasets, writes `labels.json` from a session with `-label`, and exports each cast's watched area with `-export`. See `docs/reference/datasets.md` |
 | `internal/dataset/` | Dataset format, labels and the frame loop |
 | `internal/recorder/` | `-record` sessions (frames plus mouse and key input in one window) and `ReadEvents` for the Recorder tab |
-| `cmd/responsebench/` | Standalone virtual-clock benchmark of pacing and retry policies; run `go run ./cmd/responsebench`. See `docs/REFERENCE.md`. Output goes to the git-ignored `responsebench-results/` |
+| `cmd/responsebench/` | Standalone virtual-clock benchmark of pacing and retry policies; run `go run ./cmd/responsebench`. See `docs/reference/benchmark.md`. Output goes to the git-ignored `responsebench-results/` |
 
 ## Architecture notes
 
@@ -64,8 +64,8 @@ There is no Makefile. Without a frontend build the window is empty (`frontend/di
 - Follow `.github/instructions/go.instructions.md` (idiomatic Go, early returns, documented exports, no emoji, English comments, exactly one `package` line per file when editing).
 - Tests are table-friendly `_test.go` files beside the code (`fsm_test.go`, `engine_test.go`, `bite_detector_test.go`, presenter/model tests). Add or update tests for FSM, detector and presenter changes; run `go test ./...` before finishing.
 - Windows-specific code goes in `*_windows.go` files.
-- Config changes: update `Config`, `DefaultConfig`, `Validate`, and `docs/REFERENCE.md` together.
-- Docs follow Diataxis; put new content in the matching file.
+- Config changes: update `Config`, `DefaultConfig`, `Validate`, and `docs/reference/config.md` together.
+- Docs follow Diataxis, one page per topic under `docs/tutorials`, `docs/how-to`, `docs/reference` and `docs/explanation`, each with `title`, `summary` (shown as "In short") and `order` front matter. GitHub Pages builds `docs/` with Jekyll (`_config.yml`, `_layouts/`, `assets/`) at https://soockee.github.io/pixel-bot-go/. Put new content on the matching page or add a page.
 
 ## Agentic testing and signals
 

@@ -1,29 +1,48 @@
-<a name="top"></a>
-
 # Go Fish
 
-Go Fish is a Windows application for studying visual event detection and response timing. The local simulator renders a scripted fishing scene with a visual target and timed splash events. The application captures a selected region, locates the target, and reacts to those events. Dry-run mode records intended actions in the log.
+Go Fish is a Windows app for studying visual event detection and response timing, using fishing in World of Warcraft: Forever as the test scene. A small addon marks your bobber, the app finds the marker in the game window, watches the box for the splash of a bite, and answers with a click. A local simulator plays the same scene with scripted bites, so everything can be tested without the game.
 
----
+**Documentation:** [soockee.github.io/pixel-bot-go](https://soockee.github.io/pixel-bot-go/)
 
-## Quick Start
-1. Run `go run ./cmd/fakegame` in one terminal to start the simulator.
-2. Run `go run . -dry-run` in another terminal to start the application without Administrator privileges.
-3. Select the simulator window and its capture region, then press Start.
-4. Focus the simulator window and observe the state transitions.
-5. Press Stop to end the run. Compare the simulator event timestamps with the intended actions in `pixel_bot_logs.json`.
+## Install
 
-Docs (Diataxis):
-* [Tutorials](docs/TUTORIALS.md) – first simulator run and guided optimizations.
-* [How-To Guides](docs/HOW_TO.md) – profiling, tuning, troubleshooting steps.
-* [Reference](docs/REFERENCE.md) – algorithms, config parameters, state/event tables, FAQ.
-* [Explanation](docs/EXPLANATION.md) – mental models, rationale, architecture concepts.
+1. Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest). `CHECKSUMS.txt` beside it lists its SHA-256.
+2. Copy [`addon/BobberMarker`](addon/BobberMarker) into the game's `Interface\AddOns` folder and restart the game.
+3. Start the exe as Administrator; Windows only lets it send input to the game that way.
+4. Sign in with Google, set your Fishing key under **Settings → Keys**, cast once in game, then press **Start fishing**.
 
-Work plan: [Architecture Review](docs/ARCHITECTURE_REVIEW.md) – findings and tasks for the foundation work.
+Go Fish updates itself: it checks GitHub at start and every hour, and **Update to vX.Y.Z** in the top bar or **Settings → Updates** installs a new release after checking its checksum.
 
----
+## What it does
 
-MIT License in `LICENSE`.
+* Finds the bobber by the magenta brackets the Bobber Marker addon draws, then watches only that box at 30 fps.
+* Detects a bite from the splash, by motion or brightness, or from the game's splash sound.
+* Runs a state machine: cast, search, watch, reel, pause, and stops after a session limit or too many casts without a bite.
+* Stops at once on the stop key (F10 by default), from anywhere.
+* Dry-run mode logs every key press and click instead of sending it, and needs neither Administrator nor an account.
+* Records sessions (frames, input and sound) for comparing detectors offline.
 
+## Develop
 
+Go 1.26 and Node 24 on Windows. In PowerShell:
 
+```powershell
+go run ./cmd/fakegame          # the simulator, in one terminal
+./run.ps1 -dry-run             # builds the frontend and the app, then starts it
+go test ./...
+```
+
+Pick **Fake Game** as the game window and press **Start fishing**; the log `pixel_bot_logs.json` shows each state change and the clicks a real run would send. [AGENTS.md](AGENTS.md) describes the layout and conventions.
+
+## Documentation
+
+The docs follow [Diataxis](https://diataxis.fr/) and live in [`docs/`](docs), one page per topic:
+
+* [Tutorials](https://soockee.github.io/pixel-bot-go/#tutorials): your first catch, and a first run with the simulator.
+* [How-to guides](https://soockee.github.io/pixel-bot-go/#how-to): install the addon, sign in, update, record, debug, troubleshoot.
+* [Reference](https://soockee.github.io/pixel-bot-go/#reference): config, flags, files, states and events, detection, formats.
+* [Explanation](https://soockee.github.io/pixel-bot-go/#explanation): how detection works and why it is built this way.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

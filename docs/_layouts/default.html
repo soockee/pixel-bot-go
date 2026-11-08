@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if page.title %}{{ page.title }} · Docs · {% endif %}{{ site.title }}</title>
+  <meta name="description" content="{{ page.summary | default: site.description }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="{{ '/assets/site.css' | relative_url }}">
+  <script src="{{ '/assets/site.js' | relative_url }}" defer></script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="{{ '/' | relative_url }}"><span class="mark" aria-hidden="true"></span>Go Fish</a>
+    {% assign here = page.path | split: "/" | first %}
+    <nav aria-label="Sections">
+      {% for s in site.sections %}<a href="{{ '/' | relative_url }}#{{ s.id }}"{% if here == s.id %} aria-current="true"{% endif %}>{{ s.title }}</a>{% endfor %}
+    </nav>
+    <a class="button primary" href="https://github.com/{{ site.repository }}/releases/latest">Download</a>
+  </header>
+  {{ content }}
+  <footer class="foot">
+    <span>Go Fish · MIT licensed</span>
+    <a href="https://github.com/{{ site.repository }}">GitHub</a>
+    <span>Not affiliated with Blizzard Entertainment.</span>
+  </footer>
+</body>
+</html>

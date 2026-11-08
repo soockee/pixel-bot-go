@@ -1,0 +1,29 @@
+---
+layout: default
+---
+<section class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Docs</p>
+    <h1>Cast, watch, reel in.</h1>
+    <p class="lead">Go Fish finds your bobber in World of Warcraft: Forever, watches it for the bite and reels in. Install it, look up a setting, or learn how it works.</p>
+    <div class="actions">
+      <a class="button primary" href="{{ '/tutorials/first-catch/' | relative_url }}">Start with your first catch</a>
+      <a class="button" href="{{ '/tutorials/simulator/' | relative_url }}">Try the simulator</a>
+    </div>
+    <label class="search"><span class="sr-only">Search the docs</span><input type="search" id="search" placeholder="Search {{ site.pages | where_exp: 'p', 'p.summary' | size }} pages" autocomplete="off"></label>
+    <ol class="results" id="results" hidden></ol>
+  </div>
+</section>
+<main class="cards">
+  {% for s in site.sections %}
+  {% assign dir = s.id | append: "/" %}
+  {% assign list = site.pages | where_exp: "p", "p.path contains dir" | sort: "order" %}
+  <section class="card" id="{{ s.id }}">
+    <h2>{{ s.title }}</h2>
+    <p>{{ s.blurb }}</p>
+    <ul>
+      {% for p in list %}<li><a href="{{ p.url | relative_url }}" data-text="{{ p.title | downcase }} {{ p.summary | downcase }}" data-summary="{{ p.summary }}" data-section="{{ s.title }}">{{ p.title }}</a></li>{% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+</main>

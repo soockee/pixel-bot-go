@@ -1,0 +1,42 @@
+---
+layout: default
+---
+{% assign here = page.path | split: "/" | first %}
+{% assign section = site.sections | where: "id", here | first %}
+{% comment %} All doc pages in reading order, for the sidebar and prev/next. {% endcomment %}
+{% assign prev = nil %}{% assign next = nil %}{% assign found = false %}
+{% for s in site.sections %}
+  {% assign dir = s.id | append: "/" %}
+  {% assign list = site.pages | where_exp: "p", "p.path contains dir" | sort: "order" %}
+  {% for p in list %}
+    {% if found and next == nil %}{% assign next = p %}{% endif %}
+    {% if p.url == page.url %}{% assign found = true %}{% elsif found == false %}{% assign prev = p %}{% endif %}
+  {% endfor %}
+{% endfor %}
+<div class="docs">
+  <aside class="sidebar" aria-label="Docs">
+    <label class="filter"><span class="sr-only">Filter pages</span><input type="search" id="filter" placeholder="Filter pages" autocomplete="off"></label>
+    {% for s in site.sections %}
+    {% assign dir = s.id | append: "/" %}
+    {% assign list = site.pages | where_exp: "p", "p.path contains dir" | sort: "order" %}
+    <div class="group">
+      <p class="group-title">{{ s.title }}</p>
+      {% for p in list %}<a href="{{ p.url | relative_url }}" data-text="{{ p.title | downcase }} {{ p.summary | downcase }}"{% if p.url == page.url %} aria-current="page"{% endif %}>{{ p.title }}</a>{% endfor %}
+    </div>
+    {% endfor %}
+  </aside>
+  <main class="page">
+    <nav class="crumbs" aria-label="Breadcrumb"><a href="{{ '/' | relative_url }}">Docs</a><span>/</span><a href="{{ '/' | relative_url }}#{{ section.id }}">{{ section.title }}</a><span>/</span><span>{{ page.title }}</span></nav>
+    <h1>{{ page.title }}</h1>
+    <p class="meta"><span class="badge">{{ section.title }}</span>{{ content | number_of_words | divided_by: 200 | plus: 1 }} min read<span>·</span><a href="https://github.com/{{ site.repository }}/blob/main/docs/{{ page.path }}">Edit on GitHub</a></p>
+    <div class="in-short"><p class="label">In short</p><p>{{ page.summary }}</p></div>
+    <details class="toc" id="toc" hidden><summary>On this page</summary><ol></ol></details>
+    <article class="prose">
+      {{ content }}
+    </article>
+    <nav class="pager" aria-label="Pages">
+      {% if prev %}<a class="prev" href="{{ prev.url | relative_url }}"><span>Previous</span>{{ prev.title }}</a>{% else %}<span></span>{% endif %}
+      {% if next %}<a class="next" href="{{ next.url | relative_url }}"><span>Next</span>{{ next.title }}</a>{% endif %}
+    </nav>
+  </main>
+</div>

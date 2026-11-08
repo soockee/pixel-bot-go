@@ -1,0 +1,34 @@
+# GitHub Pages builds this folder with Jekyll: https://soockee.github.io/pixel-bot-go/
+title: Go Fish
+description: Docs for Go Fish, a Windows app that finds your bobber, watches for the bite and reels in.
+baseurl: /pixel-bot-go
+repository: soockee/pixel-bot-go
+permalink: pretty
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false
+plugins:
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+exclude:
+  - ARCHITECTURE_REVIEW.md
+defaults:
+  - scope: { path: "" }
+    values: { layout: doc }
+
+# The four Diataxis quadrants, in reading order.
+sections:
+  - id: tutorials
+    title: Tutorials
+    blurb: Learn by doing. Install Go Fish, land a first fish, and try it safely against the simulator.
+  - id: how-to
+    title: How-to guides
+    blurb: Steps for one task each, from installing the addon to recording sessions and profiling.
+  - id: reference
+    title: Reference
+    blurb: Every setting, flag, file, state and format, to look up while you work.
+  - id: explanation
+    title: Explanation
+    blurb: Why it works the way it does, from finding the bobber to the state machine.
