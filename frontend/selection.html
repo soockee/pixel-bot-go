@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Selection</title>
+  <link rel="stylesheet" href="/src/selection.css">
+  <script type="module" src="/src/selection.ts"></script>
+</head>
+<body>
+  <div class="area" aria-hidden="true">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+  </div>
+  <div class="toolbar">
+    <span class="size" id="size"></span>
+    <button type="button" class="primary" id="confirm">Use area <kbd>Enter</kbd></button>
+    <button type="button" id="cancel">Cancel <kbd>Esc</kbd></button>
+    <button type="button" id="clear">Clear</button>
+  </div>
+  <p class="hint">Drag to move, drag an edge to resize</p>
+</body>
+</html>

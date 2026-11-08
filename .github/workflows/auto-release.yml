@@ -80,11 +80,23 @@ jobs:
           git tag ${{ steps.next_tag.outputs.next_tag }}
           git push origin ${{ steps.next_tag.outputs.next_tag }}
 
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+
+      - name: Build frontend
+        if: ${{ !contains(github.event.head_commit.message, 'skip-release') }}
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
       - name: Build Windows binary
         if: ${{ !contains(github.event.head_commit.message, 'skip-release') }}
         run: |
           mkdir -p dist
-          GOOS=windows GOARCH=amd64 go build -o dist/pixel-bot-go-windows-amd64.exe .
+          GOOS=windows GOARCH=amd64 go build -tags production -o dist/pixel-bot-go-windows-amd64.exe .
 
       - name: Generate checksum
         if: ${{ !contains(github.event.head_commit.message, 'skip-release') }}

@@ -97,7 +97,7 @@ func TestRecorderStopsAndFinalizesWithoutOverwriting(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "session.jsonl")
 	// Cancel once the input listeners are installed. An empty handle has no eligible
 	// client area, so this test never records desktop activity.
-	if err := run(ctx, windowTarget{}, out, cancelOnArmed{cancel}, nil, true, "test-session", time.Now(), ""); err != nil {
+	if err := run(ctx, windowTarget{}, out, cancelOnArmed{cancel}, false, true, "test-session", time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	raw, err := os.ReadFile(out)
@@ -118,7 +118,7 @@ func TestRecorderStopsAndFinalizesWithoutOverwriting(t *testing.T) {
 		end.ButtonEvents != 0 || end.Segments != 0 || dec.More() {
 		t.Fatalf("unexpected session file: %s", raw)
 	}
-	if err := run(ctx, windowTarget{}, out, cancelOnArmed{cancel}, nil, true, "test-session", time.Now(), ""); !os.IsExist(err) {
+	if err := run(ctx, windowTarget{}, out, cancelOnArmed{cancel}, false, true, "test-session", time.Now()); !os.IsExist(err) {
 		t.Fatalf("expected existing output to be refused, got %v", err)
 	}
 	unchanged, err := os.ReadFile(out)

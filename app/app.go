@@ -1,69 +1,111 @@
 package app
 
 import (
-	"fmt"
+	"context"
+	"image"
 	"log/slog"
+	"net/http"
 	"time"
+
+	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/debug"
 	"github.com/soocke/pixel-bot-go/domain/action"
-	"github.com/soocke/pixel-bot-go/ui/theme"
-	"github.com/soocke/pixel-bot-go/ui/view"
-
-	//lint:ignore ST1001 Dot import is intentional for concise Tk widget DSL builders.
-	. "modernc.org/tk9.0"
+	"github.com/soocke/pixel-bot-go/frontend"
+	"github.com/soocke/pixel-bot-go/ui/desktop"
 )
 
-const tick = 33 * time.Millisecond
+const (
+	tick         = 33 * time.Millisecond
+	devtoolsPort = "9222" // WebView2 DevTools on localhost, debug mode only
+)
+
+func init() { application.RegisterEvent[desktop.State](desktop.StateEvent) }
 
 type app struct {
 	container *AppContainer
 	logger    *slog.Logger
 	start     time.Time
-	afterID   string
+	loop      *desktop.Loop
+	wails     *application.App
+	main      *application.WebviewWindow
+	overlay   *application.WebviewWindow // the selection overlay while it is open; loop only
 }
 
-// NewApp creates the main window and all components.
+// NewApp builds the components and the window.
 func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Logger, trace TraceOptions) *app {
-	a := &app{container: BuildContainer(cfg, logger, trace), logger: logger}
+	a := &app{logger: logger}
+	a.container = BuildContainer(cfg, logger, trace, func(s desktop.State) { a.wails.Event.Emit(desktop.StateEvent, s) })
+	c := a.container
+	a.loop = desktop.NewLoop(a.tick)
+	service := desktop.NewService(a.loop, c.View, desktop.Commands{
+		ListWindows: func() []string {
+			titles, err := action.ListWindows()
+			if err != nil {
+				logger.Error("list windows failed", "error", err)
+			}
+			return titles
+		},
+		SetWindow:        a.setWindow,
+		ToggleCapture:    a.toggleCapture,
+		ToggleRecord:     c.RecordPresenter.Toggle,
+		OpenSelection:    a.openSelection,
+		ConfirmSelection: a.confirmSelection,
+		CloseSelection:   a.closeSelection,
+		Running:          c.Capture.Enabled,
+		Exit:             func() { go a.wails.Quit() }, // Quit waits for the loop, which runs this
+	}, c.Selection, c.Recordings, cfg, config.FilePath, logger)
 
-	App.WmTitle(title)
-	WmProtocol(App, "WM_DELETE_WINDOW", a.exitHandler)
-	originX, originY := 0, 0
-	if b, ok := action.ScreenBounds(cfg.Screen); ok {
-		originX, originY = b.Min.X, b.Min.Y
-	} else if cfg.Screen > 0 {
-		logger.Warn("configured screen not found; using default placement", "screen", cfg.Screen)
+	assets := http.NewServeMux()
+	assets.Handle(desktop.FramesPath, c.Frames)
+	assets.Handle(desktop.RecordingsPath, c.Recordings)
+	assets.Handle("/", application.BundledAssetFileServer(frontend.Dist()))
+	opts := application.Options{
+		Name:       title,
+		Services:   []application.Service{application.NewService(service)},
+		Assets:     application.AssetOptions{Handler: assets},
+		OnShutdown: a.shutdown,
 	}
-	WmGeometry(App, fmt.Sprintf("%dx%d+%d+%d", width, height, originX+100, originY+100))
-	theme.InitStyles()
+	if cfg.Debug {
+		// Lets agents drive and inspect the UI over the DevTools protocol.
+		opts.Windows.AdditionalBrowserArgs = []string{"--remote-debugging-port=" + devtoolsPort}
+	}
+	a.wails = application.New(opts)
+	a.main = a.wails.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name: "main", Title: title, Width: width, Height: height, MinWidth: 880, MinHeight: 600,
+		BackgroundColour: application.NewRGB(0x12, 0x13, 0x14), URL: "/", Hidden: true,
+	})
+	a.main.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { go a.wails.Quit() })
+	// The native window exists only once the app runs, so it is placed then.
+	a.wails.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
+		if b, ok := action.ScreenBounds(cfg.Screen); ok {
+			p := a.main.PhysicalBounds()
+			a.main.SetPhysicalBounds(application.Rect{X: b.Min.X + 100, Y: b.Min.Y + 100, Width: p.Width, Height: p.Height})
+		} else if cfg.Screen > 0 {
+			logger.Warn("configured screen not found; using default placement", "screen", cfg.Screen)
+		}
+		a.main.Show()
+	})
 	return a
 }
 
-// Run builds the UI, starts the update tick and blocks until the window is closed.
+// Run starts the UI loop and blocks until the app quits.
 func (a *app) Run() error {
 	c := a.container
 	cfg := c.Config
 	if cfg.AutoWindow != "" {
-		c.Capture.SetWindow(cfg.AutoWindow)
+		a.setWindow(cfg.AutoWindow)
 	}
-	c.RootView.Build(view.RootCallbacks{
-		ListWindows: func() []string {
-			titles, err := action.ListWindows()
-			if err != nil {
-				a.logger.Error("list windows failed", "error", err)
-			}
-			return titles
-		},
-		Window:        c.Capture.Window,
-		SetWindow:     c.Capture.SetWindow,
-		ToggleCapture: a.toggleCapture,
-		ToggleRecord:  c.RecordPresenter.Toggle,
-		OpenSelection: c.Selection.OpenOrFocus,
-		Exit:          a.exitHandler,
-	})
+	c.View.SetInfo(cfg.DryRun, cfg.StopKey, cfg.DarkMode)
+	c.View.SetSelection(desktop.RectOf(c.Selection.ActiveRect()), false)
+	c.View.SetStatus("Ready")
 	a.watchStopKey()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go a.loop.Run(ctx, tick)
 
 	a.start = time.Now()
 	if cfg.Debug || a.hasTraceObserver() {
@@ -71,61 +113,129 @@ func (a *app) Run() error {
 	}
 	if cfg.AutoStart {
 		a.logger.Info("auto-start requested", "window", c.Capture.Window())
-		TclAfter(500*time.Millisecond, a.toggleCapture)
+		time.AfterFunc(500*time.Millisecond, func() { a.loop.Do(a.toggleCapture) })
 	}
-	a.scheduleTick()
-	App.Wait()
-	return nil
+	return a.wails.Run()
 }
 
-func (a *app) exitHandler() {
-	if a.afterID != "" {
-		TclAfterCancel(a.afterID)
+// tick runs the presenters and sends the state; it runs on the loop.
+func (a *app) tick() {
+	c := a.container
+	c.Loop.Tick()
+	x, y, locked := c.FSM.TargetCoordinates()
+	var p desktop.Point
+	if sel := c.Selection.ActiveRect(); locked && sel != nil {
+		p = desktop.Point{X: x - sel.Min.X, Y: y - sel.Min.Y}
 	}
-	a.container.RecordPresenter.Stop()
-	a.container.Engine.Stop()
-	a.container.FSM.Close()
-	Destroy(App)
+	c.View.SetTarget(p, locked && c.Capture.Enabled())
+	c.View.Flush()
 }
 
-func (a *app) scheduleTick() {
-	a.afterID = TclAfter(tick, func() {
-		a.container.Loop.Tick()
-		a.scheduleTick()
+// shutdown stops recording and capture before the app exits.
+func (a *app) shutdown() {
+	a.loop.Do(func() {
+		if a.overlay != nil {
+			a.overlay.Close()
+		}
+		a.container.RecordPresenter.Stop()
+		a.container.Engine.Stop()
 	})
+	a.container.FSM.Close()
+}
+
+func (a *app) setWindow(title string) {
+	a.container.Capture.SetWindow(title)
+	a.container.View.SetWindow(title)
 }
 
 // toggleCapture delegates to the capture presenter after checking that a start is safe.
 func (a *app) toggleCapture() {
-	if !a.container.Capture.Enabled() {
-		if problem := a.container.startProblem(); problem != "" {
+	c := a.container
+	if !c.Capture.Enabled() {
+		if problem := c.startProblem(); problem != "" {
 			a.logger.Error("start refused: " + problem)
-			a.container.RootView.SetStatus("Cannot start: " + problem)
+			c.View.SetStatus("Cannot start: " + problem)
 			return
 		}
 	}
-	a.container.RootView.SetStatus("Ready")
-	a.container.CapturePresenter.Toggle()
+	c.View.SetStatus("Ready")
+	c.CapturePresenter.Toggle()
 }
 
-// watchStopKey registers the global stop hotkey, which also ends a recording. It
-// goes straight to the FSM so it still works if Tk stalls; the capture presenter
-// then stops capture.
+// openSelection shows the overlay that sets the capture area, over the
+// current selection or centred on the configured screen.
+func (a *app) openSelection() {
+	if a.overlay != nil {
+		a.overlay.Focus()
+		return
+	}
+	screen, ok := action.ScreenBounds(a.container.Config.Screen)
+	if !ok {
+		screen = image.Rect(0, 0, 1920, 1080)
+	}
+	r := a.container.Selection.Start(screen)
+	w := a.wails.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name: "selection", Title: "Selection", URL: "/selection.html",
+		Frameless: true, AlwaysOnTop: true, BackgroundType: application.BackgroundTypeTransparent,
+		Windows: application.WindowsWindow{HiddenOnTaskbar: true}, Hidden: true,
+	})
+	bounds := application.Rect{X: r.Min.X, Y: r.Min.Y, Width: r.Dx(), Height: r.Dy()}
+	w.SetPhysicalBounds(bounds)
+	w.Show()
+	w.SetPhysicalBounds(bounds) // the first Show sizes a window to its options
+	a.logger.Debug("selection overlay opened", "want", bounds, "got", w.PhysicalBounds())
+	w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
+		go a.loop.Do(func() { a.forgetOverlay(w) })
+	})
+	a.overlay = w
+	a.container.View.SetSelection(desktop.RectOf(a.container.Selection.ActiveRect()), true)
+}
+
+// confirmSelection selects the overlay's area and closes it.
+func (a *app) confirmSelection() {
+	if a.overlay == nil {
+		return
+	}
+	b := a.overlay.PhysicalBounds()
+	a.container.Selection.Set(image.Rect(b.X, b.Y, b.X+b.Width, b.Y+b.Height))
+	a.closeSelection()
+}
+
+func (a *app) closeSelection() {
+	if w := a.overlay; w != nil {
+		a.forgetOverlay(w)
+		w.Close()
+	}
+}
+
+// forgetOverlay drops w, unless a newer overlay replaced it.
+func (a *app) forgetOverlay(w *application.WebviewWindow) {
+	if a.overlay != w {
+		return
+	}
+	a.overlay = nil
+	a.container.View.SetSelection(desktop.RectOf(a.container.Selection.ActiveRect()), false)
+}
+
+// watchStopKey registers the global stop hotkey, which also ends a recording.
+// It goes straight to the FSM so it still works if the window stalls; the
+// capture presenter then stops capture.
 func (a *app) watchStopKey() {
-	key := a.container.Config.StopKey
+	c := a.container
+	key := c.Config.StopKey
 	vk, ok := action.ParseVK(key)
 	if !ok {
 		a.logger.Error("unknown stop key", "key", key)
-		a.container.RootView.SetStatus("Stop hotkey unavailable: unknown key " + key)
+		c.View.SetStatus("Stop hotkey unavailable: unknown key " + key)
 		return
 	}
 	stop := func() {
-		a.container.FSM.EventHalt()
-		a.container.RecordPresenter.RequestStop()
+		c.FSM.EventHalt()
+		c.RecordPresenter.RequestStop()
 	}
 	if err := action.WatchHotkey(vk, stop); err != nil {
 		a.logger.Error("stop hotkey unavailable", "key", key, "error", err)
-		a.container.RootView.SetStatus("Stop hotkey unavailable: " + key + " is in use")
+		c.View.SetStatus("Stop hotkey unavailable: " + key + " is in use")
 	}
 }
 

@@ -4,8 +4,8 @@ Hands-on walkthroughs to achieve common first wins. Derived from existing detect
 
 ---
 ## 1. First Simulator Run
-1. Launch the simulator with `go run ./cmd/fakegame` and the desktop app with `go run . -dry-run`. Keep the simulator window visible.
-2. Select a capture region around the simulator target.
+1. Build the frontend once with `npm ci` and `npm run build` in `frontend/`. Launch the simulator with `go run ./cmd/fakegame` and the desktop app with `go run . -dry-run`. Keep the simulator window visible.
+2. On the **Live** tab, click **Select** and drag the overlay over the simulator, then press Enter.
 3. Start capture; watch state: `waiting_focus → searching`.
 4. When `monitoring` appears, a match was found; observe ROI stability.
 5. Wait for a splash and check the log for the recorded reel and recast actions.

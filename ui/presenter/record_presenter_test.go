@@ -13,8 +13,8 @@ type mockRecordView struct {
 	status    string
 }
 
-func (v *mockRecordView) SetRecording(b bool) { v.recording = b }
-func (v *mockRecordView) SetStatus(s string)  { v.status = s }
+func (v *mockRecordView) SetRecording(dir string) { v.recording = dir != "" }
+func (v *mockRecordView) SetStatus(s string)      { v.status = s }
 
 func blockingJob(ctx context.Context) error {
 	<-ctx.Done()
@@ -24,7 +24,7 @@ func blockingJob(ctx context.Context) error {
 func newRecordPresenter(run func(context.Context) error) (*RecordPresenter, *mockRecordView) {
 	view := &mockRecordView{}
 	prepare := func() (RecordJob, error) { return RecordJob{Dir: "datasets/a", Run: run}, nil }
-	return NewRecordPresenter(prepare, view, "127.0.0.1:6070"), view
+	return NewRecordPresenter(prepare, view), view
 }
 
 func TestRecordPresenterStartsAndStops(t *testing.T) {
@@ -32,7 +32,7 @@ func TestRecordPresenterStartsAndStops(t *testing.T) {
 		p, view := newRecordPresenter(blockingJob)
 
 		p.Toggle()
-		if !view.recording || !strings.Contains(view.status, "127.0.0.1:6070") {
+		if !view.recording || view.status != "Recording to datasets/a" {
 			t.Fatalf("recording=%v status=%q", view.recording, view.status)
 		}
 
@@ -47,7 +47,7 @@ func TestRecordPresenterStartsAndStops(t *testing.T) {
 
 func TestRecordPresenterShowsWhyItCannotStart(t *testing.T) {
 	view := &mockRecordView{}
-	p := NewRecordPresenter(func() (RecordJob, error) { return RecordJob{}, errors.New("no window") }, view, "x")
+	p := NewRecordPresenter(func() (RecordJob, error) { return RecordJob{}, errors.New("no window") }, view)
 
 	p.Toggle()
 

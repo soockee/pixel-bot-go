@@ -18,9 +18,9 @@ import (
 	"github.com/soocke/pixel-bot-go/internal/playtrace"
 	"github.com/soocke/pixel-bot-go/internal/recorder"
 	"github.com/soocke/pixel-bot-go/internal/traceobserver"
+	"github.com/soocke/pixel-bot-go/ui/desktop"
 	"github.com/soocke/pixel-bot-go/ui/model"
 	"github.com/soocke/pixel-bot-go/ui/presenter"
-	"github.com/soocke/pixel-bot-go/ui/view"
 )
 
 // AppContainer holds the components the app talks to after wiring.
@@ -29,8 +29,10 @@ type AppContainer struct {
 	Capture          *model.CaptureModel
 	FSM              *fishing.FishingFSM
 	Engine           *fishing.Engine
-	RootView         *view.RootView
-	Selection        *view.SelectionOverlay
+	View             *desktop.View
+	Frames           *desktop.Frames
+	Selection        *desktop.Selection
+	Recordings       *desktop.Recordings
 	CapturePresenter *presenter.CapturePresenter
 	RecordPresenter  *presenter.RecordPresenter
 	Loop             *presenter.Loop
@@ -44,11 +46,13 @@ type TraceOptions struct {
 	Start  time.Time
 }
 
-// BuildContainer constructs and wires all components. It creates no Tk widgets.
-func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions) *AppContainer {
-	c := &AppContainer{Config: cfg, Capture: &model.CaptureModel{}}
-	c.RootView = view.NewRootView(cfg, config.FilePath, logger)
-	c.Selection = view.NewSelectionOverlay(cfg, config.FilePath, logger)
+// BuildContainer constructs and wires all components. It opens no window;
+// emit sends the window state to the frontend.
+func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions, emit func(desktop.State)) *AppContainer {
+	c := &AppContainer{Config: cfg, Capture: &model.CaptureModel{}, Frames: desktop.NewFrames()}
+	c.View = desktop.NewView(c.Frames, emit)
+	c.Selection = desktop.NewSelection(cfg, config.FilePath, logger)
+	c.Recordings = desktop.NewRecordings(func() string { return cfg.RecordDir })
 	inFront := func() bool {
 		title, err := action.ForegroundWindowTitle()
 		return err == nil && title != "" && strings.EqualFold(title, strings.TrimSpace(c.Capture.Window()))
@@ -90,19 +94,19 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions)
 	}
 	c.Engine = fishing.NewEngine(c.frames(), sound, c.FSM, detectors, cfg, logger)
 
-	c.CapturePresenter = presenter.NewCapturePresenter(c.Capture, c.Engine, c.FSM, c.RootView)
-	c.RecordPresenter = presenter.NewRecordPresenter(c.prepareRecording, c.RootView, recorder.DefaultListen)
+	c.CapturePresenter = presenter.NewCapturePresenter(c.Capture, c.Engine, c.FSM, c.View)
+	c.RecordPresenter = presenter.NewRecordPresenter(c.prepareRecording, c.View)
 	focusWatcher := presenter.NewFocusWatcher(c.FSM, inFront)
 	c.FSM.AddListener(func(prev, next fishing.FishingState) {
 		focusWatcher.OnState(prev, next)
 		c.CapturePresenter.OnState(prev, next)
 	})
 	c.Loop = presenter.NewLoop(
-		presenter.NewSessionPresenter(model.NewSessionModel(), c.Capture, c.RootView),
-		presenter.NewFSMPresenter(c.FSM, c.RootView),
+		presenter.NewSessionPresenter(model.NewSessionModel(), c.Capture, c.View),
+		presenter.NewFSMPresenter(c.FSM, c.View),
 		c.CapturePresenter,
 		c.RecordPresenter,
-		presenter.NewPreviewPresenter(c.Engine, c.RootView),
+		presenter.NewPreviewPresenter(c.Engine, c.View),
 	)
 	return c
 }
@@ -138,7 +142,7 @@ func (c *AppContainer) prepareRecording() (presenter.RecordJob, error) {
 		Dir:    filepath.Join(c.Config.RecordDir, time.Now().Format("20060102-150405")),
 		Frames: capture.Source{Region: func() *image.Rectangle { return &region }},
 		Window: c.Capture.Window(),
-		Listen: recorder.DefaultListen,
+		Live:   true,
 		Keys:   c.Config.RecordKeys,
 		Status: io.Discard,
 	}

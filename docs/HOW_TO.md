@@ -108,12 +108,12 @@ Restart the game or type `/reload`. In NaowhForever's Glimmer settings, switch o
 ## Record a Session
 A recording saves the screen and your input together, on the same clock, and sends no input.
 
-1. Start the app, pick the target window and click **Selection** to set the area. Click **Refresh** if the window is missing.
-2. Click **Record**. The status bar shows the new folder and the dashboard address.
+1. Start the app. On the **Live** tab, pick the target window (the refresh button reloads the list) and click **Select** to set the capture area.
+2. Open the **Recorder** tab and click **Record**. The new recording opens and follows your input live.
 3. Focus the game and play by hand.
-4. Press the stop hotkey (default F10), or click **Stop Recording** in the app.
+4. Press the stop hotkey (default F10), or click **Stop recording** in the app.
 
-Each recording gets a new timestamped folder holding `frames/`, `input.jsonl` and the game's sound in `audio.wav`. You still hear the game while it records, and music or voice chat from other programs is not recorded. Set **Recording Folder** and **Record Keys** under Show Config. The default `datasets/` folder is ignored by git. Start stays disabled while recording, and Record while the bot runs.
+Each recording gets a new timestamped folder holding `frames/`, `input.jsonl` and the game's sound in `audio.wav`. You still hear the game while it records, and music or voice chat from other programs is not recorded. Set **Recording folder** and **Record keys** on the **Settings** tab. The default `datasets/` folder is ignored by git. Start stays disabled while recording, and Record while the bot runs.
 
 For scripts and agents, the same recording runs without a window: `pixel-bot-go.exe -record <dir> -window "<title>"`, stopped with Ctrl+C, using the selection saved in the config. Leave out `-window` to record frames only, which then need `labels.json` written by hand, and add `-no-keys` to skip keys. `-list-windows` prints the titles.
 
@@ -123,16 +123,7 @@ The JSONL keeps the raw button transitions and adds one gesture per completed ho
 
 ### View a recording
 
-The status bar shows the dashboard address while recording. Open `http://127.0.0.1:6070/` to view the latest frame, movement density, completed click locations, a recent cursor path, raw right-button camera motion, and a log of gestures and shortcuts. The page updates while recording.
-
-To review a saved session, or a trace file from an earlier recorder:
-
-```powershell
-.\pixel-bot-go.exe -view datasets/zone1-day
-.\pixel-bot-go.exe -view fishing-recordings/manual-002.jsonl
-```
-
-Use `-listen 127.0.0.1:0` to select a free local port or `-listen ""` to disable the dashboard during recording. The server is loopback-only and serves the selected recording for that process.
+The **Recorder** tab lists the recordings in the recording folder, newest first. Pick one to see its counts, the latest frame, the cursor map (movement density, completed click locations and the recent path), the raw right-button camera motion, the activity of the last minute and a log of gestures and shortcuts. A recording in progress updates live. Dry-run and fake-game traces in a recording folder show their cast and bite counts instead.
 
 ### Evaluate detectors
 
@@ -157,7 +148,7 @@ This compares every registered technique, one column each. Use `-locator` or `-b
 1. Implement `detect.Locator` or `detect.BiteDetector`.
 2. Add one line for it in `domain/detect/registry.go`.
 3. Run `detecteval`. The new technique appears as a column.
-4. To use it in the app, enter its name under Show Config, in **Locator** or **Bite Detector**.
+4. To use it in the app, pick it on the **Settings** tab, under **Locator** or **Bite detector**.
 
 ### Export data for training
 
@@ -184,7 +175,7 @@ go run ./cmd/responsebench -seeds 200000 -out responsebench-results/compare-001
 go run ./cmd/responsebench -compare -manual-cast mouse:x1 -manual-reel mouse:right fishing-recordings/session-001/input.jsonl fishing-recordings/game-001.jsonl fishing-recordings/app-001.jsonl responsebench-results/compare-001/playtrace.jsonl
 ```
 
-Set the manual mappings to your bindings, for example `key:Shift+B` or `mouse:x2`, and add `-json` before the trace paths for machine-readable output. Omitting a mapping leaves those manual actions unlabeled. Use `pixel-bot-go.exe -view <path>` to inspect any schema 3 trace in the dashboard.
+Set the manual mappings to your bindings, for example `key:Shift+B` or `mouse:x2`, and add `-json` before the trace paths for machine-readable output. Omitting a mapping leaves those manual actions unlabeled. To inspect a schema 3 trace, put it as `input.jsonl` in a folder inside the recording folder and open it on the **Recorder** tab.
 
 ## Next Steps When Stuck
 Investige profile `.pb.gz` files; Compare both baseline and later snapshots plus goroutine counts. use top command to identify hotspots or retention paths

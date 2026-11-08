@@ -5,12 +5,14 @@ Visual Response Lab is a Windows Go application for visual event and response ex
 ## Stack
 
 - Go 1.26. Module path is `github.com/soocke/pixel-bot-go` (one `e`), which differs from the GitHub owner `soockee`; use the `go.mod` spelling in imports.
-- UI: `modernc.org/tk9.0` (pure-Go Tk). Win32 access via `golang.org/x/sys`.
+- UI: Wails v3 (`github.com/wailsapp/wails/v3`, WebView2, no cgo) with a Vite + TypeScript frontend in `frontend/`. Win32 access via `golang.org/x/sys`.
 - Capture and input injection (`domain/capture/capture_windows.go`, `domain/action/actions_windows.go`) are `_windows.go` files. Builds and runs on Windows only; the app needs Administrator to inject input.
 
 ## Commands
 
 ```bash
+(cd frontend && npm ci && npm run build)   # frontend, embedded by go build; needed once and after frontend changes
+(cd frontend && npm run bindings)   # regenerate frontend/bindings after changing ui/desktop types or Service methods (needs wails3 CLI v3.1.0)
 go build -o pixel-bot-go.exe .      # build
 go test ./...                       # run all tests
 go vet ./...                        # static checks
@@ -18,7 +20,7 @@ gofmt -l .                          # must print nothing
 GOOS=windows GOARCH=amd64 go build ./...   # cross-compile check from non-Windows
 ```
 
-There is no Makefile. `.github/workflows/ci.yml` runs gofmt, vet, tests and the race detector on Windows for pull requests, and `auto-release.yml` runs it before every release. The race step stays non-blocking until it has a clean run.
+There is no Makefile. Without a frontend build the window is empty (`frontend/dist` holds only `.gitkeep`). `.github/workflows/ci.yml` builds the frontend, then runs gofmt, vet, tests and the race detector on Windows for pull requests, and `auto-release.yml` runs it before every release. The race step stays non-blocking until it has a clean run.
 
 `domain/detect/bite_detector_test.go` holds failing tests for known bugs, skipped through `knownBug`. Set `RUN_KNOWN_BUGS=1` to run them, and delete the `knownBug` call in the change that fixes the bug.
 
@@ -27,20 +29,21 @@ There is no Makefile. `.github/workflows/ci.yml` runs gofmt, vet, tests and the 
 | Path | Role |
 |------|------|
 | `main.go`, `logger.go` | Entry point; loads `pixle_bot_config.json` (sic, the filename is misspelled on purpose, keep it), sets up slog, optional pprof on `localhost:6060` when `debug` is true |
-| `app/` | `App` wrapper and `AppContainer` (`container.go`) that wires models, services, presenters and the root view |
+| `app/` | Wails application, windows and selection overlay (`app.go`), and `AppContainer` (`container.go`) that wires models, presenters and the desktop adapter |
 | `config/` | `Config` struct, `DefaultConfig`, `Validate`, `Load` (JSON) |
 | `domain/capture/` | `Source.Next` grabs one frame of the selected region; `Frame.Origin` is its screen position |
 | `domain/detect/` | `Locator` and `BiteDetector` interfaces, `MarkerLocator` (the app's locator), NCC template matching (evaluation only), motion bite detector |
 | `domain/fishing/` | `Engine` (`engine.go`, the capture and detection loop) and the FSM (`fsm.go`: states, deadline, input) |
 | `domain/action/` | Key press, cursor move, right click (Windows input injection), `Guard` (safety checks on real input), global stop hotkey |
-| `ui/model` `ui/presenter` `ui/view` | MVP-style UI: models hold state, presenters connect domain to views, views are Tk widgets |
-| `ui/images`, `ui/theme` | PNG encoding for Tk, theming |
+| `ui/model` `ui/presenter` | MVP-style UI: models hold state, presenters connect domain to view interfaces. No toolkit dependency |
+| `ui/desktop` | Adapter between presenters and the window, no toolkit dependency: `View` turns presenter calls into one `State`, `Service` is what the frontend calls, `Loop` runs both on one goroutine, plus settings validation, selection, recordings and preview frames |
+| `frontend/` | Vite + TypeScript frontend (`src/`: `live.ts`, `recorder.ts`, `settings.ts`, `selection.ts` for the overlay). `bindings/` is generated from `ui/desktop`; `assets.go` embeds `dist/` |
 | `debug/` | `/debug/state` handler |
 | `addon/BobberMarker/` | WoW: Forever addon (Lua) that draws the magenta brackets `MarkerLocator` finds, only while fishing. No Lua tooling in the repo; check it in the client |
 | `assets/` | Embedded `fishing_target.png` template (`embed.go`), used by the simulator and NCC evaluation |
 | `cmd/detecteval/` | Compares every registered `Locator` and `BiteDetector` on recorded datasets, writes `labels.json` from a session with `-label`, and exports each cast's watched area with `-export`. See `docs/REFERENCE.md` |
 | `internal/dataset/` | Dataset format, labels and the frame loop |
-| `internal/recorder/` | `-record` sessions (frames plus mouse and key input in one window), the loopback dashboard and `-view` |
+| `internal/recorder/` | `-record` sessions (frames plus mouse and key input in one window) and `ReadEvents` for the Recorder tab |
 | `cmd/responsebench/` | Standalone virtual-clock benchmark of pacing and retry policies; run `go run ./cmd/responsebench`. See `docs/REFERENCE.md`. Output goes to the git-ignored `responsebench-results/` |
 
 ## Architecture notes
@@ -50,6 +53,7 @@ There is no Makefile. `.github/workflows/ci.yml` runs gofmt, vet, tests and the 
 - Techniques are exchangeable: implement `detect.Locator` or `detect.BiteDetector` and add one line to `domain/detect/registry.go`. The `locator` and `bite_detector` config values pick them in the app and config panel, and `detecteval` compares them all by default.
 - Algorithms plug in through `detect.Locator` and `detect.BiteDetector` (a `detect.SoundBiteDetector` also gets the game's sound through `fishing.SoundSource`), frames through `fishing.FrameSource`, and input through `fishing.ActionCallbacks`, so tests substitute fakes instead of touching Win32. Keep those seams when adding input, capture or detection behavior. Define other interfaces where they are consumed.
 - The bobber is whatever the addon marks: `detect.MarkerLocator` returns the box inside its corner brackets, the box centre is the click point, and the box is the area watched for a bite. Without the addon the bot finds nothing and halts after `max_failed_casts`.
+- UI and logic: the frontend only renders `desktop.State` (the `state` event) and calls `desktop.Service`; it holds no rules. Validation, defaults and decisions live in Go (`ui/desktop`, presenters, domain). `ui/desktop` and `ui/presenter` do not import Wails; only `app/` and `frontend/` know the toolkit. Add a field to `State` or a method to `Service`, regenerate the bindings, then render it.
 - Build all wiring in `app/container.go`; do not construct services inside presenters or views. Constructors require their dependencies, so do not add nil guards for them.
 
 ## Conventions
@@ -64,13 +68,14 @@ There is no Makefile. `.github/workflows/ci.yml` runs gofmt, vet, tests and the 
 
 - Logs: the app writes JSON slog entries to `pixel_bot_logs.json` (truncated each start). FSM transitions are logged at Info (`fishing state transition`, fields `from`/`to`), plus `cast action executed` and `reel action executed`.
 - Live state: with `"debug": true` in `pixle_bot_config.json`, `http://localhost:6060/debug/state` returns JSON (`fsm_state`, `capture_running`, `selected_window`, `target`, `uptime_seconds`, `time`) next to the pprof endpoints. Implemented in `debug/state.go`, registered in `app.Run`.
-- Replay tests: `domain/fishing/engine_test.go` runs rendered fake-game frames through the Engine, real matcher, real bite detector and FSM with recorded fake actions, without Tk. Extend it for new detection or FSM behavior. FSM and Engine tests use `testing/synctest`, so timers run on a fake clock.
-- Fake game: `go run ./cmd/fakegame [-scenario file.json] [-title "Fake Game"]` opens a window with a noisy scene, the real bobber template with the addon's brackets and scripted bites (default loop: empty 2s, bobber 4s, splash 0.6s, empty 3s). Each phase change prints a JSON line on stdout (`t`, `phase`, `bobber` rect), to correlate with `pixel_bot_logs.json`. Scene logic lives in `internal/fakegame` and is unit-tested against the real template matcher and bite detector. Scenario JSON fields: `width`, `height`, `bobber_x`, `bobber_y`, `bobber_scale`, `seed`, `loop`, `splash_lum`, `timeline` (`[{"phase":"empty|bobber|splash","ms":N}]`).
+- Driving the UI: in debug mode the WebView2 DevTools listen on `localhost:9222` (`curl localhost:9222/json` lists the main page and, while open, `selection.html`). Use the DevTools protocol (`Runtime.evaluate` to click elements such as `#tab-recorder` or `#start`, `Page.captureScreenshot` for a picture). GDI screen captures miss the transparent selection overlay.
+- Replay tests: `domain/fishing/engine_test.go` runs rendered fake-game frames through the Engine, real matcher, real bite detector and FSM with recorded fake actions, without a window. Extend it for new detection or FSM behavior. FSM and Engine tests use `testing/synctest`, so timers run on a fake clock.
+- Fake game: `go run ./cmd/fakegame [-scenario file.json] [-title "Fake Game"]` opens a frameless window with a noisy scene, the real bobber template with the addon's brackets and scripted bites (default loop: empty 2s, bobber 4s, splash 0.6s, empty 3s). Each phase change prints a JSON line on stdout (`t`, `phase`, `bobber` rect), to correlate with `pixel_bot_logs.json`. Scene logic lives in `internal/fakegame` and is unit-tested against the real template matcher and bite detector. Scenario JSON fields: `width`, `height`, `bobber_x`, `bobber_y`, `bobber_scale`, `seed`, `loop`, `splash_lum`, `timeline` (`[{"phase":"empty|bobber|splash","ms":N}]`).
 - Dry run: `pixel-bot-go.exe -dry-run` (or `PIXELBOT_DRY_RUN=1`) logs key presses, cursor moves and clicks as `dry-run action` entries instead of injecting them; no Administrator needed. `Config.DryRun` is `json:"-"` so it is never saved. Implemented in `domain/action/dryrun.go`, wired in `app/container.go`.
 - Headless run: `-auto-window "<title>" -auto-start` preselects the target window and starts capture 0.5 s after launch; the capture region comes from `selection_x/y/w/h` in `pixle_bot_config.json`. Search results are logged at Debug as `detection.search` (`found`, `score`, `scale`, `x`, `y`). Fake game window position: `-pos x,y`.
 - Focus: the focus watcher runs for the whole run, so a test stalls in `focus` (`waiting_focus`) if the fake game loses focus. Dry-run skips `action.Guard`.
 - Screens: `-screen N` (or `"screen": N` in the config) opens the app windows and the selection overlay on monitor N (1 = primary, others left to right); `-list-screens` prints the monitors as JSON. Test runs always use screen 2, to keep test windows separate from the primary desktop. Selection coordinates are absolute and can be negative; capture uses the virtual desktop bounds. `fakegame` takes the same `-screen` and a `-pos` relative to it.
-- Recording: people use the Record button (`ui/presenter/record_presenter.go`), which starts the same `recorder.Session`. Anything a person does goes through the UI; CLI flags are for scripts and agents. `pixel-bot-go.exe -record <dir> [-window "<title>"]` saves frames of the saved selection, plus `input.jsonl` and the process's sound in `audio.wav` (`capture.CaptureAudio`, process loopback) for that window, until Ctrl+C. It opens no app window and sends no input. The dashboard is at `127.0.0.1:6070`; `-view <path>` reopens a recording. Recordings go under the git-ignored `datasets/` or `fishing-recordings/`; never commit them.
+- Recording: people use the Record button (`ui/presenter/record_presenter.go`), which starts the same `recorder.Session`. Anything a person does goes through the UI; CLI flags are for scripts and agents. `pixel-bot-go.exe -record <dir> [-window "<title>"]` saves frames of the saved selection, plus `input.jsonl` and the process's sound in `audio.wav` (`capture.CaptureAudio`, process loopback) for that window, until Ctrl+C. It opens no app window and sends no input. The Recorder tab shows recordings, live while they record. Recordings go under the git-ignored `datasets/` or `fishing-recordings/`; never commit them.
 - End-to-end procedure (build, launch the simulator and desktop app, drive the UI, read signals, judge a healthy cycle): `.claude/skills/run-app/SKILL.md`.
 
 ## Release and repository hygiene

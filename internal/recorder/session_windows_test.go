@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"context"
 	"image"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,34 +72,5 @@ func TestSessionWithUnknownWindowCreatesNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); !os.IsNotExist(err) {
 		t.Errorf("directory exists: %v", err)
-	}
-}
-
-func TestDashboardServesTheLatestFrame(t *testing.T) {
-	const address = "127.0.0.1:6070"
-	frames := t.TempDir()
-	for name, content := range map[string]string{"000000100.png": "old", "000000200.png": "new", "000000300.png.tmp": "partial"} {
-		if err := os.WriteFile(filepath.Join(frames, name), []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	trace := createDashboardTrace(t, "{\"type\":\"move\"}\n")
-	get := func(handler http.Handler) *httptest.ResponseRecorder {
-		w := httptest.NewRecorder()
-		handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "http://"+address+"/api/frame", nil))
-		return w
-	}
-
-	w := get(dashboardHandler(trace, frames, true, address))
-	if w.Code != http.StatusOK || w.Body.String() != "new" || w.Header().Get("Content-Type") != "image/png" {
-		t.Errorf("status=%d type=%q body=%q", w.Code, w.Header().Get("Content-Type"), w.Body.String())
-	}
-	if !strings.Contains(w.Header().Get("Content-Security-Policy"), "img-src 'self'") {
-		t.Errorf("CSP blocks the image: %q", w.Header().Get("Content-Security-Policy"))
-	}
-
-	// A trace saved without frames has nothing to show.
-	if w := get(dashboardHandler(trace, "", false, address)); w.Code != http.StatusNotFound {
-		t.Errorf("no frames: status=%d", w.Code)
 	}
 }

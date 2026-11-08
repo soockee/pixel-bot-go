@@ -36,8 +36,6 @@ func main() {
 	record := flag.String("record", "", "record the saved selection into this new directory until Ctrl+C; sends no input")
 	window := flag.String("window", "", "with -record: also record your mouse and key input in the window with this exact title")
 	noKeys := flag.Bool("no-keys", false, "with -record: record only mouse input")
-	listen := flag.String("listen", recorder.DefaultListen, "with -record or -view: loopback dashboard address; empty disables it")
-	view := flag.String("view", "", "open the dashboard for a saved recording directory or trace file")
 	listWindows := flag.Bool("list-windows", false, "print visible window titles and exit")
 	autoWindow := flag.String("auto-window", "", "preselect the target window title (headless runs)")
 	autoStart := flag.Bool("auto-start", false, "start capture automatically after launch (needs a saved selection and -auto-window)")
@@ -62,15 +60,10 @@ func main() {
 		fmt.Println(strings.Join(titles, "\n"))
 		return
 	}
-	if *view != "" || *record != "" {
+	if *record != "" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
-		var err error
-		if *view != "" {
-			err = recorder.View(ctx, *view, *listen, os.Stderr)
-		} else {
-			err = recordSession(ctx, cfg, recorder.Session{Dir: *record, Window: *window, Listen: *listen, Label: *traceSession, Keys: !*noKeys, Status: os.Stderr})
-		}
+		err := recordSession(ctx, cfg, recorder.Session{Dir: *record, Window: *window, Label: *traceSession, Keys: !*noKeys, Status: os.Stderr})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "recorder:", err)
 			os.Exit(1)
@@ -129,7 +122,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	runErr := app.NewApp("Visual Response Lab", 800, 600, cfg, logger, trace).Run()
+	runErr := app.NewApp("Visual Response Lab", 1180, 760, cfg, logger, trace).Run()
 	if trace.Output != nil {
 		status := "complete"
 		if runErr != nil {

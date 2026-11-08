@@ -5,7 +5,7 @@ description: Build and launch Visual Response Lab with the local simulator, run 
 
 # Run Visual Response Lab with the simulator
 
-Visual Response Lab is a Windows Tk app. For these tests, use `cmd/fakegame` with the app in `-dry-run` mode to record intended actions without injecting input or requiring Administrator privileges.
+Visual Response Lab is a Windows Wails (WebView2) app. For these tests, use `cmd/fakegame` with the app in `-dry-run` mode to record intended actions without injecting input or requiring Administrator privileges.
 
 ## 1. Cheap checks first
 
@@ -27,6 +27,7 @@ The app writes `pixel_bot_logs.json` and reads `pixle_bot_config.json` (misspell
 
 ```bash
 RUN="$SCRATCH/pixelbot-run"; mkdir -p "$RUN"
+(cd frontend && npm ci && npm run build)   # the window is empty without it
 go build -o "$RUN/pixel-bot-go.exe" . && go build -o "$RUN/fakegame.exe" ./cmd/fakegame
 cd "$RUN"
 # OX, OY = x and y of screen 2 from -list-screens
@@ -48,6 +49,10 @@ sleep 2; (./fakegame.exe -screen 2 -pos 1350,50 > fakegame.out 2>&1 &)
 ```
 
 `-auto-window` preselects the target window title, `-auto-start` toggles capture 0.5 s after launch, `-dry-run` logs input instead of sending it. The default fake scenario loops every 9.6 s, so wait 25 to 30 s for two or three cycles.
+
+## 3b. Drive the UI (optional)
+
+With `debug: true` the WebView2 DevTools listen on `localhost:9222`. `curl -s localhost:9222/json` lists the pages (`/` and, while open, `selection.html`). Send `Runtime.evaluate` over the page's `webSocketDebuggerUrl` to click by id (`#tab-live`, `#tab-recorder`, `#tab-settings`, `#start`, `#record`, `#select-area`) and `Page.captureScreenshot` to see a page; Node 24 has `fetch` and `WebSocket` built in, so a 20-line script does it. Run every call with a timeout. GDI screen captures (PowerShell `CopyFromScreen`) miss the transparent selection overlay and are only correct when the capturing process is per-monitor DPI aware.
 
 ## 4. Stop
 

@@ -20,6 +20,17 @@ jobs:
           go-version: "1.26"
           cache: false
 
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
       - name: Check formatting
         shell: bash
         run: test -z "$(gofmt -l .)"

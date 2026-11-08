@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visual Response Lab</title>
+  <link rel="stylesheet" href="/src/style.css">
+  <script type="module" src="/src/main.ts"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Visual Response Lab</div>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button role="tab" id="tab-live" aria-controls="view-live" data-tab="live">Live</button>
+      <button role="tab" id="tab-recorder" aria-controls="view-recorder" data-tab="recorder">Recorder</button>
+      <button role="tab" id="tab-settings" aria-controls="view-settings" data-tab="settings">Settings</button>
+    </nav>
+    <div class="topbar-end">
+      <span class="run-state" id="run-state"><span class="dot" aria-hidden="true"></span><span id="run-label">Stopped</span></span>
+      <button class="icon-button" id="theme" type="button" aria-label="Switch theme"></button>
+    </div>
+  </header>
+
+  <main>
+    <section class="view live" id="view-live" role="tabpanel" aria-labelledby="tab-live">
+      <div class="panel capture">
+        <div class="panel-head">
+          <h2>Capture</h2>
+          <span class="meta" id="capture-meta"></span>
+        </div>
+        <div class="stage" id="stage">
+          <div class="frame" id="frame">
+            <img id="capture-img" alt="Live capture of the selected area">
+            <div class="lock" id="lock" aria-hidden="true"></div>
+            <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+          </div>
+          <div class="empty" id="capture-empty">
+            <p id="capture-empty-text">Pick a window and a capture area, then start</p>
+          </div>
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="panel">
+          <div class="field">
+            <label for="window">Target window</label>
+            <div class="inline">
+              <select id="window"></select>
+              <button class="icon-button" id="refresh" type="button" aria-label="Refresh windows"></button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="label">Capture area</span>
+            <div class="inline">
+              <span class="value mono" id="area">None</span>
+              <button class="button" id="select-area" type="button">Select</button>
+              <button class="icon-button" id="clear-area" type="button" aria-label="Clear capture area"></button>
+            </div>
+          </div>
+          <button class="button primary wide" id="start" type="button">Start</button>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Cycle</h2>
+            <span class="meta mono" id="timers"></span>
+          </div>
+          <ol class="cycle" id="cycle"></ol>
+        </div>
+
+        <div class="panel watch">
+          <div class="panel-head">
+            <h2>Bite watch</h2>
+            <span class="meta mono" id="target"></span>
+          </div>
+          <div class="watch-box">
+            <img id="roi-img" alt="Area watched for a bite">
+            <p class="muted" id="roi-empty">Shown while watching for a bite</p>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="view recorder" id="view-recorder" role="tabpanel" aria-labelledby="tab-recorder" hidden>
+      <aside class="panel list-panel">
+        <button class="button primary wide" id="record" type="button">Record</button>
+        <p class="muted small" id="record-hint">Records the capture area, plus your mouse, keys and sound in the target window</p>
+        <div class="panel-head list-head">
+          <h2>Recordings</h2>
+          <button class="icon-button" id="refresh-recordings" type="button" aria-label="Refresh recordings"></button>
+        </div>
+        <ul class="recordings" id="recordings"></ul>
+      </aside>
+      <div class="trace" id="trace">
+        <div class="trace-head">
+          <div>
+            <h1 id="trace-title">No recording open</h1>
+            <p class="muted" id="trace-status">Record a session or pick one from the list</p>
+          </div>
+        </div>
+        <dl class="stats" id="stats"></dl>
+        <div class="trace-body" id="trace-body">
+        <div class="panel map-panel" id="map-panel">
+          <div class="panel-head">
+            <h2>Cursor map</h2>
+            <div class="layers" aria-label="Map layers">
+              <label><input type="checkbox" id="layer-heat" checked> Movement</label>
+              <label><input type="checkbox" id="layer-clicks" checked> Clicks</label>
+              <label><input type="checkbox" id="layer-path"> Recent path</label>
+            </div>
+          </div>
+          <canvas id="map" aria-label="Movement heatmap, click locations and recent cursor path"></canvas>
+          <div class="legend" id="legend"></div>
+        </div>
+        <div class="trace-grid">
+          <div class="panel" id="frame-panel">
+            <div class="panel-head"><h2>Latest frame</h2></div>
+            <img id="trace-frame" alt="Latest frame of the recording">
+          </div>
+          <div class="panel" id="camera-panel">
+            <div class="panel-head"><h2>Camera drag</h2><span class="meta">Latest right-button hold</span></div>
+            <canvas id="camera" aria-label="Relative movement during the latest right-button hold"></canvas>
+          </div>
+          <div class="panel" id="activity-panel">
+            <div class="panel-head"><h2>Activity</h2><span class="meta">Last 60 s</span></div>
+            <canvas id="activity" aria-label="Movement samples and presses per second"></canvas>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h2>Recent input</h2></div>
+          <table class="log">
+            <thead><tr><th scope="col">Time</th><th scope="col">Input</th><th scope="col">Details</th></tr></thead>
+            <tbody id="input-log"></tbody>
+          </table>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view settings" id="view-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+      <form class="settings-form" id="settings" novalidate></form>
+    </section>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status" role="status"></span>
+    <span class="statusbar-end">
+      <span id="dry-run" hidden>Dry run, input is logged only</span>
+      <span id="stop-hint"><kbd id="stop-key"></kbd> stops</span>
+    </span>
+  </footer>
+</body>
+</html>

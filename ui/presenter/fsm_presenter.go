@@ -28,6 +28,6 @@ func NewFSMPresenter(fsm FSMSource, view StateView) *FSMPresenter {
 func (p *FSMPresenter) Tick() {
 	if s := p.fsm.Current(); s != p.latest {
 		p.latest = s
-		p.view.SetStateLabel("State: " + s.String())
+		p.view.SetStateLabel(s.String())
 	}
 }

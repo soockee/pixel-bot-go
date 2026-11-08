@@ -86,7 +86,7 @@ return (x,y,score,scale,found?)
 * Multi-scale template matching with stride + refine pass.
 * Response state machine (cast → search → monitor → reel → cooldown).
 * Bite detection via grayscale ROI motion heuristics (`motion`), or the splash brightening the centre of the marker box (`splash`).
-* Dark mode UI and adjustable selection area.
+* Desktop window with Live, Recorder and Settings tabs, dark and light themes, and a selection overlay for the capture area.
 * JSON config persistence and structured event logging.
 
 ## Command-Line Flags
@@ -96,15 +96,13 @@ return (x,y,score,scale,found?)
 | `-screen N` / config `screen`   | Open windows and the selection overlay on monitor N (1 = primary, others left to right); 0 = default placement |
 | `-list-screens`                 | Print the monitors as JSON (`screen`, `x`, `y`, `w`, `h`, `primary`) and exit               |
 | `-record <dir>`                 | Record the saved selection into a new directory at about 10 fps until Ctrl+C; opens no app window and sends no input |
-| `-window "<title>"`             | With `-record`: also record your mouse and key input in that window to `input.jsonl`, the sound of its process to `audio.wav`, and serve the dashboard |
+| `-window "<title>"`             | With `-record`: also record your mouse and key input in that window to `input.jsonl` and the sound of its process to `audio.wav` |
 | `-no-keys`                      | With `-record`: record only mouse input |
-| `-listen <addr>`                | Dashboard address, loopback only (default `127.0.0.1:6070`); empty disables it |
-| `-view <path>`                  | Open the dashboard for a saved session directory or trace file |
 | `-list-windows`                 | Print visible window titles and exit |
 | `-auto-window "<title>"`        | Preselect the target window title (must match the window title exactly, case-insensitive)   |
 | `-auto-start`                   | Start capture 0.5 s after launch; refused unless `selection_x/y/w/h` are saved in the config |
 
-With `"debug": true` in the config, `http://localhost:6060/debug/state` returns the live FSM state as JSON, and `detection.search` entries (found, score, scale, position; misses sampled 1 in 10) are written to the log. `go run ./cmd/fakegame` opens a scripted simulator scene for local testing (`-scenario file.json`, `-pos x,y`, `-title`).
+With `"debug": true` in the config, `http://localhost:6060/debug/state` returns the live FSM state as JSON, the window's WebView2 DevTools listen on `localhost:9222`, and `detection.search` entries (found, score, scale, position; misses sampled 1 in 10) are written to the log. `go run ./cmd/fakegame` opens a scripted simulator scene for local testing (`-scenario file.json`, `-pos x,y`, `-title`).
 
 ## Generated Files
 | File                    | Purpose                                  | Notes                                                   |

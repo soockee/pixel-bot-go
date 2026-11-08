@@ -9,8 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
-	"os"
 	"sync"
 	"time"
 
@@ -19,15 +17,12 @@ import (
 	"github.com/soocke/pixel-bot-go/internal/playtrace"
 )
 
-// DefaultListen is the default dashboard address.
-const DefaultListen = "127.0.0.1:6070"
-
 // Session describes one recording.
 type Session struct {
 	Dir    string              // new dataset directory
 	Frames dataset.FrameSource // screen capture
 	Window string              // exact title of the window to record input and sound from; empty records frames only
-	Listen string              // loopback dashboard address; empty disables it
+	Live   bool                // flush the input trace often, so a viewer can follow it
 	Label  string              // shared with other traces from this playtest
 	Keys   bool                // record keys as well as the mouse
 	Status io.Writer           // progress messages
@@ -37,17 +32,10 @@ type Session struct {
 // one start time, so their timestamps line up.
 func (s Session) Run(parent context.Context) error {
 	var target windowTarget
-	var listener net.Listener
 	if s.Window != "" {
 		var err error
 		if target, err = findTarget(s.Window); err != nil {
 			return err
-		}
-		if s.Listen != "" {
-			if listener, err = listenDashboard(s.Listen); err != nil {
-				return fmt.Errorf("listen for dashboard: %w", err)
-			}
-			defer listener.Close()
 		}
 	}
 	var info dataset.SessionInfo
@@ -79,7 +67,7 @@ func (s Session) Run(parent context.Context) error {
 	if s.Window != "" {
 		wg.Go(func() {
 			defer cancel()
-			inputErr = run(ctx, target, dataset.InputPath(s.Dir), s.Status, listener, s.Keys, s.Label, start, dataset.FramesPath(s.Dir))
+			inputErr = run(ctx, target, dataset.InputPath(s.Dir), s.Status, s.Live, s.Keys, s.Label, start)
 		})
 		wg.Go(func() {
 			// Frames and input matter more than sound, so a sound failure does not stop them.
@@ -117,22 +105,7 @@ func (s Session) sessionInfo(target windowTarget) (dataset.SessionInfo, error) {
 	return dataset.SessionInfo{ClientToFrame: origin.Sub(frame.Origin)}, nil
 }
 
-// View serves the dashboard for a saved session directory or trace file until
-// ctx ends.
-func View(ctx context.Context, path, address string, status io.Writer) error {
-	listener, err := listenDashboard(address)
-	if err != nil {
-		return fmt.Errorf("listen for dashboard: %w", err)
-	}
-	defer listener.Close()
-	frames := ""
-	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		path, frames = dataset.InputPath(path), dataset.FramesPath(path)
-	}
-	return viewTrace(ctx, listener, path, frames, status)
-}
-
-func run(parent context.Context, target windowTarget, out string, status io.Writer, listener net.Listener, recordKeys bool, session string, start time.Time, frames string) (err error) {
+func run(parent context.Context, target windowTarget, out string, status io.Writer, live, recordKeys bool, session string, start time.Time) (err error) {
 	utc := start.UTC()
 	traceWriter, err := playtrace.Create(out, playtrace.Header{
 		Source: playtrace.Manual, Clock: playtrace.Monotonic, SessionID: session,
@@ -156,17 +129,10 @@ func run(parent context.Context, target windowTarget, out string, status io.Writ
 	}()
 
 	var flush <-chan time.Time
-	if listener != nil {
+	if live {
 		if err := traceWriter.Flush(); err != nil {
 			return err
 		}
-		trace, err := os.Open(out)
-		if err != nil {
-			return err
-		}
-		defer trace.Close()
-		stopDashboard := startDashboard(listener, trace, frames, true, status)
-		defer stopDashboard()
 		ticker := time.NewTicker(250 * time.Millisecond)
 		defer ticker.Stop()
 		flush = ticker.C
