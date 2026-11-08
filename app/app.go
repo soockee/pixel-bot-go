@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"image"
 	"log/slog"
 	"net/http"
 	"time"
@@ -27,17 +28,20 @@ const (
 func init() { application.RegisterEvent[desktop.State](desktop.StateEvent) }
 
 type app struct {
-	container *AppContainer
-	logger    *slog.Logger
-	start     time.Time
-	loop      *desktop.Loop
-	wails     *application.App
-	main      *application.WebviewWindow
-	cloud     *cloud.Client  // nil while sign-in is not configured
-	session   *cloud.Session // the signed-in account, nil when signed out; used on the loop
-	updates   *update.Client
-	release   update.Release // the latest release found, zero before the first check; used on the loop
-	restart   string         // the executable to start once the app quit, after an update
+	container    *AppContainer
+	logger       *slog.Logger
+	start        time.Time
+	loop         *desktop.Loop
+	wails        *application.App
+	main         *application.WebviewWindow
+	overlay      *application.WebviewWindow
+	overlayArea  image.Rectangle // the game area the overlay covers, empty while parked; used on the loop
+	overlayReady bool            // passThrough set the overlay's styles; used on the main thread
+	cloud        *cloud.Client   // nil while sign-in is not configured
+	session      *cloud.Session  // the signed-in account, nil when signed out; used on the loop
+	updates      *update.Client
+	release      update.Release // the latest release found, zero before the first check; used on the loop
+	restart      string         // the executable to start once the app quit, after an update
 }
 
 // NewApp builds the components and the window.
@@ -90,6 +94,7 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		Name: "main", Title: title, Width: width, Height: height, MinWidth: 880, MinHeight: 600,
 		BackgroundColour: application.NewRGB(0x12, 0x13, 0x14), URL: "/", Hidden: true,
 	})
+	a.overlay = a.newOverlay()
 	a.main.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { go a.wails.Quit() })
 	// The native window exists only once the app runs, so it is placed then.
 	a.wails.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
@@ -160,6 +165,7 @@ func (a *app) autoStart(tries int) {
 func (a *app) tick() {
 	c := a.container
 	c.Loop.Tick()
+	a.followGame()
 	run := c.FSM.Stats()
 	c.View.SetRun(run.Casts, run.Reels, run.FailedInRow, c.Config.MaxFailedCasts, c.Config.MaxSessionMinutes)
 	c.View.Flush()

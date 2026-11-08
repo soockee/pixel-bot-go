@@ -4,7 +4,7 @@ import { framesUrl, Service, type State } from "./api";
 import { $, clock, h } from "./dom";
 
 /** The fishing cycle in order, keyed by fishing.FishingState names. */
-const cycle: [state: string, step: string, caption: string][] = [
+export const cycle: [state: string, step: string, caption: string][] = [
   ["focus", "Focus", "Waiting for the game window to have focus"],
   ["searching", "Search", "Looking for the bobber"],
   ["monitoring", "Watch", "Watching for a bite"],

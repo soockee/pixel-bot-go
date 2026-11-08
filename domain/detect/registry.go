@@ -14,6 +14,7 @@ import (
 // The app config, the config panel and detecteval all pick it up by name.
 var (
 	locators = map[string]func(config.Config) (Locator, error){
+		"color":  func(config.Config) (Locator, error) { return NewColorLocator(), nil },
 		"marker": func(config.Config) (Locator, error) { return NewMarkerLocator(), nil },
 		"ncc": func(cfg config.Config) (Locator, error) {
 			tmpl, err := assets.FishingTargetImage()
@@ -24,6 +25,7 @@ var (
 		},
 	}
 	biteDetectors = map[string]func(*slog.Logger) BiteDetector{
+		"histogram":    func(logger *slog.Logger) BiteDetector { return NewHistogramBiteDetector(logger) },
 		"motion":       func(logger *slog.Logger) BiteDetector { return NewMotionBiteDetector(logger) },
 		"splash":       func(logger *slog.Logger) BiteDetector { return NewSplashBiteDetector(logger) },
 		"splash_sound": func(logger *slog.Logger) BiteDetector { return NewSplashSoundDetector(logger) },

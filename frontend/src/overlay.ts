@@ -1,0 +1,36 @@
+// Overlay: lies over the game during a run and shows how it goes, so the
+// player never has to leave the game. Go places it and it takes no clicks.
+import { onState } from "./api";
+import { $, keyLabel } from "./dom";
+import { cycle } from "./live";
+
+const step = $("hud-step");
+const catches = $("hud-catches");
+const stop = $("hud-stop");
+const status = $("hud-status");
+const box = $("box");
+
+onState((s) => {
+  document.body.hidden = !s.running;
+  if (!s.running) return;
+  step.textContent = cycle.find(([key]) => key === s.fsm)?.[2] ?? "Starting";
+  catches.textContent = `${s.reels} ${s.reels === 1 ? "catch" : "catches"}`;
+  stop.textContent = `${keyLabel(s.stopKey)} to stop`;
+  status.hidden = s.status === "" || s.status === "Ready";
+  status.textContent = s.status;
+  // roiBox is in screen pixels on the game's client area, which the overlay
+  // covers. The outline goes around it, outside what the bite detector sees,
+  // because the bot's screen capture includes this window.
+  const watching = s.fsm === "monitoring" && s.roiBox.w > 0;
+  box.hidden = !watching;
+  if (watching) {
+    const gap = 4;
+    const px = (v: number) => `${v / devicePixelRatio}px`;
+    Object.assign(box.style, {
+      left: `calc(${px(s.roiBox.x)} - ${gap}px)`,
+      top: `calc(${px(s.roiBox.y)} - ${gap}px)`,
+      width: `calc(${px(s.roiBox.w)} + ${2 * gap}px)`,
+      height: `calc(${px(s.roiBox.h)} + ${2 * gap}px)`,
+    });
+  }
+});

@@ -14,8 +14,8 @@ order: 2
 | StopKey (`stop_key`)        | Global hotkey that halts the run; accepts the same unmodified keys as CastKey | Hidden from other apps; read at start  |
 | MaxFailedCasts              | Casts in a row without a reel before halting | Default 5                             |
 | MaxSessionMinutes           | Run length; halts at the next cast after it | Default 60                             |
-| Locator (`locator`)         | Technique that finds the bobber             | `marker` by default; see `detect.LocatorNames` |
-| BiteDetector (`bite_detector`) | Technique that recognises a bite        | `motion` by default, `splash`, or `splash_sound` (splash plus the bite sound; listens to the selected window's process) |
+| Locator (`locator`)         | Technique that finds the bobber             | `marker` by default, or `color` (finds the bobber by its colours, without the addon, and is easily fooled); see `detect.LocatorNames` |
+| BiteDetector (`bite_detector`) | Technique that recognises a bite        | `motion` by default, `histogram` (colour histogram against the calm bobber), `splash`, or `splash_sound` (splash plus the bite sound; listens to the selected window's process) |
 | RecordDir (`record_dir`)    | Folder for new recordings                   | Default `datasets`                     |
 | RecordKeys (`record_keys`)  | Record keys as well as the mouse            | Default true                           |
 | ShareRecordings (`share_recordings`) | Shows the Recorder tab and the Recording settings without debug mode | Default false; Settings → Data sharing |

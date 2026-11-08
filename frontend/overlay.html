@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Go Fish overlay</title>
+  <link rel="stylesheet" href="/src/overlay.css">
+  <script type="module" src="/src/overlay.ts"></script>
+</head>
+<body hidden>
+  <div class="hud" role="status">
+    <span class="dot" aria-hidden="true"></span>
+    <span id="hud-step"></span>
+    <span class="sep" aria-hidden="true">·</span>
+    <span class="mono" id="hud-catches"></span>
+    <span class="sep" aria-hidden="true">·</span>
+    <span class="muted" id="hud-stop"></span>
+  </div>
+  <p class="hud-status" id="hud-status" hidden></p>
+  <div class="box" id="box" hidden></div>
+</body>
+</html>
