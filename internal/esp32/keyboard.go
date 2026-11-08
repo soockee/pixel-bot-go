@@ -40,6 +40,7 @@ type Keyboard struct {
 	mu     sync.Mutex
 	port   serial.Port
 	reader *bufio.Reader
+	open   func(string, *serial.Mode) (serial.Port, error) // nil opens the real port; tests replace it
 }
 
 // Open checks the firmware and Bluetooth connection without sending any input.
@@ -49,7 +50,11 @@ func (k *Keyboard) Open(name string) error {
 	if k.port != nil {
 		return errors.New("ESP32 port is already open")
 	}
-	port, err := serial.Open(name, &serial.Mode{
+	open := k.open
+	if open == nil {
+		open = serial.Open
+	}
+	port, err := open(name, &serial.Mode{
 		BaudRate: 115200, InitialStatusBits: &serial.ModemOutputBits{},
 	})
 	if err != nil {
@@ -103,6 +108,9 @@ func (k *Keyboard) Tap(usage byte) error {
 	k.closePort()
 	if err != nil {
 		return fmt.Errorf("ESP32 tap acknowledgment: %w", err)
+	}
+	if reply == "ERR disconnected" {
+		return errors.New("the ESP32 lost its Bluetooth link to this PC; reconnect Go Fish ESP32 Probe")
 	}
 	return fmt.Errorf("ESP32 rejected tap: %q", reply)
 }
