@@ -43,7 +43,7 @@ For optional reaction timing, run independent fixed simulator trials using the s
 
 Use the headless paired replay to check a new model against three scripted bites with the real engine and FSM. Supply the model's absolute path in `VRL_TIMING_REPLAY_MODEL` and run `go test ./domain/fishing -run TestPairedTimingReplay -count=1 -v`.
 
-`-live-timing -timing-model <file>` explicitly enables the model's holds and cooldowns for live input. Live runs keep the fixed reel delay because the detector calibration is from the simulator. The input guard checks focus, window bounds and pointer position before pressing. Stop, focus loss, geometry changes and shutdown release a pending hold. Live timing uses a fresh seed on launch unless `-timing-seed` is supplied.
+`-live-timing -timing-model <file>` explicitly enables the model's holds and cooldowns for live input. Live runs keep the fixed reel delay because the detector calibration is from the simulator. The input guard checks focus, window bounds and pointer position before pressing. Stop, focus loss, geometry changes and shutdown release a pending hold. The ESP32 uses the requested Interact hold with firmware that advertises `TAPMS`. Older firmware keeps its 40 ms hold. Live timing uses a fresh seed on launch unless `-timing-seed` is supplied.
 
 ## Recorded Cursor Movement
 

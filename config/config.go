@@ -64,6 +64,10 @@ type Config struct {
 	ESP32Port string `json:"esp32_port,omitempty"`
 	// StopKey is the global hotkey that halts the bot. Read at startup.
 	StopKey string `json:"stop_key"`
+	// IdleKey is an optional non-toggle game action between catches.
+	IdleKey string `json:"idle_key,omitempty"`
+	// TargetPlayerKey selects the nearby friendly player reported by the addon.
+	TargetPlayerKey string `json:"target_player_key,omitempty"`
 	// MaxFailedCasts halts the bot after this many casts in a row end without a reel.
 	MaxFailedCasts int `json:"max_failed_casts"`
 	// MaxSessionMinutes halts the bot at the first cast after this long.
@@ -184,6 +188,8 @@ func (c *Config) Validate() error {
 	if c.OverlayY < 0 || c.OverlayY > 1 {
 		c.OverlayY = d.OverlayY
 	}
+	c.IdleKey = strings.ToUpper(strings.TrimSpace(c.IdleKey))
+	c.TargetPlayerKey = strings.ToUpper(strings.TrimSpace(c.TargetPlayerKey))
 	if c.StopKey == "" {
 		c.StopKey = d.StopKey
 	}

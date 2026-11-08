@@ -214,7 +214,7 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 					log.add("open")
 					return func() { log.add("close") }, nil
 				}
-				actions.TapKeyboard = func(vk byte) error {
+				actions.TapKeyboard = func(vk byte, _ time.Duration) error {
 					switch vk {
 					case 0x72:
 						log.add("cast")

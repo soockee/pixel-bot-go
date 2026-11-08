@@ -8,6 +8,7 @@ import (
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/action"
 	"github.com/soocke/pixel-bot-go/domain/detect"
+	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/internal/esp32"
 )
 
@@ -24,6 +25,8 @@ type Settings struct {
 	InteractKey            string  `json:"interactKey"`
 	ESP32Port              string  `json:"esp32Port"`
 	StopKey                string  `json:"stopKey"`
+	IdleKey                string  `json:"idleKey"`
+	TargetPlayerKey        string  `json:"targetPlayerKey"`
 	MaxFailedCasts         int     `json:"maxFailedCasts"`
 	MaxSessionMinutes      int     `json:"maxSessionMinutes"`
 	Schedule               bool    `json:"schedule"`
@@ -57,6 +60,7 @@ func settingsOf(c *config.Config) Settings {
 		MinScale: c.MinScale, MaxScale: c.MaxScale, ScaleStep: c.ScaleStep, Threshold: c.Threshold,
 		Stride: c.Stride, Refine: c.Refine, CastKey: c.CastKey, StopKey: c.StopKey,
 		ReelMethod: c.ReelMethod, InteractKey: c.InteractKey, ESP32Port: c.ESP32Port,
+		IdleKey: c.IdleKey, TargetPlayerKey: c.TargetPlayerKey,
 		MaxFailedCasts: c.MaxFailedCasts, MaxSessionMinutes: c.MaxSessionMinutes,
 		Schedule: c.Schedule, PlayMinMinutes: c.PlayMinMinutes, PlayMaxMinutes: c.PlayMaxMinutes,
 		BreakMinMinutes: c.BreakMinMinutes, BreakMaxMinutes: c.BreakMaxMinutes,
@@ -129,6 +133,7 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	c.Stride, c.Refine, c.CastKey, c.StopKey = s.Stride, s.Refine, s.CastKey, s.StopKey
 	c.ReelMethod, c.InteractKey, c.ESP32Port = s.ReelMethod, s.InteractKey, port
 	c.MaxFailedCasts, c.MaxSessionMinutes = s.MaxFailedCasts, s.MaxSessionMinutes
+	c.IdleKey, c.TargetPlayerKey = s.IdleKey, s.TargetPlayerKey
 	c.Schedule = s.Schedule
 	c.PlayMinMinutes, c.PlayMaxMinutes = s.PlayMinMinutes, s.PlayMaxMinutes
 	c.BreakMinMinutes, c.BreakMaxMinutes = s.BreakMinMinutes, s.BreakMaxMinutes
@@ -137,6 +142,9 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	c.RecordDir, c.RecordKeys, c.ShareRecordings = strings.TrimSpace(s.RecordDir), s.RecordKeys, s.ShareRecordings
 	c.ROISizePx, c.CooldownSeconds, c.MaxCastDurationSeconds = s.ROISizePx, s.CooldownSeconds, s.MaxCastDurationSeconds
 	if err := c.Validate(); err != nil {
+		return c, err
+	}
+	if err := fishing.CheckActivityKeys(c, action.ParseVK); err != nil {
 		return c, err
 	}
 	return c, c.CheckSchedule()

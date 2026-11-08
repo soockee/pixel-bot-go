@@ -58,7 +58,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	c.Recordings = desktop.NewRecordings(func() string { return cfg.RecordDir })
 	inFront := c.gameFocused
 
-	callbacks := fishing.ActionCallbacks{ParseVK: action.ParseVK}
+	callbacks := fishing.ActionCallbacks{ParseVK: action.ParseVK, CanAct: inFront}
 	dryRun := cfg.DryRun
 	if dryRun {
 		logger.Warn("dry-run enabled: input actions are logged, not injected")
@@ -99,10 +99,15 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			if err := keyboard.Open(port); err != nil {
 				return nil, err
 			}
+			if trace.Timing != nil {
+				if err := keyboard.PrepareTimedTaps(); err != nil {
+					return nil, err
+				}
+			}
 			logger.Info("ESP32 keyboard ready", "port", keyboard.Name())
 			return keyboard.Close, nil
 		}
-		callbacks.TapKeyboard = func(vk byte) error {
+		callbacks.TapKeyboard = func(vk byte, hold time.Duration) error {
 			usage, ok := esp32.ForegroundUsage(vk)
 			if !inFront() {
 				return errors.New("selected game window lost focus")
@@ -110,7 +115,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			if !ok {
 				return errors.New("ESP32 could not map the key in the active keyboard layout")
 			}
-			return keyboard.Tap(usage)
+			return keyboard.TapFor(usage, hold)
 		}
 		guard := &action.Guard{
 			Logger: logger, InFront: inFront, Area: c.gameArea, CursorPos: action.CursorPos,

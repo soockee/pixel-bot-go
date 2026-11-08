@@ -34,6 +34,7 @@ type playSchedule struct {
 	phase     schedulePhase
 	until     time.Time
 	nextCheck time.Time
+	confirmed bool
 	logout    byte
 	world     *image.RGBA
 	character *image.RGBA
@@ -42,7 +43,8 @@ type playSchedule struct {
 }
 
 func randomDuration(minMinutes, maxMinutes int) time.Duration {
-	return time.Duration(minMinutes+rand.IntN(maxMinutes-minMinutes+1)) * time.Minute
+	minSeconds, maxSeconds := minMinutes*60, maxMinutes*60
+	return time.Duration(minSeconds+rand.IntN(maxSeconds-minSeconds+1)) * time.Second
 }
 
 func (a *app) beginSchedule() error {
@@ -55,9 +57,9 @@ func (a *app) beginSchedule() error {
 	if !ok {
 		return errors.New("set a valid Logout key")
 	}
-	for _, other := range []string{cfg.CastKey, cfg.InteractKey, cfg.StopKey, c.View.State().StopKey} {
+	for _, other := range []string{cfg.CastKey, cfg.InteractKey, cfg.StopKey, cfg.IdleKey, cfg.TargetPlayerKey, c.View.State().StopKey} {
 		if vk, ok := action.ParseVK(other); ok && key == vk {
-			return errors.New("the Logout key must differ from the Cast, Interact and Stop keys")
+			return errors.New("the Logout key must differ from the other Go Fish keys")
 		}
 	}
 	if cfg.ESP32Port != "" && !esp32.SupportsKey(key) {
@@ -85,6 +87,7 @@ func (a *app) beginSchedule() error {
 func (a *app) setSchedulePhase(phase schedulePhase, until time.Time, status string) {
 	a.schedule.phase, a.schedule.until = phase, until
 	a.schedule.nextCheck = time.Time{}
+	a.schedule.confirmed = false
 	a.container.View.SetStatus(status)
 	a.container.View.SetRunning(true)
 }
@@ -112,7 +115,11 @@ func (a *app) tickSchedule(now time.Time) {
 	switch s.phase {
 	case play:
 		if !c.Capture.Enabled() {
-			a.stopSchedule("Schedule stopped because fishing halted")
+			reason := c.FSM.HaltReason()
+			if reason == "" {
+				reason = "fishing stopped"
+			}
+			a.stopSchedule("Schedule stopped: " + reason)
 		} else if !now.Before(s.until) {
 			c.CapturePresenter.Disable()
 			a.setSchedulePhase(sendLogout, now.Add(screenWait), "Schedule: preparing to log out")
@@ -125,16 +132,23 @@ func (a *app) tickSchedule(now time.Time) {
 		return
 	}
 
+	wantWorld := s.phase == waitWorld || s.phase == sendLogout
 	if !now.Before(s.until) {
-		a.stopSchedule("Schedule stopped: expected game screen was not confirmed")
+		expected := "character selection"
+		if wantWorld {
+			expected = "the logged-in game"
+		}
+		a.stopSchedule("Schedule stopped: could not confirm " + expected + ". Check focus and the saved screen image.")
 		return
 	}
 	if now.Before(s.nextCheck) || c.FSM.Current() != fishing.StateHalt {
 		return
 	}
 	s.nextCheck = now.Add(750 * time.Millisecond)
-	wantWorld := s.phase == waitWorld || s.phase == sendLogout
-	if !s.screen(wantWorld) {
+	matched := s.screen(wantWorld)
+	confirmed := matched && s.confirmed
+	s.confirmed = matched
+	if !confirmed {
 		return
 	}
 	switch s.phase {
@@ -183,6 +197,8 @@ func (a *app) scheduleKey(vk byte, wantWorld bool, next schedulePhase, status st
 	}
 	if sent {
 		a.setSchedulePhase(next, time.Now().Add(screenWait), status)
+	} else {
+		a.schedule.confirmed = false
 	}
 }
 

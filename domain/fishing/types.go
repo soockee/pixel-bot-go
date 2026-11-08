@@ -47,9 +47,11 @@ type ActionCallbacks struct {
 	MoveCursor func(x, y int)
 	ClickRight func()
 	ParseVK    func(key string) (byte, bool)
+	// CanAct checks focus just before dispatching an optional action.
+	CanAct func() bool
 	// OpenKeyboard validates and opens the external keyboard for one run.
 	OpenKeyboard func(config.Config) (closeKeyboard func(), err error)
-	TapKeyboard  func(vk byte) error
+	TapKeyboard  func(vk byte, hold time.Duration) error
 
 	// ObserveCast and ObserveReel run when a cast or reel is scheduled.
 	// Each can return a callback to observe its eventual dispatch.

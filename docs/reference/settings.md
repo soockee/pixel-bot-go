@@ -10,6 +10,8 @@ order: 1
 | Reel method | Right click | Right-click the marked bobber, or use the game's native Interact binding without moving the cursor. |
 | Interact key | Unset | The binding used when the reel method is Interact key. It must differ from the Cast and Stop keys. |
 | ESP32 port | Unset | `auto` to find the paired BLE keyboard on its USB cable, or its COM port such as `COM3`. Requires the Interact key reel method and keyboard bindings for Cast and Interact. |
+| Between-catch action | Unset | Occasionally presses a configured one-shot game action after a catch. Use an unused key and bind the desired action in the game. |
+| Target passing player | Unset | Selects a nearby friendly player offered by the game's soft targeting and continues fishing. |
 | Stop key | F10 | Stops Go Fish from anywhere. Takes effect after a restart. |
 | Session length | 60 min | Go Fish stops at the first cast after this time. 5 to 240 minutes. |
 | Schedule play and breaks | Off | Alternates random fishing sessions and logged-out breaks after Start. |
@@ -23,6 +25,11 @@ order: 1
 | Move overlay | Top centre | A button, not a setting you type: drag the pill that shows a run over the game, then click **Done** to keep its place. See [Change keys and limits](../how-to/settings.md#move-the-overlay). |
 | Dark theme | on | Dark or light colours. |
 | Share recordings | off | Shows the Recorder tab, to record yourself fishing and send it in. See [Record and share a session](../how-to/share-recordings.md). |
+
+To use **Target passing player**, enter an unused key, update Bobber Marker,
+and type `/reload` in the game. The addon enables friendly soft targeting and
+checks for a friendly player in range while you are fishing. Clear the key,
+update Bobber Marker, and reload to disable this action.
 
 With **Share recordings** on, Settings also shows:
 

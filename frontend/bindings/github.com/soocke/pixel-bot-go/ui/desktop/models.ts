@@ -46,6 +46,8 @@ export interface Settings {
     "interactKey": string;
     "esp32Port": string;
     "stopKey": string;
+    "idleKey": string;
+    "targetPlayerKey": string;
     "maxFailedCasts": number;
     "maxSessionMinutes": number;
     "schedule": boolean;

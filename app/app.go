@@ -16,6 +16,7 @@ import (
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/debug"
 	"github.com/soocke/pixel-bot-go/domain/action"
+	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/frontend"
 	"github.com/soocke/pixel-bot-go/internal/cloud"
 	"github.com/soocke/pixel-bot-go/internal/update"
@@ -221,6 +222,12 @@ func (a *app) toggleCapture() {
 		if problem := c.startProblem(); problem != "" {
 			a.logger.Error("start refused: " + problem)
 			c.View.SetStatus("Cannot start: " + problem)
+			return
+		}
+		keys := *c.Config
+		keys.StopKey = c.View.State().StopKey
+		if err := fishing.CheckActivityKeys(keys, action.ParseVK); err != nil {
+			c.View.SetStatus("Cannot start: " + err.Error())
 			return
 		}
 		if c.Config.Schedule {

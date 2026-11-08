@@ -201,3 +201,34 @@ func TestTapOnClosedKeyboard(t *testing.T) {
 		t.Fatal("Tap on a closed keyboard succeeded")
 	}
 }
+
+func TestTimedTapNegotiatesOnceAndSupportsLegacyFirmware(t *testing.T) {
+	for _, tc := range []struct{ capability, taps string }{
+		{"TAPMS", "TAP 04 500\nTAP 05 70\n"},
+		{"ERR command", "TAP 04\nTAP 05\n"},
+	} {
+		t.Run(tc.capability, func(t *testing.T) {
+			port := &scriptedPort{reply: strings.NewReader("GOFISH 1 READY\n" + tc.capability + "\nOK\nOK\n")}
+			keyboard := openWith(port, nil)
+			if err := keyboard.Open("COM3"); err != nil {
+				t.Fatal(err)
+			}
+			defer keyboard.Close()
+			if err := keyboard.PrepareTimedTaps(); err != nil {
+				t.Fatal(err)
+			}
+			if err := keyboard.TapFor(4, 501*time.Millisecond); err == nil {
+				t.Fatal("accepted hold longer than firmware limit")
+			}
+			if err := keyboard.TapFor(4, 500*time.Millisecond); err != nil {
+				t.Fatal(err)
+			}
+			if err := keyboard.TapFor(5, 70*time.Millisecond); err != nil {
+				t.Fatal(err)
+			}
+			if got, want := port.writes.String(), "HELLO\nTAPMS\n"+tc.taps; got != want {
+				t.Fatalf("serial writes = %q, want %q", got, want)
+			}
+		})
+	}
+}

@@ -20,6 +20,8 @@ The serial link runs at 115200 baud. Terminate each command with a newline.
 | `PING` | `PONG waiting` before Bluetooth connects, or `PONG connected` afterwards |
 | `HELLO` | `GOFISH 1 READY` when Bluetooth is connected, or `GOFISH 1 WAITING` otherwise |
 | `TAP 04` | Queues the HID usage in hexadecimal, holds it for 40 ms, and queues its release. Returns `OK` when the BLE stack accepts both reports, or an `ERR` response on failure. |
+| `TAPMS` | Returns `TAPMS` on firmware that accepts explicit hold durations. |
+| `TAP 04 85` | Holds the key for 85 ms. The optional hold is accepted from 10 to 500 ms. |
 | `TEST` | Performs the same tap as `TAP 04`. |
 
 Focus a blank Notepad window before sending `TEST`. The serial response describes the board's state. Check the editor to confirm Windows received the key.

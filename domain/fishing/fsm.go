@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"image"
 	"log/slog"
+	"math/rand/v2"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -44,6 +45,7 @@ type FishingFSM struct {
 	releaseInput  func()
 	detectorAt    time.Time
 	reelDelay     time.Duration
+	idleTried     bool
 	failedCasts   int
 	sessionEnd    time.Time
 	stats         struct{ casts, reels, failedInRow atomic.Int32 } // this run, for the UI
@@ -118,6 +120,10 @@ func (f *FishingFSM) handle(ev any) {
 		if (f.state == StateMonitoring || f.state == StateReeling) && !f.hasCurrentTarget() {
 			f.resumeSearch()
 		}
+	case evtPassingPlayer:
+		if f.state == StateMonitoring && f.hasCurrentTarget() && e.confirm() {
+			f.activity(f.cfg.TargetPlayerKey, "target passing player")
+		}
 	case evtTargetLost:
 		if f.state == StateMonitoring {
 			f.castFailed()
@@ -178,6 +184,7 @@ type (
 	}
 	evtTargetInvalidated struct{}
 	evtTargetLost        struct{}
+	evtPassingPlayer     struct{ confirm func() bool }
 	evtHalt              struct{ reason string }
 	evtFishBite          struct{ at time.Time }
 	evtFocusAcquired     struct{}
@@ -266,6 +273,13 @@ func (f *FishingFSM) deadlineReached() {
 	case StateReeling:
 		f.finishReel()
 	case StateCooldown:
+		if !f.idleTried && f.cfg.IdleKey != "" && time.Now().Before(f.sessionEnd) && rand.IntN(12) == 0 {
+			f.idleTried = true
+			if f.activity(f.cfg.IdleKey, "between-catch action") {
+				f.arm(time.Duration(300+rand.IntN(601)) * time.Millisecond)
+			}
+			return
+		}
 		f.recast()
 	}
 }
@@ -347,6 +361,7 @@ func (f *FishingFSM) transition(next FishingState) {
 	case StateReeling:
 		f.startReel()
 	case StateCooldown:
+		f.idleTried = false
 		cooldown := f.reelTiming.Cooldown
 		f.reelTiming = ReelTiming{}
 		if cooldown == 0 {
@@ -369,7 +384,7 @@ func (f *FishingFSM) pressCast() bool {
 		dispatched = f.actions.ObserveCast()
 	}
 	if f.hardwareKeyboard() {
-		if !f.tapKeyboard(vk) {
+		if !f.tapKeyboard(vk, 0) {
 			return false
 		}
 	} else {
@@ -418,9 +433,8 @@ func (f *FishingFSM) startReel() {
 		f.reelPressed = false
 	}
 	if f.cfg.ReelMethod == config.ReelInteractKey {
-		f.reelTiming.Hold = interactHold
-		if f.hardwareKeyboard() {
-			f.reelTiming.Hold = 0 // the ESP32 owns the press and release
+		if f.reelTiming.Hold == 0 {
+			f.reelTiming.Hold = interactHold
 		}
 	} else if !f.beginCursor(false) {
 		return
@@ -479,7 +493,7 @@ func (f *FishingFSM) finishReel() {
 				return
 			}
 			if f.hardwareKeyboard() {
-				if !f.tapKeyboard(vk) {
+				if !f.tapKeyboard(vk, f.reelTiming.Hold) {
 					f.halt()
 					return
 				}
@@ -503,7 +517,7 @@ func (f *FishingFSM) finishReel() {
 		if f.reelDone != nil {
 			f.reelDone()
 		}
-		if f.reelTiming.Hold > 0 {
+		if f.reelTiming.Hold > 0 && !f.hardwareKeyboard() {
 			f.reelPressed = true
 			f.arm(f.reelTiming.Hold)
 			return
@@ -524,12 +538,12 @@ func (f *FishingFSM) hardwareKeyboard() bool {
 	return f.cfg.ESP32Port != "" && !f.cfg.DryRun
 }
 
-func (f *FishingFSM) tapKeyboard(vk byte) bool {
+func (f *FishingFSM) tapKeyboard(vk byte, hold time.Duration) bool {
 	if f.actions.TapKeyboard == nil {
 		f.why("the ESP32 keyboard is not available")
 		return false
 	}
-	if err := f.actions.TapKeyboard(vk); err != nil {
+	if err := f.actions.TapKeyboard(vk, hold); err != nil {
 		f.why("the ESP32 keyboard failed: " + err.Error())
 		return false
 	}

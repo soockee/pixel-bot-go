@@ -52,8 +52,8 @@ bool sendReport(uint8_t usage) {
   return reportQueued;
 }
 
-bool parseUsage(uint8_t &usage) {
-  if (length != 6 || std::strncmp(line, "TAP ", 4) != 0) {
+bool parseTap(uint8_t &usage, unsigned long &duration) {
+  if (length < 6 || std::strncmp(line, "TAP ", 4) != 0) {
     return false;
   }
   for (size_t i = 4; i < 6; ++i) {
@@ -66,20 +66,39 @@ bool parseUsage(uint8_t &usage) {
       return false;
     }
   }
-  return usage >= 0x04 && usage <= 0x65;
+  if (usage < 0x04 || usage > 0x65) {
+    return false;
+  }
+  if (length == 6) {
+    return true;
+  }
+  if (line[6] != ' ' || length < 9 || length > 10) {
+    return false;
+  }
+  duration = 0;
+  for (size_t i = 7; i < length; ++i) {
+    if (line[i] < '0' || line[i] > '9') {
+      return false;
+    }
+    duration = duration * 10 + (line[i] - '0');
+  }
+  return duration >= 10 && duration <= 500;
 }
 
 void handleLine() {
   uint8_t usage = 0;
+  unsigned long duration = holdMs;
   if (invalidLine) {
     Serial.println("ERR command");
   } else if (std::strcmp(line, "PING") == 0) {
     Serial.println(connected ? "PONG connected" : "PONG waiting");
   } else if (std::strcmp(line, "HELLO") == 0) {
     Serial.println(connected ? "GOFISH 1 READY" : "GOFISH 1 WAITING");
+  } else if (std::strcmp(line, "TAPMS") == 0) {
+    Serial.println("TAPMS");
   } else if (std::strcmp(line, "TEST") == 0) {
     usage = keyA;
-  } else if (!parseUsage(usage)) {
+  } else if (!parseTap(usage, duration)) {
     Serial.println("ERR command");
     return;
   }
@@ -90,7 +109,7 @@ void handleLine() {
     Serial.println("ERR disconnected");
   } else {
     const bool down = sendReport(usage);
-    delay(holdMs);
+    delay(duration);
     const bool up = sendReport(0);
     Serial.println(down && up && connected ? "OK" : "ERR BLE report");
   }

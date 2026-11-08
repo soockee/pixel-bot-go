@@ -41,6 +41,20 @@ func TestScheduledBreakWaitsForBothGameScreens(t *testing.T) {
 		}
 		a.setSchedulePhase(waitWorld, time.Now().Add(screenWait), "")
 		a.tickSchedule(time.Now())
+		if c.Capture.Enabled() {
+			t.Fatal("started fishing after one frame")
+		}
+		world = false
+		time.Sleep(time.Second)
+		a.tickSchedule(time.Now())
+		world = true
+		time.Sleep(time.Second)
+		a.tickSchedule(time.Now())
+		if c.Capture.Enabled() {
+			t.Fatal("combined matches from either side of a missing frame")
+		}
+		time.Sleep(time.Second)
+		a.tickSchedule(time.Now())
 		synctest.Wait()
 		if !c.Capture.Enabled() || a.schedule.phase != play {
 			t.Fatal("scheduled play did not start")
@@ -48,6 +62,8 @@ func TestScheduledBreakWaitsForBothGameScreens(t *testing.T) {
 		time.Sleep(2 * time.Minute)
 		a.tickSchedule(time.Now())
 		synctest.Wait()
+		a.tickSchedule(time.Now())
+		time.Sleep(time.Second)
 		a.tickSchedule(time.Now())
 		if c.Capture.Enabled() || a.schedule.phase != waitCharacters || !slices.Equal(keys, []byte{'L'}) {
 			t.Fatalf("logout did not stop capture and dispatch once: %v", keys)
@@ -58,6 +74,8 @@ func TestScheduledBreakWaitsForBothGameScreens(t *testing.T) {
 			t.Fatal("started break before character selection")
 		}
 		world = false
+		time.Sleep(time.Second)
+		a.tickSchedule(time.Now())
 		time.Sleep(time.Second)
 		a.tickSchedule(time.Now())
 		if a.schedule.phase != takeBreak || a.schedule.until.Sub(time.Now()) != 3*time.Minute {
@@ -73,10 +91,14 @@ func TestScheduledBreakWaitsForBothGameScreens(t *testing.T) {
 		world = false
 		time.Sleep(time.Second)
 		a.tickSchedule(time.Now())
+		time.Sleep(time.Second)
+		a.tickSchedule(time.Now())
 		if !slices.Equal(keys, []byte{'L', loginKey}) || a.schedule.phase != waitWorld || c.Capture.Enabled() {
 			t.Fatalf("login did not wait for world: %v", keys)
 		}
 		world = true
+		a.tickSchedule(time.Now())
+		time.Sleep(time.Second)
 		a.tickSchedule(time.Now())
 		synctest.Wait()
 		if a.schedule.phase != play || !c.Capture.Enabled() {
