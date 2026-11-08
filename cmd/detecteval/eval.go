@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/soocke/pixel-bot-go/domain/capture"
 	"github.com/soocke/pixel-bot-go/domain/detect"
 	"github.com/soocke/pixel-bot-go/internal/dataset"
 )
@@ -119,9 +120,34 @@ func watchAreas(d *dataset.Dataset, roiSize int) ([]watch, error) {
 	return watches, nil
 }
 
-// evaluateBite runs a bite detector over each cast's watch area.
+// evaluateBite runs a bite detector over each cast's watch area. A detector that
+// listens also gets the recorded sound, in play order between the frames, and
+// skips datasets without sound.
 func evaluateBite(b detect.BiteDetector, d *dataset.Dataset, watches []watch, c *BiteCounts) error {
+	listener, listens := b.(detect.SoundBiteDetector)
+	var sound []byte
+	if listens {
+		var err error
+		if sound, err = d.Audio(); err != nil || sound == nil {
+			return err
+		}
+	}
+	const packet = capture.AudioRate / 100 * capture.AudioFrameBytes // 10 ms, as Windows delivers it
 	for i, cast := range d.Labels.Casts {
+		pos := int(watches[i].FromMS*capture.AudioRate/1000) * capture.AudioFrameBytes
+		// hear plays the sound up to untilMS and returns when a bite was heard.
+		hear := func(untilMS int64) (int64, bool) {
+			for ; listens && pos+packet <= len(sound); pos += packet {
+				at := time.Unix(0, 0).Add(time.Duration(pos/capture.AudioFrameBytes) * time.Second / capture.AudioRate)
+				if at.UnixMilli() >= untilMS {
+					return 0, false
+				}
+				if listener.Hear(sound[pos:pos+packet], at) {
+					return at.UnixMilli(), true
+				}
+			}
+			return 0, false
+		}
 		c.Casts++
 		if cast.BiteMS != nil {
 			c.BiteCasts++
@@ -131,6 +157,10 @@ func evaluateBite(b detect.BiteDetector, d *dataset.Dataset, watches []watch, c 
 			img, err := f.Load()
 			if err != nil {
 				return err
+			}
+			if ms, heard := hear(f.MS); heard {
+				scoreBite(ms, cast.BiteMS, c)
+				break
 			}
 			if b.Feed(img.SubImage(watches[i].Area).(*image.RGBA), time.UnixMilli(f.MS)) {
 				scoreBite(f.MS, cast.BiteMS, c)

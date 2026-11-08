@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"image"
 	"io"
@@ -80,7 +81,14 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions)
 		bite, err := detect.NewBiteDetector(run.BiteDetector, logger)
 		return locator, bite, err
 	}
-	c.Engine = fishing.NewEngine(c.frames(), c.FSM, detectors, cfg, logger)
+	sound := func(ctx context.Context, emit func([]byte, time.Time) error) error {
+		pid, err := capture.WindowProcess(c.Capture.Window())
+		if err != nil {
+			return err
+		}
+		return capture.CaptureAudio(ctx, pid, emit)
+	}
+	c.Engine = fishing.NewEngine(c.frames(), sound, c.FSM, detectors, cfg, logger)
 
 	c.CapturePresenter = presenter.NewCapturePresenter(c.Capture, c.Engine, c.FSM, c.RootView)
 	c.RecordPresenter = presenter.NewRecordPresenter(c.prepareRecording, c.RootView, recorder.DefaultListen)

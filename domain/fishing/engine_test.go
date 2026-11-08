@@ -1,6 +1,7 @@
 package fishing
 
 import (
+	"context"
 	"errors"
 	"image"
 	"log/slog"
@@ -52,7 +53,7 @@ func newSceneEngine(t *testing.T, log *actionLog) (*Engine, *FishingFSM, *sceneF
 	detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
 		return detect.NewMarkerLocator(), detect.NewMotionBiteDetector(nil), nil
 	}
-	engine := NewEngine(frames, fsm, detectors, cfg, testLogger)
+	engine := NewEngine(frames, noSound, fsm, detectors, cfg, testLogger)
 	return engine, fsm, frames, r.BobberRect().Add(frames.origin)
 }
 
@@ -127,7 +128,7 @@ func TestEngineReportsDetectorsItCannotBuild(t *testing.T) {
 	cfg := testConfig()
 	fsm := NewFSM(nil, cfg, recordingActions(&actionLog{}))
 	defer fsm.Close()
-	engine := NewEngine(&failingFrames{}, fsm, func(config.Config) (detect.Locator, detect.BiteDetector, error) {
+	engine := NewEngine(&failingFrames{}, noSound, fsm, func(config.Config) (detect.Locator, detect.BiteDetector, error) {
 		return nil, nil, errors.New("unknown locator")
 	}, cfg, testLogger)
 
@@ -153,7 +154,7 @@ func TestEngineSurvivesCaptureFailures(t *testing.T) {
 		detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
 			return nil, detect.NewMotionBiteDetector(nil), nil
 		}
-		engine := NewEngine(frames, fsm, detectors, cfg, testLogger)
+		engine := NewEngine(frames, noSound, fsm, detectors, cfg, testLogger)
 
 		startEngine(t, engine)
 		time.Sleep(time.Second)
@@ -162,5 +163,53 @@ func TestEngineSurvivesCaptureFailures(t *testing.T) {
 		if frames.calls.Load() < 10 {
 			t.Errorf("calls = %d, want the loop to keep trying", frames.calls.Load())
 		}
+	})
+}
+
+// noSound is a SoundSource for runs that must not listen.
+func noSound(context.Context, func([]byte, time.Time) error) error {
+	panic("the engine listened for a detector that does not hear")
+}
+
+// earDetector reports a bite on the first loud packet it hears.
+type earDetector struct{ detect.BiteDetector }
+
+func (earDetector) Hear(pcm []byte, _ time.Time) bool { return pcm[0] != 0 }
+
+func TestEngineReelsWhenTheDetectorHearsABite(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		log := &actionLog{}
+		engine, fsm, _, _ := newSceneEngine(t, log)
+		defer fsm.Close()
+		bang := make(chan struct{})
+		engine.detectors = func(config.Config) (detect.Locator, detect.BiteDetector, error) {
+			return detect.NewMarkerLocator(), earDetector{detect.NewMotionBiteDetector(nil)}, nil
+		}
+		engine.sound = func(ctx context.Context, emit func([]byte, time.Time) error) error {
+			quiet := []byte{0}
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-bang:
+					bang = nil // a closed channel stays ready
+					emit([]byte{1}, time.Now())
+				case <-time.After(10 * time.Millisecond):
+					emit(quiet, time.Now())
+				}
+			}
+		}
+		startEngine(t, engine)
+		defer engine.Stop()
+		fsm.EventAwaitFocus()
+		fsm.EventFocusAcquired()
+		time.Sleep(500 * time.Millisecond)
+		wantState(t, fsm, StateMonitoring)
+
+		close(bang)
+		time.Sleep(100*time.Millisecond + reelClickDelay)
+
+		wantState(t, fsm, StateCooldown)
+		wantActions(t, log, "move", "move", "click")
 	})
 }

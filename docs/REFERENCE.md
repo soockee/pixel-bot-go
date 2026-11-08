@@ -64,7 +64,7 @@ return (x,y,score,scale,found?)
 | MaxFailedCasts              | Casts in a row without a reel before halting | Default 5                             |
 | MaxSessionMinutes           | Run length; halts at the next cast after it | Default 60                             |
 | Locator (`locator`)         | Technique that finds the bobber             | `marker` by default; see `detect.LocatorNames` |
-| BiteDetector (`bite_detector`) | Technique that recognises a bite        | `motion` by default, or `splash`       |
+| BiteDetector (`bite_detector`) | Technique that recognises a bite        | `motion` by default, `splash`, or `splash_sound` (splash plus the bite sound; listens to the selected window's process) |
 | RecordDir (`record_dir`)    | Folder for new recordings                   | Default `datasets`                     |
 | RecordKeys (`record_keys`)  | Record keys as well as the mouse            | Default true                           |
 
@@ -178,7 +178,7 @@ A cast covers the time the bobber is on screen. Leave out `bite_ms` if no bite c
 | False bites per cast | First trigger earlier than that, or in a cast with no bite |
 | Bite latency p95 | Trigger time after `bite_ms`, rounded up to 0 for early triggers |
 
-Bite metrics watch the marker box from the frame it locks on, landing included, as the app does, and otherwise a square around the labelled bobber from the cast's start. Every bite detector sees the same areas, and the choice of locator does not affect them. `n/a` means nothing was measured. All values except search time repeat exactly. Recordings run at about 10 fps and the live app at 30 fps, so bite numbers are an approximation. `bite_ms` from `-label` is the reel minus a fixed reaction time, while real reactions vary from 0.8 to 1.7 s, so a trigger on the real splash can count as a false bite.
+A detector that listens, such as `splash_sound`, also gets the session's `audio.wav` in play order, and datasets without sound are skipped for it. Bite metrics watch the marker box from the frame it locks on, landing included, as the app does, and otherwise a square around the labelled bobber from the cast's start. Every bite detector sees the same areas, and the choice of locator does not affect them. `n/a` means nothing was measured. All values except search time repeat exactly. Recordings run at about 10 fps and the live app at 30 fps, so bite numbers are an approximation. `bite_ms` from `-label` is the reel minus a fixed reaction time, while real reactions vary from 0.8 to 1.7 s, so a trigger on the real splash can count as a false bite.
 
 `detecteval -label <dir> [-cast mouse:x1] [-reel mouse:right] [-reaction 1200] [-box 40]` pairs each cast with the next reel click. Bindings are `mouse:<button>` for a click or `key:<name>`, including chords such as `key:Shift+B`.
 

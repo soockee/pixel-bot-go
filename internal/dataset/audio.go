@@ -1,7 +1,11 @@
 package dataset
 
 import (
+	"bytes"
 	"encoding/binary"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -57,6 +61,23 @@ func (w *AudioWriter) Write(pcm []byte, at time.Time) error {
 	n, err := w.file.Write(pcm)
 	w.samples += int64(n / capture.AudioFrameBytes)
 	return err
+}
+
+// Audio returns the samples of audio.wav in the layout of capture.CaptureAudio,
+// or nil when the dataset has no sound.
+func (d *Dataset) Audio() ([]byte, error) {
+	data, err := os.ReadFile(AudioPath(d.Dir))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	// Sizes are ignored, because a killed recording leaves them at zero.
+	if len(data) < wavHeaderBytes || !bytes.Equal(data[8:36], wavHeader(0)[8:36]) {
+		return nil, fmt.Errorf("%s is not %d Hz %d-bit stereo PCM", audioFile, capture.AudioRate, capture.AudioBits)
+	}
+	return data[wavHeaderBytes:], nil
 }
 
 // Close writes the final sizes into the header.

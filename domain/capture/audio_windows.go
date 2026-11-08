@@ -88,6 +88,24 @@ func CaptureAudio(ctx context.Context, pid uint32, emit func(pcm []byte, at time
 	return nil
 }
 
+// WindowProcess returns the ID of the process that owns the top-level window
+// with this exact title.
+func WindowProcess(title string) (uint32, error) {
+	name, err := windows.UTF16PtrFromString(title)
+	if err != nil {
+		return 0, err
+	}
+	hwnd, _, _ := findWindow.Call(0, uintptr(unsafe.Pointer(name)))
+	if hwnd == 0 {
+		return 0, fmt.Errorf("no window titled %q", title)
+	}
+	var pid uint32
+	if _, err := windows.GetWindowThreadProcessId(windows.HWND(hwnd), &pid); err != nil {
+		return 0, err
+	}
+	return pid, nil
+}
+
 // activateProcessLoopback opens an audio client on the process loopback device.
 func activateProcessLoopback(pid uint32) (unsafe.Pointer, error) {
 	params := activationParams{activationType: 1, pid: pid} // process loopback, include the process tree
@@ -185,6 +203,7 @@ const (
 var (
 	mmdevapi                    = windows.NewLazySystemDLL("mmdevapi.dll")
 	activateAudioInterfaceAsync = mmdevapi.NewProc("ActivateAudioInterfaceAsync")
+	findWindow                  = user32.NewProc("FindWindowW")
 	kernel32                    = windows.NewLazySystemDLL("kernel32.dll")
 	queryPerformanceCounter     = kernel32.NewProc("QueryPerformanceCounter")
 	queryPerformanceFrequency   = kernel32.NewProc("QueryPerformanceFrequency")

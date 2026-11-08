@@ -27,3 +27,11 @@ type BiteDetector interface {
 	Feed(roi *image.RGBA, t time.Time) bool
 	Reset()
 }
+
+// SoundBiteDetector is a BiteDetector that also listens to the game. Hear takes
+// each packet of capture.CaptureAudio in play order, on the goroutine that calls
+// Feed, and reports a bite.
+type SoundBiteDetector interface {
+	BiteDetector
+	Hear(pcm []byte, t time.Time) bool
+}

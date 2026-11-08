@@ -46,6 +46,8 @@ Adaptive thresholds, variable cooldown strategies, multi‑modal confirmation (a
 
 The `splash` bite detector watches the centre of the marker box, where the bobber sits. A bite throws up a splash there, which brightens many centre pixels within one or two frames. Spell effects of other players and passing light spread across the whole box, so the detector needs at least half of the brightened pixels in the centre. Each pixel is compared with a baseline that takes on the scene with a 0.5 s lag, so lasting changes such as the landed bobber or a parked cursor blend in, while the splash appears within a frame or two. It ignores the first 3 s after the lock, while the bobber lands.
 
+The `splash_sound` bite detector adds the game's sound. In recordings the bite sound starts 0.2 to 0.45 s after the splash at the player's bobber. Other players' bobbers make the same sound but splash elsewhere, and spell effects splash without it, so the detector needs both: a sound starting within 0.8 s after a splash in the centre of the box. A sound starts when its 50 ms level is above 15 and three times the median of the 2 s before. The engine taps the selected window's process through Windows process loopback, which leaves the game audible and records no other program. The game mutes itself in the background unless its sound-in-background option is on, but the bot only fishes while the game is focused.
+
 ## Summary Mental Model
 Two timer gates (search, cooldown) guarantee forward motion; detection / bite events adjust path opportunistically. Understand states + events + timers to trace any cycle.
 

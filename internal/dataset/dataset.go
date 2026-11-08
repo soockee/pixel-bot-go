@@ -85,6 +85,7 @@ type FrameRef struct {
 // Dataset is a loaded recording. Frames are sorted by time.
 type Dataset struct {
 	Name   string
+	Dir    string
 	Labels Labels
 	Frames []FrameRef
 }
@@ -95,7 +96,7 @@ func Load(dir string) (*Dataset, error) {
 	if err != nil {
 		return nil, err
 	}
-	d := &Dataset{Name: filepath.Base(dir)}
+	d := &Dataset{Name: filepath.Base(dir), Dir: dir}
 	if err := json.Unmarshal(data, &d.Labels); err != nil {
 		return nil, fmt.Errorf("%s: %w", labelsFile, err)
 	}

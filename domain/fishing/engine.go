@@ -4,6 +4,7 @@ import (
 	"context"
 	"image"
 	"log/slog"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -22,6 +23,16 @@ type FrameSource interface {
 	Next() (capture.Frame, error)
 }
 
+// SoundSource streams the game's sound to emit until ctx ends. The first sample
+// of each packet played at the given time.
+type SoundSource func(ctx context.Context, emit func(pcm []byte, at time.Time) error) error
+
+// soundPacket is one packet from a SoundSource.
+type soundPacket struct {
+	pcm []byte
+	at  time.Time
+}
+
 // Preview is the latest image for display. ROI is nil outside monitoring.
 type Preview struct {
 	Frame *image.RGBA
@@ -33,6 +44,7 @@ type Preview struct {
 // UI dependency. Start and Stop must be called from one goroutine.
 type Engine struct {
 	frames    FrameSource
+	sound     SoundSource
 	fsm       *FishingFSM
 	detectors DetectorFactory
 	cfg       *config.Config
@@ -45,9 +57,10 @@ type Engine struct {
 // DetectorFactory builds the detectors for a run from that run's config.
 type DetectorFactory func(config.Config) (detect.Locator, detect.BiteDetector, error)
 
-// NewEngine returns a stopped Engine.
-func NewEngine(frames FrameSource, fsm *FishingFSM, detectors DetectorFactory, cfg *config.Config, logger *slog.Logger) *Engine {
-	return &Engine{frames: frames, fsm: fsm, detectors: detectors, cfg: cfg, logger: logger}
+// NewEngine returns a stopped Engine. It listens to sound only for a bite
+// detector that implements detect.SoundBiteDetector.
+func NewEngine(frames FrameSource, sound SoundSource, fsm *FishingFSM, detectors DetectorFactory, cfg *config.Config, logger *slog.Logger) *Engine {
+	return &Engine{frames: frames, sound: sound, fsm: fsm, detectors: detectors, cfg: cfg, logger: logger}
 }
 
 // Start begins a run with the detectors the current config names. Starting twice
@@ -63,6 +76,7 @@ func (e *Engine) Start() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel, e.done = cancel, make(chan struct{})
 	r := &run{engine: e, locator: locator, bite: bite}
+	r.listener, _ = bite.(detect.SoundBiteDetector)
 	go r.loop(ctx, e.done)
 	return nil
 }
@@ -86,7 +100,8 @@ type run struct {
 	engine     *Engine
 	locator    detect.Locator
 	bite       detect.BiteDetector
-	target     image.Rectangle // locked area in screen coordinates
+	listener   detect.SoundBiteDetector // bite, when it also listens
+	target     image.Rectangle          // locked area in screen coordinates
 	lastSearch time.Time
 	searches   int
 	monitoring bool
@@ -95,6 +110,9 @@ type run struct {
 
 func (r *run) loop(ctx context.Context, done chan<- struct{}) {
 	defer close(done)
+	var listening sync.WaitGroup
+	defer listening.Wait()
+	sounds := r.listen(ctx, &listening)
 	ticker := time.NewTicker(frameInterval)
 	defer ticker.Stop()
 	for {
@@ -103,7 +121,42 @@ func (r *run) loop(ctx context.Context, done chan<- struct{}) {
 			return
 		case <-ticker.C:
 			r.step()
+		case p := <-sounds:
+			r.hear(p)
 		}
+	}
+}
+
+// listen streams sound into the returned channel while the run lasts, or
+// returns nil when the bite detector does not listen.
+func (r *run) listen(ctx context.Context, wg *sync.WaitGroup) <-chan soundPacket {
+	if r.listener == nil {
+		return nil
+	}
+	sounds := make(chan soundPacket, 256) // 2.5 s of 10 ms packets
+	e := r.engine
+	wg.Go(func() {
+		err := e.sound(ctx, func(pcm []byte, at time.Time) error {
+			select {
+			case sounds <- soundPacket{pcm, at}:
+			default: // the loop is busy; a dropped packet only blurs one level
+			}
+			return nil
+		})
+		if err != nil && ctx.Err() == nil {
+			e.logger.Error("sound capture failed; bites cannot be heard", "error", err)
+		}
+	})
+	return sounds
+}
+
+// hear gives a sound packet to the bite detector while it watches a bobber.
+func (r *run) hear(p soundPacket) {
+	if !r.monitoring || r.engine.fsm.Current() != StateMonitoring {
+		return
+	}
+	if r.listener.Hear(p.pcm, p.at) {
+		r.engine.fsm.EventFishBite()
 	}
 }
 

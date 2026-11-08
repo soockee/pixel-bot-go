@@ -343,7 +343,7 @@ Phase 3 status: the Engine also took over the capture loop, so the capture servi
 - [ ] **T5.5** Build and evaluate L2 (motion).
 - [ ] **T5.6** Build and evaluate B1 (bobber tracking).
 - [ ] **T5.8** Build and evaluate `splash`: the splash brightens the centre of the marker box, while other players' effects spread across it. *Status:* built (`domain/detect/splash.go`); thresholds come from one 6-cast session and need more footage before it becomes the default.
-- [ ] **T5.9** Evaluate B2 (bite sound). Needs audio in recordings first.
+- [ ] **T5.9** Evaluate B2 (bite sound). *Status:* recordings carry the game's sound, and `splash_sound` combines it with the splash: 9 of 11 bites caught with no false trigger on two sessions. Needs more sessions before it becomes the default.
 - [ ] **T5.7** Ship the best candidates and delete the rest. Keep only code that won. Record results here.
 
 The app now locates the bobber from the addon's corner brackets (`detect.MarkerLocator`), which replaces the template for the live locator and covers T5.4 and T5.5 unless the marker proves unreliable. Bite detection (T5.3, T5.6) still needs footage with the marker on.

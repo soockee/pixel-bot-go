@@ -13,10 +13,7 @@ import (
 // Not safe for concurrent use; call Feed from a single goroutine.
 type SplashBiteDetector struct {
 	logger *slog.Logger
-	base   []float32 // per-pixel luminance that follows the scene with a lag
-	w, h   int
-	start  time.Time
-	last   time.Time
+	scene  brightening
 	fired  bool
 }
 
@@ -43,16 +40,48 @@ func (s *SplashBiteDetector) Feed(roi *image.RGBA, t time.Time) bool {
 	if roi == nil || s.fired {
 		return false
 	}
-	b := roi.Bounds()
-	w, h := b.Dx(), b.Dy()
+	b, ok := s.scene.measure(roi, t)
+	if !ok {
+		return false
+	}
+	s.fired = b.centreSplash() && 2*b.centre >= b.all
+	if s.fired {
+		s.logger.Info("bite detected", "detector", "splash", "centre", b.centre, "brightened", b.all, "disc", b.disc)
+	}
+	return s.fired
+}
+
+var _ BiteDetector = (*SplashBiteDetector)(nil)
+
+// brightening compares each frame of the watched box with a baseline that
+// follows the scene with a lag, so an abrupt splash stands out.
+type brightening struct {
+	base        []float32
+	w, h        int
+	start, last time.Time
+}
+
+// brightened counts pixels that rose by splashRise, in the whole box and in the
+// centre disc where the bobber sits.
+type brightened struct{ all, centre, disc int }
+
+func (b brightened) centreSplash() bool {
+	return b.centre > 0 && float64(b.centre) >= splashMinCentre*float64(b.disc)
+}
+
+// measure updates the baseline with roi and reports what brightened. It reports
+// false until the scene has settled after the first frame.
+func (s *brightening) measure(roi *image.RGBA, t time.Time) (brightened, bool) {
+	r := roi.Bounds()
+	w, h := r.Dx(), r.Dy()
 	first := s.base == nil || w != s.w || h != s.h
 	if first {
 		s.base, s.w, s.h, s.start = make([]float32, w*h), w, h, t
 	}
 	follow := float32(1 - math.Exp(-float64(t.Sub(s.last))/float64(splashLag)))
 	s.last = t
-	cx, cy, r := w/2, h/2, min(w, h)/4
-	var all, centre, disc int
+	cx, cy, radius := w/2, h/2, min(w, h)/4
+	var b brightened
 	for y := range h {
 		row := roi.Pix[y*roi.Stride:]
 		for x := range w {
@@ -63,27 +92,18 @@ func (s *SplashBiteDetector) Feed(roi *image.RGBA, t time.Time) bool {
 				s.base[i] = l
 				continue
 			}
-			inDisc := (x-cx)*(x-cx)+(y-cy)*(y-cy) <= r*r
+			inDisc := (x-cx)*(x-cx)+(y-cy)*(y-cy) <= radius*radius
 			if inDisc {
-				disc++
+				b.disc++
 			}
 			if l-s.base[i] > splashRise {
-				all++
+				b.all++
 				if inDisc {
-					centre++
+					b.centre++
 				}
 			}
 			s.base[i] += (l - s.base[i]) * follow
 		}
 	}
-	if first || t.Sub(s.start) < splashSettle {
-		return false
-	}
-	s.fired = centre > 0 && float64(centre) >= splashMinCentre*float64(disc) && 2*centre >= all
-	if s.fired {
-		s.logger.Info("bite detected", "detector", "splash", "centre", centre, "brightened", all, "disc", disc)
-	}
-	return s.fired
+	return b, !first && t.Sub(s.start) >= splashSettle
 }
-
-var _ BiteDetector = (*SplashBiteDetector)(nil)
