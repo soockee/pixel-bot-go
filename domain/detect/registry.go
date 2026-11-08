@@ -25,6 +25,7 @@ var (
 	}
 	biteDetectors = map[string]func(*slog.Logger) BiteDetector{
 		"motion": func(logger *slog.Logger) BiteDetector { return NewMotionBiteDetector(logger) },
+		"splash": func(logger *slog.Logger) BiteDetector { return NewSplashBiteDetector(logger) },
 	}
 )
 

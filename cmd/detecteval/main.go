@@ -138,7 +138,7 @@ func run(configPath, locatorArg, biteArg string, asJSON bool, dirs []string, out
 			report.Locators[name] = counts
 			searches[name] = append(searches[name], times...)
 		}
-		areas, err := watchAreas(d, cfg.ROISizePx)
+		watches, err := watchAreas(d, cfg.ROISizePx)
 		if err != nil {
 			return fmt.Errorf("%s: %w", dir, err)
 		}
@@ -148,7 +148,7 @@ func run(configPath, locatorArg, biteArg string, asJSON bool, dirs []string, out
 				return err
 			}
 			counts := report.Bites[name]
-			if err := evaluateBite(bite, d, areas, &counts); err != nil {
+			if err := evaluateBite(bite, d, watches, &counts); err != nil {
 				return fmt.Errorf("%s: %w", dir, err)
 			}
 			report.Bites[name] = counts

@@ -44,6 +44,8 @@ While monitoring, a grayscale ROI stream feeds statistical heuristics (EMA + win
 ## Extensibility Ideas
 Adaptive thresholds, variable cooldown strategies, multi‑modal confirmation (audio splash) can be added as new event sources feeding the FSM.
 
+The `splash` bite detector watches the centre of the marker box, where the bobber sits. A bite throws up a splash there, which brightens many centre pixels within one or two frames. Spell effects of other players and passing light spread across the whole box, so the detector needs at least half of the brightened pixels in the centre. It ignores the first 3 s after the lock, while the landing ripples fade.
+
 ## Summary Mental Model
 Two timer gates (search, cooldown) guarantee forward motion; detection / bite events adjust path opportunistically. Understand states + events + timers to trace any cycle.
 

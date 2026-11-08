@@ -44,12 +44,12 @@ func export(out string, dirs []string, roiSize int, status io.Writer) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", dir, err)
 		}
-		areas, err := watchAreas(d, roiSize)
+		watches, err := watchAreas(d, roiSize)
 		if err != nil {
 			return fmt.Errorf("%s: %w", dir, err)
 		}
 		for i, cast := range d.Labels.Casts {
-			box := areas[i]
+			box := watches[i].Area
 			rel := filepath.Join(d.Name, fmt.Sprintf("cast-%03d", i))
 			if err := os.MkdirAll(filepath.Join(out, rel), 0o755); err != nil {
 				return err

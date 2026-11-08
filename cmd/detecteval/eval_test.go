@@ -177,11 +177,11 @@ func TestBitesAreWatchedInTheMarkerBox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	areas, err := watchAreas(d, 80)
+	watches, err := watchAreas(d, 80)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := areas[0]; got.Dx() == 80 || !got.Overlaps(d.Labels.Casts[0].Bobber.Image()) {
+	if got := watches[0].Area; got.Dx() == 80 || !got.Overlaps(d.Labels.Casts[0].Bobber.Image()) {
 		t.Errorf("area = %v, want the marker's box", got)
 	}
 }

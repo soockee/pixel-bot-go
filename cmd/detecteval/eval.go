@@ -83,45 +83,56 @@ func evaluateLocator(l detect.Locator, d *dataset.Dataset, c *LocatorCounts) ([]
 	return searches, nil
 }
 
-// watchAreas finds the area the app would watch in each cast: the marker's box,
-// or a square around the labelled bobber when no marker shows. All bite
-// detectors see the same areas, so their results compare directly.
-func watchAreas(d *dataset.Dataset, roiSize int) ([]image.Rectangle, error) {
+// watch is what the app would watch in a cast: an area, from the frame it locks on.
+type watch struct {
+	Area   image.Rectangle
+	FromMS int64
+}
+
+// watchAreas finds what the app would watch in each cast: the marker's box from
+// the frame the marker locks on, or a square around the labelled bobber from the
+// cast's start when no marker shows. The search starts at the cast and skips a
+// marker left from the cast before, so every bite detector sees what the app sees,
+// landing included.
+func watchAreas(d *dataset.Dataset, roiSize int) ([]watch, error) {
 	marker := detect.NewMarkerLocator()
-	areas := make([]image.Rectangle, len(d.Labels.Casts))
+	watches := make([]watch, len(d.Labels.Casts))
+	prevReel := int64(-1)
 	for i, cast := range d.Labels.Casts {
+		from := max(cast.StartMS-dataset.LandingMS, prevReel+1) // a cast cannot start before the last reel
+		prevReel = cast.EndMS
 		b := cast.Bobber.Image()
 		half := roiSize / 2
-		cx, cy := (b.Min.X+b.Max.X)/2, (b.Min.Y+b.Max.Y)/2
-		areas[i] = image.Rect(cx-half, cy-half, cx+half, cy+half)
-		for _, f := range d.FramesIn(cast.Span) {
+		centre := image.Pt((b.Min.X+b.Max.X)/2, (b.Min.Y+b.Max.Y)/2)
+		watches[i] = watch{image.Rect(centre.X-half, centre.Y-half, centre.X+half, centre.Y+half), cast.StartMS}
+		for _, f := range d.FramesIn(dataset.Span{StartMS: from, EndMS: cast.EndMS}) {
 			img, err := f.Load()
 			if err != nil {
 				return nil, err
 			}
-			if match, found := marker.Locate(img); found {
-				areas[i] = match.Box
+			if match, found := marker.Locate(img); found && centre.In(match.Box) {
+				watches[i] = watch{match.Box, f.MS}
 				break
 			}
 		}
 	}
-	return areas, nil
+	return watches, nil
 }
 
 // evaluateBite runs a bite detector over each cast's watch area.
-func evaluateBite(b detect.BiteDetector, d *dataset.Dataset, areas []image.Rectangle, c *BiteCounts) error {
+func evaluateBite(b detect.BiteDetector, d *dataset.Dataset, watches []watch, c *BiteCounts) error {
 	for i, cast := range d.Labels.Casts {
 		c.Casts++
 		if cast.BiteMS != nil {
 			c.BiteCasts++
 		}
 		b.Reset()
-		for _, f := range d.FramesIn(cast.Span) {
+		for _, f := range d.FramesIn(dataset.Span{StartMS: watches[i].FromMS, EndMS: cast.EndMS}) {
 			img, err := f.Load()
 			if err != nil {
 				return err
 			}
-			if b.Feed(img.SubImage(areas[i]).(*image.RGBA), time.UnixMilli(f.MS)) {
+			if b.Feed(img.SubImage(watches[i].Area).(*image.RGBA), time.UnixMilli(f.MS)) {
 				scoreBite(f.MS, cast.BiteMS, c)
 				break
 			}
