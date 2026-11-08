@@ -133,6 +133,9 @@ func (s *Service) SaveSettings(values Settings) (saved Settings, err error) {
 			return
 		}
 		*s.cfg = next
+		if s.cmds.CheckAddon != nil {
+			s.cmds.CheckAddon() // the addon binds the Cast and Interact keys, so a change makes it outdated
+		}
 		s.view.SetRecorder(next.RecorderShown())
 		s.logger.Info("config saved", "path", s.cfgPath)
 		s.view.SetStatus("Settings saved")

@@ -123,6 +123,31 @@ func TestShareRecordingsShowsTheRecorder(t *testing.T) {
 	}
 }
 
+func TestSavingSettingsRechecksTheAddon(t *testing.T) {
+	cfg := config.DefaultConfig()
+	loop := NewLoop(func() {})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go loop.Run(ctx, time.Hour)
+	checks := 0
+	cmds := Commands{Running: func() bool { return false }, CheckAddon: func() { checks++ }}
+	s := NewService(loop, NewView(NewFrames(), func(State) {}), cmds, nil, cfg,
+		filepath.Join(t.TempDir(), "config.json"), slog.New(slog.DiscardHandler))
+
+	values := settingsOf(cfg)
+	values.CastKey = "F4" // the addon binds this key, so its install is now out of date
+	if _, err := s.SaveSettings(values); err != nil {
+		t.Fatal(err)
+	}
+	if checks != 1 {
+		t.Fatalf("addon checked %d times after saving, want 1", checks)
+	}
+	values.StopKey = "nope"
+	if _, err := s.SaveSettings(values); err == nil || checks != 1 {
+		t.Fatalf("a rejected save: err %v, checks %d; want an error and no check", err, checks)
+	}
+}
+
 func TestViewFlushSendsOnlyChanges(t *testing.T) {
 	var sent []State
 	v := NewView(NewFrames(), func(s State) { sent = append(sent, s) })

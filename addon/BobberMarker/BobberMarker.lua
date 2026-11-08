@@ -195,6 +195,98 @@ local function IsChanneling()
 end
 
 ---------------------------------------------------------------------------
+-- Keys
+---------------------------------------------------------------------------
+
+-- Go Fish presses the Cast key and, when it reels with the Interact key, the
+-- Interact key. Its installer writes both into BobberMarkerKeys (Keys.lua,
+-- loaded before this file), and this puts them to work in the game so nobody has
+-- to: a macro that casts Fishing on the Cast key, and the game's own Interact
+-- action on the Interact key. Macros and bindings cannot change in combat, so
+-- this waits for it to end. It changes only what differs and says what it did.
+
+local CAST_MACRO = "GoFish Cast";
+local FISHING = 7620;      -- the spell ID of Fishing; its name is looked up, so the macro follows the game's language
+local MACRO_ICON = 134400; -- the question mark icon
+local INTERACT = "INTERACTTARGET";
+local keysPending = false;
+
+local function Say(text)
+	print("|cffff00ffBobber Marker:|r " .. text);
+end
+
+local function FishingName()
+	local name;
+	if C_Spell and C_Spell.GetSpellName then
+		name = C_Spell.GetSpellName(FISHING);
+	elseif GetSpellInfo then
+		name = GetSpellInfo(FISHING);
+	end
+	return name or "Fishing";
+end
+
+-- Makes sure the account-wide Cast macro casts Fishing. False when it cannot.
+local function EnsureCastMacro()
+	local body = "#showtooltip\n/cast " .. FishingName();
+	local index = GetMacroIndexByName(CAST_MACRO);
+	if index and index > 0 then
+		local _, _, current = GetMacroInfo(index);
+		if current ~= body then
+			EditMacro(index, CAST_MACRO, nil, body);
+			Say("updated the " .. CAST_MACRO .. " macro.");
+		end
+		return true;
+	end
+	if CreateMacro(CAST_MACRO, MACRO_ICON, body, false) then
+		Say("created the " .. CAST_MACRO .. " macro.");
+		return true;
+	end
+	Say("could not create the " .. CAST_MACRO .. " macro; the macro list may be full.");
+	return false;
+end
+
+local function SetUpKeys()
+	local keys = BobberMarkerKeys;
+	if type(keys) ~= "table" then
+		return;
+	end
+	if InCombatLockdown() then
+		keysPending = true; -- PLAYER_REGEN_ENABLED tries again
+		return;
+	end
+	keysPending = false;
+	local changed = false;
+	local cast, interact = keys.cast, keys.interact;
+	if cast and cast ~= "" and EnsureCastMacro() and GetBindingAction(cast) ~= "MACRO " .. CAST_MACRO then
+		if SetBindingMacro(cast, CAST_MACRO) then
+			Say(cast .. " now casts Fishing.");
+			changed = true;
+		else
+			Say("could not bind " .. cast .. "; bind it to the " .. CAST_MACRO .. " macro in Key Bindings.");
+		end
+	end
+	if interact and interact ~= "" and GetBindingAction(interact) ~= INTERACT then
+		if SetBinding(interact, INTERACT) then
+			Say(interact .. " now interacts with the target.");
+			changed = true;
+		else
+			Say("could not bind " .. interact .. "; bind Interact With Target to it in Key Bindings.");
+		end
+	end
+	if changed then
+		SaveBindings(GetCurrentBindingSet());
+	end
+end
+
+-- A failure here must not stop the marker, so it is reported instead of raised.
+local function TrySetUpKeys()
+	local ok, err = pcall(SetUpKeys);
+	if not ok then
+		Say("could not set up the keys: " .. tostring(err));
+	end
+end
+
+---------------------------------------------------------------------------
 -- Events and the slash command
 ---------------------------------------------------------------------------
 
@@ -208,10 +300,17 @@ function handlers.ADDON_LOADED()
 end
 
 function handlers.PLAYER_ENTERING_WORLD()
+	TrySetUpKeys();
 	if IsChanneling() then
 		StartFishing();
 	else
 		StopFishing();
+	end
+end
+
+function handlers.PLAYER_REGEN_ENABLED()
+	if keysPending then
+		TrySetUpKeys();
 	end
 end
 
