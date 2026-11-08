@@ -15,6 +15,6 @@ try {
         if (-not (Test-Path node_modules)) { npm ci }
         npm run build
     } finally { Pop-Location }
-    go build -o pixel-bot-go.exe .
+    go build -ldflags '-H=windowsgui' -o pixel-bot-go.exe . # as released: no terminal window; runs with arguments use this one
     & .\pixel-bot-go.exe @args
 } finally { Pop-Location }

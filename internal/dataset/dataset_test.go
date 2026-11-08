@@ -41,6 +41,35 @@ func writeLabels(t *testing.T, dir, labels string) {
 	}
 }
 
+// slowStop cancels during its first frame and then outlasts a tick, so the
+// cancelled context and the ticker are both ready when Record loops.
+type slowStop struct{ countingFrames }
+
+func (f *slowStop) Next() (capture.Frame, error) {
+	frame, err := f.countingFrames.Next()
+	time.Sleep(recordInterval + recordInterval/2)
+	return frame, err
+}
+
+func TestRecordGrabsNoFrameAfterStop(t *testing.T) {
+	// select picks at random when both are ready, so a single run could pass by luck.
+	for range 12 {
+		ctx, cancel := context.WithCancel(context.Background())
+		dir := filepath.Join(t.TempDir(), "session")
+		if err := Create(dir); err != nil {
+			t.Fatal(err)
+		}
+		frames := &slowStop{countingFrames{limit: 1, cancel: cancel}}
+		if _, err := Record(ctx, frames, detect.NewMarkerLocator(), dir, time.Unix(0, 0)); err != nil {
+			t.Fatal(err)
+		}
+		cancel()
+		if frames.calls != 1 {
+			t.Fatalf("Record grabbed %d frames, want 1: it kept going after the stop", frames.calls)
+		}
+	}
+}
+
 func TestRecordThenLoad(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "session")
 	ctx, cancel := context.WithCancel(context.Background())

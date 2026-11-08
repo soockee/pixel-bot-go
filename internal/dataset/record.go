@@ -62,8 +62,12 @@ func Record(ctx context.Context, frames FrameSource, locator detect.Locator, dir
 	for {
 		select {
 		case <-ctx.Done():
-			return written, nil
 		case <-ticker.C:
+		}
+		// A slow frame leaves both ready, and select then picks at random, which
+		// would grab one more frame after the stop.
+		if ctx.Err() != nil {
+			return written, nil
 		}
 		frame, err := frames.Next()
 		if err != nil {
