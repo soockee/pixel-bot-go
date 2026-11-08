@@ -33,11 +33,16 @@ func (a *app) newOverlay() *application.WebviewWindow {
 // layered window at full opacity passes clicks to the game. Wails' own
 // IgnoreMouseEvents and ExStyle options lose the transparent background, so the
 // styles go on the native window, which exists only some time after the app
-// started. It reports whether they were set. Call on the main thread.
+// started. It also hides the overlay from screen copies (BitBlt in
+// domain/capture), so the bot never sees its own brackets and status. It
+// reports whether the click-through styles were set. Call on the main thread.
 func (a *app) passThrough() bool {
 	hwnd := w32.HWND(a.overlay.NativeWindow())
 	if hwnd == 0 {
 		return false
+	}
+	if !w32.SetWindowDisplayAffinity(uintptr(hwnd), w32.WDA_EXCLUDEFROMCAPTURE) {
+		a.logger.Warn("overlay is visible to screen capture; the bot may read it")
 	}
 	style := uint32(w32.GetWindowLong(hwnd, w32.GWL_EXSTYLE))
 	w32.SetWindowLong(hwnd, w32.GWL_EXSTYLE, style|w32.WS_EX_NOACTIVATE|w32.WS_EX_TRANSPARENT|w32.WS_EX_LAYERED)
