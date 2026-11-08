@@ -94,11 +94,18 @@ jobs:
 
       - name: Build Windows binary
         if: ${{ !contains(github.event.head_commit.message, 'skip-release') }}
+        env:
+          VERSION: ${{ steps.next_tag.outputs.next_tag }}
+          CLOUD_URL: ${{ vars.VRL_CLOUD_URL }}
+          CLIENT_ID: ${{ vars.VRL_OAUTH_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.VRL_OAUTH_CLIENT_SECRET }}
         run: |
           mkdir -p dist
-          # The version lets the app offer newer releases (internal/update).
+          # The version lets the app offer newer releases (internal/update); the
+          # sign-in values come from repository settings, not the public source.
+          pkg=github.com/soocke/pixel-bot-go/internal
           GOOS=windows GOARCH=amd64 go build -tags production \
-            -ldflags "-X github.com/soocke/pixel-bot-go/internal/update.Version=${{ steps.next_tag.outputs.next_tag }}" \
+            -ldflags "-X $pkg/update.Version=$VERSION -X $pkg/cloud.DefaultURL=$CLOUD_URL -X $pkg/cloud.DefaultClientID=$CLIENT_ID -X $pkg/cloud.DefaultClientSecret=$CLIENT_SECRET" \
             -o dist/pixel-bot-go-windows-amd64.exe .
 
       - name: Generate checksum

@@ -80,8 +80,8 @@ return (x,y,score,scale,found?)
 | BiteDetector (`bite_detector`) | Technique that recognises a bite        | `motion` by default, `splash`, or `splash_sound` (splash plus the bite sound; listens to the selected window's process) |
 | RecordDir (`record_dir`)    | Folder for new recordings                   | Default `datasets`                     |
 | RecordKeys (`record_keys`)  | Record keys as well as the mouse            | Default true                           |
-| CloudURL (`cloud_url`)      | Upload service URL, from the owner | Empty turns sign-in off |
-| OAuthClientID / OAuthClientSecret (`oauth_client_id`, `oauth_client_secret`) | Google Desktop OAuth client the app signs in with | Not confidential for desktop apps; empty client ID turns sign-in off |
+| CloudURL (`cloud_url`)      | Upload service URL | Empty uses the one release builds carry; empty in both turns sign-in off |
+| OAuthClientID / OAuthClientSecret (`oauth_client_id`, `oauth_client_secret`) | Google Desktop OAuth client the app signs in with | Not confidential for desktop apps; empty client ID uses the release build's client; empty in both turns sign-in off |
 
 Set the cast key in **Settings → Keys**. It must differ from the Stop hotkey.
 
@@ -93,7 +93,7 @@ Set the cast key in **Settings → Keys**. It must differ from the Stop hotkey.
 * Desktop window focused on fishing: the live capture with the locked bobber, the cycle, catches this run, and progress toward the session and failed-cast limits. Settings holds keys, run limits and the theme. With `"debug": true` a Recorder tab, the bite watch and the detection settings appear. The app finds the game window itself: it searches the window's client area and, once the bobber is locked, captures only its box.
 * JSON config persistence and structured event logging.
 * In-app update: a release build checks the latest GitHub Release at start and offers **Update to vX.Y.Z** in the top bar. The update downloads only `pixel-bot-go-windows-amd64.exe` and `CHECKSUMS.txt` over HTTPS from that release's `github.com/soockee/pixel-bot-go/releases/download/<tag>/` URLs, refuses the build unless its SHA-256 matches, renames the running exe to `<exe>.old`, puts the new one in place and restarts with the same arguments. It is refused during a run, a recording or an upload. The version comes from `-ldflags -X github.com/soocke/pixel-bot-go/internal/update.Version=vX.Y.Z`, set by `auto-release.yml`; any other value (`dev` by default) skips the check.
-* Google sign-in with role-based access: a real run needs a role with `fishing.run`, uploading a recording `recordings.upload`. The owner assigns roles; an account nobody gave a role may do nothing. Dry runs need no account, and while `cloud_url` or `oauth_client_id` is empty sign-in is off and nothing is gated.
+* Google sign-in with role-based access: a real run needs a role with `fishing.run`, uploading a recording `recordings.upload`. The owner assigns roles; an account nobody gave a role may do nothing. Dry runs need no account, and without a service URL and client ID (config or build) sign-in is off and nothing is gated.
 
 ## Command-Line Flags
 | Flag / variable                 | Effect                                                                                      |

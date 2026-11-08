@@ -50,7 +50,8 @@ type Config struct {
 	RecordKeys bool `json:"record_keys"`
 	// CloudURL is the vrl-recordings upload service, and OAuthClientID and
 	// OAuthClientSecret its Desktop OAuth client (not confidential for
-	// installed apps). Sign-in is off while CloudURL or OAuthClientID is empty.
+	// installed apps). Empty values fall back to the ones release builds carry
+	// (internal/cloud); without either, sign-in is off.
 	CloudURL          string `json:"cloud_url"`
 	OAuthClientID     string `json:"oauth_client_id"`
 	OAuthClientSecret string `json:"oauth_client_secret"`

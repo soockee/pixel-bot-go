@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -18,10 +19,14 @@ var errNoSignIn = errors.New("sign-in is not configured: set cloud_url and oauth
 // newCloud returns the upload service client, or nil while it is not configured.
 func (a *app) newCloud() *cloud.Client {
 	cfg := a.container.Config
-	if cfg.CloudURL == "" || cfg.OAuthClientID == "" {
+	url, id, secret := cmp.Or(cfg.CloudURL, cloud.DefaultURL), cfg.OAuthClientID, cfg.OAuthClientSecret
+	if id == "" {
+		id, secret = cloud.DefaultClientID, cloud.DefaultClientSecret
+	}
+	if url == "" || id == "" {
 		return nil
 	}
-	return cloud.New(cfg.CloudURL, cfg.OAuthClientID, cfg.OAuthClientSecret)
+	return cloud.New(url, id, secret)
 }
 
 // can reports whether the signed-in account's role grants permission. It runs

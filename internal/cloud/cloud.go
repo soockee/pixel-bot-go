@@ -18,6 +18,15 @@ import (
 	"golang.org/x/oauth2"
 )
 
+// Release builds set the service and its Desktop OAuth client with -ldflags
+// -X from repository variables, so they stay out of the source. The config
+// overrides them.
+var (
+	DefaultURL          string
+	DefaultClientID     string
+	DefaultClientSecret string
+)
+
 // Permissions the service grants through a role.
 const (
 	PermFish   = "fishing.run"
