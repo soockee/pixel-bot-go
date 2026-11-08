@@ -137,6 +137,11 @@ export interface State {
     "debug": boolean;
 
     /**
+     * sign-in is configured; without it fishing needs no role
+     */
+    "signIn": boolean;
+
+    /**
      * signed-in Google email, or ""
      */
     "account": string;

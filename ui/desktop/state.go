@@ -43,6 +43,7 @@ type State struct {
 	StopKey        string `json:"stopKey"`
 	Dark           bool   `json:"dark"`
 	Debug          bool   `json:"debug"`     // show the developer views
+	SignIn         bool   `json:"signIn"`    // sign-in is configured; without it fishing needs no role
 	Account        string `json:"account"`   // signed-in Google email, or ""
 	Role           string `json:"role"`      // the account's role, "" when nobody gave it one
 	CanFish        bool   `json:"canFish"`   // the role may start a run (dry runs need no role)

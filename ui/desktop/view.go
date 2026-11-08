@@ -95,6 +95,9 @@ func (v *View) SetAccount(email, role string, canFish, canUpload bool) {
 	v.state.Account, v.state.Role, v.state.CanFish, v.state.CanUpload = email, role, canFish, canUpload
 }
 
+// SetSignIn shows whether sign-in is configured.
+func (v *View) SetSignIn(configured bool) { v.state.SignIn = configured }
+
 // SetUploading shows the recording being uploaded, "" when none.
 func (v *View) SetUploading(name string) { v.state.Uploading = name }
 

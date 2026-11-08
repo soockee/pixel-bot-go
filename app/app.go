@@ -175,8 +175,9 @@ func (a *app) setWindow(title string) {
 func (a *app) toggleCapture() {
 	c := a.container
 	if !c.Capture.Enabled() {
-		// A dry run sends no input, so tests and agents need no account.
-		if !c.Config.DryRun && !a.can(cloud.PermFish) {
+		// A dry run sends no input, so tests and agents need no account; without
+		// a configured sign-in there are no roles to check.
+		if !c.Config.DryRun && a.cloud != nil && !a.can(cloud.PermFish) {
 			a.logger.Warn("start refused: the account may not fish", "signed_in", a.session != nil)
 			c.View.SetStatus("Sign in with an account whose role may fish")
 			return

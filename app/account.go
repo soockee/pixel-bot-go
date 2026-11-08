@@ -47,8 +47,11 @@ func (a *app) setSession(s *cloud.Session) {
 }
 
 // restoreAccount signs in with the kept refresh token, if there is one.
+// Without a configured sign-in, fishing needs no role.
 func (a *app) restoreAccount() {
+	a.container.View.SetSignIn(a.cloud != nil)
 	if a.cloud == nil {
+		a.container.View.SetAccount("", "", true, false)
 		return
 	}
 	token, err := cloud.LoadToken(accountPath)

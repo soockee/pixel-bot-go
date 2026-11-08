@@ -80,6 +80,7 @@ onState((s: State) => {
   signedIn = s.account !== "";
   $("account").hidden = !signedIn;
   $("account").textContent = signedIn ? `${s.account} · ${s.role || "no role"}` : "";
+  signIn.hidden = !s.signIn;
   if (!signIn.disabled) signIn.textContent = signedIn ? "Sign out" : "Sign in with Google";
 
   const update = $<HTMLButtonElement>("update");

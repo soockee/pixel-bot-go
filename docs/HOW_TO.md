@@ -115,7 +115,7 @@ Fishing with real input and uploading recordings need a Google account with a ro
 1. Click **Sign in with Google** in the top bar. The browser opens Google sign-in; pick your account and return to the app.
 2. The top bar shows your email and role. Without a role, **Start fishing** stays disabled: ask the owner to give your account a role that may fish, then sign out and in again.
 
-The app keeps you signed in (`pixel_bot_account.bin`, encrypted for your Windows user) and checks your role on each start. **Sign out** forgets it and stops a real run. Sign-in needs `cloud_url` and `oauth_client_id` in the config.
+The app keeps you signed in (`pixel_bot_account.bin`, encrypted for your Windows user) and checks your role on each start. **Sign out** forgets it and stops a real run. Sign-in needs `cloud_url` and `oauth_client_id` in the config; without them the top bar has no **Sign in** button and fishing needs no role.
 
 ## Update the App
 At each start a release build asks GitHub for the latest release of `soockee/pixel-bot-go`. When it is newer, the top bar shows **Update to vX.Y.Z**.
