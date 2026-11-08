@@ -24,6 +24,9 @@ type Commands struct {
 	SignOut func()
 	Upload  func(dir string) error
 	Update  func() error
+	// CheckUpdate asks GitHub for the latest release; it also waits for the network.
+	CheckUpdate  func() error
+	ReleaseNotes func()
 }
 
 // Service is what the frontend calls. Every method runs on the UI loop, so
@@ -166,6 +169,12 @@ func (s *Service) Upload(name string) error {
 
 // Update downloads, verifies and installs the newer release, then restarts.
 func (s *Service) Update() error { return s.cmds.Update() }
+
+// CheckUpdate looks for a newer release now; the result arrives in State.
+func (s *Service) CheckUpdate() error { return s.cmds.CheckUpdate() }
+
+// ReleaseNotes opens the latest release's page in the browser.
+func (s *Service) ReleaseNotes() { _ = s.do(s.cmds.ReleaseNotes) }
 
 // Exit closes the app.
 func (s *Service) Exit() { _ = s.do(s.cmds.Exit) }

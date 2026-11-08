@@ -28,38 +28,65 @@ func (a *app) checkUpdate() {
 	}
 	if !update.IsRelease(update.Version) {
 		a.logger.Info("update check skipped: not a release build", "version", update.Version)
+		a.container.View.SetUpdateCheck("", time.Time{}, time.Time{}, errLocalBuild.Error())
 		return
 	}
 	go func() {
 		for {
-			a.findUpdate()
+			if err := a.findUpdate(); err != nil {
+				a.logger.Warn("update check failed", "error", err)
+			}
 			time.Sleep(updateEvery)
 		}
 	}()
 }
 
-// findUpdate offers the latest release when it is newer than this build.
-func (a *app) findUpdate() {
+var errLocalBuild = errors.New("this is a local build; only release builds update")
+
+// findUpdate asks GitHub for the latest release and offers it when it is
+// newer than this build. It runs on the caller's goroutine.
+func (a *app) findUpdate() error {
+	if !update.IsRelease(update.Version) {
+		return errLocalBuild
+	}
+	view := a.container.View
+	busy := false
+	a.loop.Do(func() {
+		if busy = view.State().Checking; !busy {
+			view.SetChecking()
+		}
+	})
+	if busy {
+		return nil
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	r, err := a.updates.Latest(ctx)
-	if err != nil {
-		a.logger.Warn("update check failed", "error", err)
-		return
-	}
-	if !update.Newer(r.Tag, update.Version) {
-		a.logger.Debug("up to date", "version", update.Version, "latest", r.Tag)
-		return
-	}
 	a.loop.Do(func() {
-		st := a.container.View.State()
-		if st.Updating || st.Update == r.Tag {
-			return // already offered, or an update is installing
+		if err != nil {
+			view.SetUpdateCheck(a.release.Tag, a.release.Published, time.Now(), err.Error())
+			return
 		}
-		a.logger.Info("update available", "version", update.Version, "latest", r.Tag)
+		view.SetUpdateCheck(r.Tag, r.Published, time.Now(), "")
+		st := view.State()
+		if st.Updating {
+			return // the release being installed stays
+		}
 		a.release = r
-		a.container.View.SetUpdate(r.Tag, false)
+		if update.Newer(r.Tag, update.Version) && st.Update != r.Tag {
+			a.logger.Info("update available", "version", update.Version, "latest", r.Tag)
+			view.SetUpdate(r.Tag, false)
+		}
 	})
+	return err
+}
+
+// releaseNotes opens the latest release's page in the browser.
+func (a *app) releaseNotes() {
+	if a.release.Tag == "" {
+		return
+	}
+	a.wails.Browser.OpenURL(a.release.Notes())
 }
 
 // updateProblem says why an update cannot start now, or "" when it can. It
@@ -67,7 +94,7 @@ func (a *app) findUpdate() {
 func (a *app) updateProblem() string {
 	st := a.container.View.State()
 	switch {
-	case a.release.Tag == "":
+	case !update.Newer(a.release.Tag, update.Version):
 		return "no update is available"
 	case a.container.Capture.Enabled():
 		return "stop the run before updating"

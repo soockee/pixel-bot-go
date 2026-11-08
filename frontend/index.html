@@ -136,6 +136,28 @@
     </section>
 
     <section class="view settings" id="view-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+      <div class="settings-form">
+        <section class="updates" aria-labelledby="updates-title">
+          <div class="updates-head">
+            <div>
+              <h2 id="updates-title">Updates</h2>
+              <p class="hint" id="update-checked">Not checked yet</p>
+            </div>
+            <button class="button" id="check-update" type="button"><span id="check-icon" aria-hidden="true"></span>Check for updates</button>
+          </div>
+          <p class="update-warning" id="update-warning" hidden><span id="warning-icon" aria-hidden="true"></span><span id="update-warning-text"></span></p>
+          <div class="update-app">
+            <span class="update-icon" aria-hidden="true"><span class="brand-mark"></span></span>
+            <div class="update-info">
+              <strong>Visual Response Lab</strong>
+              <span class="hint"><span id="update-detail"></span><button class="link" id="release-notes" type="button" hidden>What's new</button></span>
+            </div>
+            <span class="pill" id="update-pill" hidden></span>
+            <button class="button primary" id="install-update" type="button" hidden></button>
+          </div>
+          <p class="hint">Each download is checked against the SHA-256 checksum GitHub publishes with the release before the app replaces itself.</p>
+        </section>
+      </div>
       <form class="settings-form" id="settings" novalidate></form>
     </section>
   </main>

@@ -105,6 +105,24 @@ func (v *View) SetUploading(name string) { v.state.Uploading = name }
 // is being installed.
 func (v *View) SetUpdate(tag string, updating bool) { v.state.Update, v.state.Updating = tag, updating }
 
+// SetChecking shows that a release check runs; SetUpdateCheck ends it.
+func (v *View) SetChecking() { v.state.Checking = true }
+
+// SetUpdateCheck shows the latest release found and when the app asked,
+// with the reason if the check failed.
+func (v *View) SetUpdateCheck(latest string, released, checked time.Time, problem string) {
+	v.state.Checking, v.state.Latest, v.state.UpdateError = false, latest, problem
+	v.state.LatestReleased, v.state.UpdateChecked = unix(released), unix(checked)
+}
+
+// unix returns t in Unix seconds, 0 for the zero time.
+func unix(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
+}
+
 // SetVersion shows the running build's version.
 func (v *View) SetVersion(version string) { v.state.Version = version }
 

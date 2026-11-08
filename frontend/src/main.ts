@@ -5,6 +5,7 @@ import { $, keyLabel, storage } from "./dom";
 import { setupLive } from "./live";
 import { setupRecorder } from "./recorder";
 import { setupSettings } from "./settings";
+import { setupUpdates } from "./updates";
 
 type Tab = "live" | "recorder" | "settings";
 const tabs: Tab[] = ["live", "recorder", "settings"];
@@ -60,6 +61,7 @@ $("update").addEventListener("click", () => void Service.Update().catch(() => un
 
 const live = setupLive();
 const settings = setupSettings();
+const updates = setupUpdates();
 let theme = "";
 
 onState((s: State) => {
@@ -76,6 +78,7 @@ onState((s: State) => {
   live(s);
   if (debug) recorder.onState(s);
   settings(s);
+  updates(s);
 
   signedIn = s.account !== "";
   $("account").hidden = !signedIn;

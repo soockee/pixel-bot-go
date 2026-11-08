@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Version is the running build's release tag. Release builds set it with
@@ -38,11 +39,14 @@ type Client struct {
 	HTTP     *http.Client
 }
 
+// releases is the public repository's release page.
+const releases = "https://github.com/soockee/pixel-bot-go/releases/"
+
 // New returns a client for the public soockee/pixel-bot-go repository.
 func New() *Client {
 	return &Client{
 		API:      "https://api.github.com/repos/soockee/pixel-bot-go/releases/latest",
-		Download: "https://github.com/soockee/pixel-bot-go/releases/download/",
+		Download: releases + "download/",
 		HTTP:     &http.Client{CheckRedirect: httpsOnly},
 	}
 }
@@ -60,10 +64,14 @@ func httpsOnly(req *http.Request, via []*http.Request) error {
 
 // Release is a published release with the two files an update needs.
 type Release struct {
-	Tag     string
-	exeURL  string
-	sumsURL string
+	Tag       string
+	Published time.Time
+	exeURL    string
+	sumsURL   string
 }
+
+// Notes returns the release page, which lists what changed.
+func (r Release) Notes() string { return releases + "tag/" + r.Tag }
 
 // Latest returns the latest published release.
 func (c *Client) Latest(ctx context.Context) (Release, error) {
@@ -73,8 +81,9 @@ func (c *Client) Latest(ctx context.Context) (Release, error) {
 	}
 	defer body.Close()
 	var r struct {
-		Tag    string `json:"tag_name"`
-		Assets []struct {
+		Tag       string    `json:"tag_name"`
+		Published time.Time `json:"published_at"`
+		Assets    []struct {
 			Name string `json:"name"`
 			URL  string `json:"browser_download_url"`
 		} `json:"assets"`
@@ -85,7 +94,7 @@ func (c *Client) Latest(ctx context.Context) (Release, error) {
 	if _, ok := parse(r.Tag); !ok {
 		return Release{}, fmt.Errorf("latest release tag %q is not vX.Y.Z", r.Tag)
 	}
-	rel := Release{Tag: r.Tag}
+	rel := Release{Tag: r.Tag, Published: r.Published}
 	for _, a := range r.Assets {
 		switch a.Name {
 		case AssetName:

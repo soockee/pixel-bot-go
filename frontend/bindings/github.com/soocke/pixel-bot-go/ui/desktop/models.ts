@@ -177,6 +177,31 @@ export interface State {
     "updating": boolean;
 
     /**
+     * latest release tag found, "" before the first check
+     */
+    "latest": string;
+
+    /**
+     * when Latest was published, Unix seconds
+     */
+    "latestReleased": number;
+
+    /**
+     * when the app last asked for releases, Unix seconds; 0 never
+     */
+    "updateChecked": number;
+
+    /**
+     * why the last check failed, or why there is none
+     */
+    "updateError": string;
+
+    /**
+     * a check runs
+     */
+    "checking": boolean;
+
+    /**
      * the running build's release tag, "dev" for local builds
      */
     "version": string;

@@ -44,7 +44,7 @@ func fakeGitHub(t *testing.T, tag string, exe []byte, sum string, assets func(ba
 	t.Cleanup(srv.Close)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/repos/latest", func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprintf(w, `{"tag_name":%q,"assets":[%s]}`, tag, assets(srv.URL+"/dl/"+tag+"/"))
+		fmt.Fprintf(w, `{"tag_name":%q,"published_at":"2026-11-08T13:30:00Z","assets":[%s]}`, tag, assets(srv.URL+"/dl/"+tag+"/"))
 	})
 	mux.HandleFunc("/dl/"+tag+"/"+AssetName, func(w http.ResponseWriter, _ *http.Request) { w.Write(exe) })
 	mux.HandleFunc("/dl/"+tag+"/"+sumsName, func(w http.ResponseWriter, _ *http.Request) {
@@ -79,8 +79,8 @@ func TestFetchVerifiesChecksum(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if r.Tag != "v1.2.3" {
-				t.Fatalf("tag = %q", r.Tag)
+			if r.Tag != "v1.2.3" || r.Published.Unix() != 1794144600 {
+				t.Fatalf("release = %q published %v", r.Tag, r.Published)
 			}
 			path := filepath.Join(t.TempDir(), "next.exe")
 			var done int64

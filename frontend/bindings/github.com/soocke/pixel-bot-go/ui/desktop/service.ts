@@ -20,6 +20,13 @@ import * as recorder$0 from "../../internal/recorder/models.js";
 import * as $models from "./models.js";
 
 /**
+ * CheckUpdate looks for a newer release now; the result arrives in State.
+ */
+export function CheckUpdate(): $CancellablePromise<void> {
+    return $Call.ByID(1075086600);
+}
+
+/**
  * Exit closes the app.
  */
 export function Exit(): $CancellablePromise<void> {
@@ -38,6 +45,13 @@ export function RecordingEvents(name: string, offset: number): $CancellablePromi
  */
 export function Recordings(): $CancellablePromise<$models.Recording[] | null> {
     return $Call.ByID(3544455459);
+}
+
+/**
+ * ReleaseNotes opens the latest release's page in the browser.
+ */
+export function ReleaseNotes(): $CancellablePromise<void> {
+    return $Call.ByID(1571238081);
 }
 
 /**

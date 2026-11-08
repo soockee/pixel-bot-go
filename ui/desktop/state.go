@@ -42,14 +42,19 @@ type State struct {
 	DryRun         bool   `json:"dryRun"`
 	StopKey        string `json:"stopKey"`
 	Dark           bool   `json:"dark"`
-	Debug          bool   `json:"debug"`     // show the developer views
-	SignIn         bool   `json:"signIn"`    // sign-in is configured; without it fishing needs no role
-	Account        string `json:"account"`   // signed-in Google email, or ""
-	Role           string `json:"role"`      // the account's role, "" when nobody gave it one
-	CanFish        bool   `json:"canFish"`   // the role may start a run (dry runs need no role)
-	CanUpload      bool   `json:"canUpload"` // the role may upload recordings
-	Uploading      string `json:"uploading"` // recording being uploaded, or ""
-	Update         string `json:"update"`    // newer release tag on offer, or ""
-	Updating       bool   `json:"updating"`  // the update downloads or installs
-	Version        string `json:"version"`   // the running build's release tag, "dev" for local builds
+	Debug          bool   `json:"debug"`          // show the developer views
+	SignIn         bool   `json:"signIn"`         // sign-in is configured; without it fishing needs no role
+	Account        string `json:"account"`        // signed-in Google email, or ""
+	Role           string `json:"role"`           // the account's role, "" when nobody gave it one
+	CanFish        bool   `json:"canFish"`        // the role may start a run (dry runs need no role)
+	CanUpload      bool   `json:"canUpload"`      // the role may upload recordings
+	Uploading      string `json:"uploading"`      // recording being uploaded, or ""
+	Update         string `json:"update"`         // newer release tag on offer, or ""
+	Updating       bool   `json:"updating"`       // the update downloads or installs
+	Latest         string `json:"latest"`         // latest release tag found, "" before the first check
+	LatestReleased int64  `json:"latestReleased"` // when Latest was published, Unix seconds
+	UpdateChecked  int64  `json:"updateChecked"`  // when the app last asked for releases, Unix seconds; 0 never
+	UpdateError    string `json:"updateError"`    // why the last check failed, or why there is none
+	Checking       bool   `json:"checking"`       // a check runs
+	Version        string `json:"version"`        // the running build's release tag, "dev" for local builds
 }

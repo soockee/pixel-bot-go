@@ -118,7 +118,7 @@ Fishing with real input and uploading recordings need a Google account with a ro
 The app keeps you signed in (`pixel_bot_account.bin`, encrypted for your Windows user) and checks your role on each start. **Sign out** forgets it and stops a real run. Release builds carry the service and sign-in client; a local build needs `cloud_url`, `oauth_client_id` and `oauth_client_secret` in the config. Without them the top bar has no **Sign in** button and fishing needs no role.
 
 ## Update the App
-At start and then every hour, a release build asks GitHub for the latest release of `soockee/pixel-bot-go`. When it is newer, the top bar shows **Update to vX.Y.Z**.
+At start and then every hour, a release build asks GitHub for the latest release of `soockee/pixel-bot-go`. When it is newer, the top bar shows **Update to vX.Y.Z**. **Settings > Updates** shows the installed and latest version, when the app last checked, a **Check for updates** button and **What's new**, which opens the release notes.
 
 1. Stop the run, the recording and any upload; the button stays disabled until then.
 2. Click **Update to vX.Y.Z**. The status bar shows the download; the app checks the build against the release's `CHECKSUMS.txt`, refuses it on a mismatch, then replaces itself and restarts with the same flags.

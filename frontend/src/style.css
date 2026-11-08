@@ -533,6 +533,69 @@ main { min-height: 0; overflow: hidden; }
 .row .control { display: flex; justify-content: flex-end; }
 
 .settings-status { color: var(--text-3); font-size: 12px; min-height: 18px; }
+
+/* Updates: the app's own release, shaped like one row of an add-on list. */
+.updates {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  background: var(--surface);
+}
+.updates .hint { color: var(--text-3); font-size: 12px; margin: 0; }
+.updates .hint.bad { color: var(--bad); }
+.updates-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.updates-head h2 { margin: 0 0 2px; font-size: 14px; font-weight: 500; }
+.updates-head .button, .update-warning { display: inline-flex; align-items: center; gap: 8px; }
+.update-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: var(--r-control);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.update-warning svg { color: var(--accent-text); flex: none; }
+.update-app {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.update-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: var(--raised);
+}
+.update-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.update-info .hint { font-family: var(--mono); font-size: 11px; }
+.link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-text);
+  font: inherit;
+  cursor: pointer;
+}
+.link:hover { text-decoration: underline; }
+.pill {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--text-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.pill.good { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
 .settings-status.bad { color: var(--bad); }
 
 /* A key is set by pressing it: the button shows the key as a keycap. */

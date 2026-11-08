@@ -35,7 +35,7 @@ type app struct {
 	cloud     *cloud.Client  // nil while sign-in is not configured
 	session   *cloud.Session // the signed-in account, nil when signed out; used on the loop
 	updates   *update.Client
-	release   update.Release // the newer release on offer, zero when none; used on the loop
+	release   update.Release // the latest release found, zero before the first check; used on the loop
 	restart   string         // the executable to start once the app quit, after an update
 }
 
@@ -64,6 +64,8 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		SignOut:       a.signOut,
 		Upload:        a.upload,
 		Update:        a.installUpdate,
+		CheckUpdate:   a.findUpdate,
+		ReleaseNotes:  a.releaseNotes,
 	}, c.Recordings, cfg, config.FilePath, logger)
 
 	assets := http.NewServeMux()
