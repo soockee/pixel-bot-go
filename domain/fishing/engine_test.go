@@ -21,15 +21,26 @@ var testLogger = slog.New(slog.DiscardHandler)
 
 // sceneFrames renders the fake game at a fixed screen position.
 type sceneFrames struct {
-	render func(fakegame.Phase) *image.RGBA
-	phase  atomic.Pointer[fakegame.Phase]
-	origin image.Point
+	render  func(fakegame.Phase) *image.RGBA
+	phase   atomic.Pointer[fakegame.Phase]
+	origin  image.Point
+	grabbed atomic.Pointer[image.Rectangle] // the last captured area
 }
 
 func (s *sceneFrames) set(p fakegame.Phase) { s.phase.Store(&p) }
-func (s *sceneFrames) Next() (capture.Frame, error) {
+
+// Window is where the scene sits on the screen.
+func (s *sceneFrames) Window() (image.Rectangle, error) {
+	return s.render(*s.phase.Load()).Bounds().Add(s.origin), nil
+}
+
+// Grab captures area of the scene, the way the screen would, and records it.
+func (s *sceneFrames) Grab(area image.Rectangle) (capture.Frame, error) {
+	s.grabbed.Store(&area)
 	img := s.render(*s.phase.Load())
-	return capture.Frame{Image: img, Origin: s.origin, CapturedAt: time.Now()}, nil
+	sub := img.SubImage(area.Sub(s.origin)).(*image.RGBA)
+	sub.Rect = sub.Rect.Sub(sub.Rect.Min) // a capture's pixels start at (0, 0)
+	return capture.Frame{Image: sub, Origin: area.Min, CapturedAt: time.Now()}, nil
 }
 
 func startEngine(t *testing.T, engine *Engine) {
@@ -39,7 +50,7 @@ func startEngine(t *testing.T, engine *Engine) {
 	}
 }
 
-func newSceneEngine(t *testing.T, log *actionLog) (*Engine, *FishingFSM, *sceneFrames, image.Rectangle) {
+func newSceneEngine(t *testing.T, actions ActionCallbacks) (*Engine, *FishingFSM, *sceneFrames, image.Rectangle) {
 	t.Helper()
 	tmpl, err := assets.FishingTargetImage()
 	if err != nil {
@@ -49,7 +60,7 @@ func newSceneEngine(t *testing.T, log *actionLog) (*Engine, *FishingFSM, *sceneF
 	cfg := testConfig()
 	frames := &sceneFrames{render: r.Render, origin: image.Pt(-1000, 200)}
 	frames.set(fakegame.PhaseBobber)
-	fsm := NewFSM(nil, cfg, recordingActions(log))
+	fsm := NewFSM(nil, cfg, actions)
 	detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
 		return detect.NewMarkerLocator(), detect.NewMotionBiteDetector(nil), nil
 	}
@@ -62,7 +73,7 @@ func newSceneEngine(t *testing.T, log *actionLog) (*Engine, *FishingFSM, *sceneF
 func TestEngineReelsWhenTheSceneSplashes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}
-		engine, fsm, frames, bobber := newSceneEngine(t, log)
+		engine, fsm, frames, bobber := newSceneEngine(t, recordingActions(log))
 		defer fsm.Close()
 		startEngine(t, engine)
 		defer engine.Stop()
@@ -74,6 +85,16 @@ func TestEngineReelsWhenTheSceneSplashes(t *testing.T) {
 		x, y, ok := fsm.TargetCoordinates()
 		if !ok || !image.Pt(x, y).In(bobber) {
 			t.Fatalf("target = (%d,%d) ok=%v, want it inside %v", x, y, ok, bobber)
+		}
+		// Watching captures only the box around the bobber; the preview keeps
+		// the whole window and places the live box on it.
+		time.Sleep(frameInterval)
+		window, _ := frames.Window()
+		if got := *frames.grabbed.Load(); !image.Pt(x, y).In(got) || got.Dx()*got.Dy() > window.Dx()*window.Dy()/20 {
+			t.Fatalf("watching grabbed %v of window %v, want a small box around (%d,%d)", got, window, x, y)
+		}
+		if p := engine.Preview(); p.ROI == nil || p.Frame.Bounds().Size() != window.Size() || !image.Pt(x, y).Sub(window.Min).In(p.ROIBox) {
+			t.Fatalf("preview frame %v, ROI box %v; want the window and the box at the bobber", p.Frame.Bounds(), p.ROIBox)
 		}
 
 		frames.set(fakegame.PhaseSplash)
@@ -87,7 +108,7 @@ func TestEngineReelsWhenTheSceneSplashes(t *testing.T) {
 func TestEngineStaysQuietOnAStaticBobber(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}
-		engine, fsm, _, _ := newSceneEngine(t, log)
+		engine, fsm, _, _ := newSceneEngine(t, recordingActions(log))
 		defer fsm.Close()
 		startEngine(t, engine)
 		defer engine.Stop()
@@ -103,7 +124,7 @@ func TestEngineStaysQuietOnAStaticBobber(t *testing.T) {
 
 func TestEnginePublishesPreviewUntilStopped(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		engine, fsm, _, _ := newSceneEngine(t, &actionLog{})
+		engine, fsm, _, _ := newSceneEngine(t, recordingActions(&actionLog{}))
 		defer fsm.Close()
 		if engine.Preview() != nil {
 			t.Fatal("preview before Start")
@@ -140,8 +161,12 @@ func TestEngineReportsDetectorsItCannotBuild(t *testing.T) {
 
 type failingFrames struct{ calls atomic.Int32 }
 
-func (f *failingFrames) Next() (capture.Frame, error) {
+func (f *failingFrames) Window() (image.Rectangle, error) {
 	f.calls.Add(1)
+	return image.Rectangle{}, errors.New("no window")
+}
+
+func (f *failingFrames) Grab(image.Rectangle) (capture.Frame, error) {
 	return capture.Frame{}, errors.New("no screen")
 }
 
@@ -179,7 +204,7 @@ func (earDetector) Hear(pcm []byte, _ time.Time) bool { return pcm[0] != 0 }
 func TestEngineReelsWhenTheDetectorHearsABite(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}
-		engine, fsm, _, _ := newSceneEngine(t, log)
+		engine, fsm, _, _ := newSceneEngine(t, recordingActions(log))
 		defer fsm.Close()
 		bang := make(chan struct{})
 		engine.detectors = func(config.Config) (detect.Locator, detect.BiteDetector, error) {

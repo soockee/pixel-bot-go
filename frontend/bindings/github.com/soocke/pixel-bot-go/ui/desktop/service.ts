@@ -20,38 +20,10 @@ import * as recorder$0 from "../../internal/recorder/models.js";
 import * as $models from "./models.js";
 
 /**
- * ClearSelection removes the capture area.
- */
-export function ClearSelection(): $CancellablePromise<void> {
-    return $Call.ByID(912704438);
-}
-
-/**
- * CloseSelection closes the overlay without a change.
- */
-export function CloseSelection(): $CancellablePromise<void> {
-    return $Call.ByID(608873597);
-}
-
-/**
- * ConfirmSelection selects the overlay's area and closes it.
- */
-export function ConfirmSelection(): $CancellablePromise<void> {
-    return $Call.ByID(2721390745);
-}
-
-/**
  * Exit closes the app.
  */
 export function Exit(): $CancellablePromise<void> {
     return $Call.ByID(1811592007);
-}
-
-/**
- * OpenSelection opens the selection overlay.
- */
-export function OpenSelection(): $CancellablePromise<void> {
-    return $Call.ByID(869406367);
 }
 
 /**
@@ -98,6 +70,20 @@ export function Settings(): $CancellablePromise<$models.SettingsForm> {
 }
 
 /**
+ * SignIn signs in with Google in the browser. It returns once signed in.
+ */
+export function SignIn(): $CancellablePromise<void> {
+    return $Call.ByID(2511847789);
+}
+
+/**
+ * SignOut forgets the signed-in account.
+ */
+export function SignOut(): $CancellablePromise<void> {
+    return $Call.ByID(2484931158);
+}
+
+/**
  * State returns the current state; later changes arrive as StateEvent.
  */
 export function State(): $CancellablePromise<$models.State> {
@@ -116,6 +102,20 @@ export function ToggleCapture(): $CancellablePromise<void> {
  */
 export function ToggleRecord(): $CancellablePromise<void> {
     return $Call.ByID(4283655706);
+}
+
+/**
+ * Update downloads, verifies and installs the newer release, then restarts.
+ */
+export function Update(): $CancellablePromise<void> {
+    return $Call.ByID(1125825238);
+}
+
+/**
+ * Upload sends recording name to the upload service and returns when done.
+ */
+export function Upload(name: string): $CancellablePromise<void> {
+    return $Call.ByID(1993239178, name);
 }
 
 /**

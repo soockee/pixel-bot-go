@@ -151,25 +151,6 @@ button, select, input { font: inherit; color: inherit; }
   gap: 12px;
 }
 
-.run-state {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-2);
-  font-family: var(--mono);
-  font-size: 12px;
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 4px;
-  background: var(--text-3);
-}
-.run-state.on { color: var(--text); }
-.run-state.on .dot { background: var(--accent); }
-.run-state.recording .dot { background: var(--bad); }
-
 /* Controls */
 
 .button {
@@ -283,7 +264,7 @@ main { min-height: 0; overflow: hidden; }
   gap: 16px;
 }
 
-.capture { min-height: 0; }
+.capture { min-height: 0; padding: 12px; gap: 12px; }
 
 .stage {
   position: relative;
@@ -335,6 +316,73 @@ main { min-height: 0; overflow: hidden; }
   text-align: center;
 }
 
+/* The caption sits on the stage under the image: the step and its time. */
+.caption {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--text);
+}
+.caption .dot { background: var(--accent); }
+.caption .mono { color: var(--text-2); font-size: 12px; }
+
+.dot { width: 8px; height: 8px; border-radius: 4px; background: var(--text-3); }
+
+/* The fishing loop as one track; the current step carries the accent. */
+.track {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.track li {
+  padding-top: 8px;
+  border-top: 2px solid var(--line-strong);
+  color: var(--text-3);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--fast) var(--ease), border-color var(--fast) var(--ease);
+}
+.track li.current { border-top-color: var(--accent); color: var(--text); }
+
+.setup {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 4px;
+}
+.setup label, .setup .label { color: var(--text-2); font-size: 12px; }
+.setup .label { margin-top: 8px; }
+
+.catch { gap: 16px; }
+.figure { display: flex; align-items: baseline; gap: 8px; }
+.big { font-size: 40px; line-height: 1; color: var(--text); }
+.catch > p { margin-top: -8px; }
+
+.meter { display: flex; flex-direction: column; gap: 6px; }
+.meter-head { display: flex; justify-content: space-between; gap: 8px; color: var(--text-2); font-size: 12px; }
+.bar { height: 4px; border-radius: 2px; background: var(--sunken); overflow: hidden; }
+.bar i {
+  display: block;
+  height: 100%;
+  background: var(--text-2);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 300ms var(--ease), background-color var(--fast) var(--ease);
+}
+.bar i.warn { background: var(--bad); }
+
 .side {
   display: flex;
   flex-direction: column;
@@ -342,39 +390,6 @@ main { min-height: 0; overflow: hidden; }
   min-height: 0;
   overflow-y: auto;
 }
-
-.cycle {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.cycle li {
-  display: grid;
-  grid-template-columns: 16px 1fr auto;
-  align-items: center;
-  gap: 8px;
-  height: 28px;
-  padding: 0 8px;
-  border-radius: 6px;
-  color: var(--text-3);
-  transition: background-color var(--fast) var(--ease), color var(--fast) var(--ease);
-}
-.cycle li::before {
-  content: "";
-  justify-self: center;
-  width: 6px;
-  height: 6px;
-  border-radius: 3px;
-  background: currentColor;
-  opacity: 0.6;
-}
-.cycle li span:last-child { font-family: var(--mono); font-size: 11px; }
-.cycle li.current { background: var(--accent-soft); color: var(--text); }
-.cycle li.current::before { background: var(--accent); opacity: 1; }
-.cycle li.current span:last-child { color: var(--accent-text); }
 
 .watch-box {
   position: relative;
@@ -491,7 +506,7 @@ main { min-height: 0; overflow: hidden; }
   gap: 16px;
   max-width: 760px;
   margin: 0 auto;
-  padding-bottom: 72px;
+  padding-bottom: 24px;
 }
 
 .settings-form fieldset {
@@ -506,7 +521,7 @@ main { min-height: 0; overflow: hidden; }
 
 .row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 200px;
+  grid-template-columns: minmax(0, 1fr) 248px;
   align-items: center;
   gap: 16px;
   min-height: 44px;
@@ -517,20 +532,79 @@ main { min-height: 0; overflow: hidden; }
 .row .hint { display: block; color: var(--text-3); font-size: 12px; }
 .row .control { display: flex; justify-content: flex-end; }
 
-.savebar {
-  position: sticky;
-  bottom: 0;
-  display: flex;
+.settings-status { color: var(--text-3); font-size: 12px; min-height: 18px; }
+.settings-status.bad { color: var(--bad); }
+
+/* A key is set by pressing it: the button shows the key as a keycap. */
+.key-button {
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 16px;
-  padding: 12px 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-panel);
-  background: var(--raised);
+  justify-content: center;
+  min-width: 96px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-control);
+  background: var(--sunken);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: border-color var(--fast) var(--ease), color var(--fast) var(--ease);
 }
-.savebar .message { margin-right: auto; color: var(--text-2); }
-.savebar .message.bad { color: var(--bad); }
+.key-button:hover { border-color: var(--text-3); }
+.key-button.listening { border-color: var(--accent); color: var(--accent-text); }
+.key-button:disabled { opacity: 0.5; cursor: default; }
+
+.slider { display: grid; grid-template-columns: 1fr 64px; align-items: center; gap: 12px; width: 100%; }
+.slider output { color: var(--text); text-align: right; font-size: 12px; }
+
+input[type="range"] {
+  width: 100%;
+  height: 16px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: var(--line-strong); }
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--text);
+  transition: transform var(--fast) var(--ease);
+}
+input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.1); }
+input[type="range"]:disabled { opacity: 0.5; cursor: default; }
+
+/* Switches for on and off settings. */
+input.switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  border-radius: 10px;
+  background: var(--line-strong);
+  appearance: none;
+  cursor: pointer;
+  transition: background-color var(--fast) var(--ease);
+}
+input.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--text);
+  transition: transform var(--fast) var(--ease);
+}
+input.switch:checked { background: var(--accent); }
+input.switch:checked::after { transform: translateX(16px); background: var(--accent-ink); }
+input.switch:disabled { opacity: 0.5; cursor: default; }
 
 /* Status bar */
 
@@ -563,3 +637,4 @@ main { min-height: 0; overflow: hidden; }
 }
 .trace-body { display: flex; flex-direction: column; gap: 16px; }
 .trace > *, .trace-body > * { flex: none; }
+.lock img { display: block; width: 100%; height: 100%; }

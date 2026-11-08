@@ -81,41 +81,56 @@ func describe(values []int64) *distribution {
 }
 
 type traceSummary struct {
-	File           string           `json:"file"`
-	Source         string           `json:"source"`
-	Clock          string           `json:"clock"`
-	Session        string           `json:"session_id,omitempty"`
-	Controller     string           `json:"controller,omitempty"`
-	Status         string           `json:"status"`
-	Runs           int              `json:"runs"`
-	Moves          int              `json:"moves"`
-	ButtonPresses  int              `json:"button_presses"`
-	Clicks         int              `json:"clicks"`
-	Drags          int              `json:"drags"`
-	KeyPresses     int              `json:"key_presses"`
-	Casts          int              `json:"casts"`
-	BitesAvailable int              `json:"bites_available"`
-	BitesDetected  int              `json:"bites_detected"`
-	Reels          int              `json:"reels"`
-	Completed      int              `json:"simulated_completions"`
-	ReelSpacing    *distribution    `json:"reel_spacing,omitempty"`
-	InternalDelay  *distribution    `json:"internal_bite_to_reel,omitempty"`
-	ClickHold      *distribution    `json:"click_hold,omitempty"`
-	DragHold       *distribution    `json:"drag_hold,omitempty"`
-	Activity       *activityProfile `json:"activity,omitempty"`
+	File            string                  `json:"file"`
+	Source          string                  `json:"source"`
+	Clock           string                  `json:"clock"`
+	Session         string                  `json:"session_id,omitempty"`
+	Controller      string                  `json:"controller,omitempty"`
+	Status          string                  `json:"status"`
+	Runs            int                     `json:"runs"`
+	Moves           int                     `json:"moves"`
+	ButtonPresses   int                     `json:"button_presses"`
+	Clicks          int                     `json:"clicks"`
+	Drags           int                     `json:"drags"`
+	KeyPresses      int                     `json:"key_presses"`
+	Casts           int                     `json:"casts"`
+	BitesAvailable  int                     `json:"bites_available"`
+	BitesDetected   int                     `json:"bites_detected"`
+	Reels           int                     `json:"reels"`
+	Completed       int                     `json:"simulated_completions"`
+	ReelSpacing     *distribution           `json:"reel_spacing,omitempty"`
+	InternalDelay   *distribution           `json:"internal_bite_to_reel,omitempty"`
+	ClickHold       *distribution           `json:"click_hold,omitempty"`
+	DragHold        *distribution           `json:"drag_hold,omitempty"`
+	Activity        *activityProfile        `json:"activity,omitempty"`
+	SimulatedTiming *simulatedTimingSummary `json:"simulated_timing,omitempty"`
+	Gameplay        *gameplayAudit          `json:"gameplay,omitempty"`
+}
+
+type simulatedTimingSummary struct {
+	Profile       string         `json:"profile"`
+	Planned       int            `json:"planned"`
+	Released      int            `json:"released"`
+	Canceled      map[string]int `json:"canceled,omitempty"`
+	Hold          *distribution  `json:"hold,omitempty"`
+	ReleaseToCast *distribution  `json:"release_to_cast,omitempty"`
 }
 
 type traceAccumulator struct {
 	summary                          traceSummary
 	activity                         *activityTracker
 	intervals, delays, clicks, drags []int64
+	holds, cooldowns                 []int64
 }
 
 type runObservations struct {
-	summary *traceAccumulator
-	pending map[int]int64
-	reels   []int64
-	last    int64
+	summary  *traceAccumulator
+	pending  map[int]int64
+	reels    []int64
+	last     int64
+	press    *playtrace.Event
+	release  *int64
+	gameplay gameplayHistory
 }
 
 func (r *runObservations) flushReels() {
@@ -132,6 +147,10 @@ type loadedTrace struct {
 	path, status      string
 	summaries         []traceSummary
 	ground, responses []int64
+	released          [][2]int64
+	detections        []int64
+	detector          string
+	mixedDetectors    bool
 	end               int64
 }
 
@@ -234,6 +253,47 @@ func readTrace(path string, cast, reel manualBinding) (loadedTrace, error) {
 			}
 		case playtrace.CastDispatched:
 			counts.Casts++
+			if header.Source == playtrace.AppDryRun {
+				run.gameplay.cast(event.ElapsedUS)
+			}
+			if run.release != nil {
+				group.cooldowns = append(group.cooldowns, event.ElapsedUS-*run.release)
+				run.release = nil
+			}
+		case playtrace.TimingGap:
+			run.press, run.release = nil, nil
+			clear(run.pending)
+			run.gameplay.gap()
+		case playtrace.ReelPlanned:
+			if header.Source != playtrace.AppDryRun || event.EventID == nil || event.Timing == nil ||
+				event.Timing.DetectorUS < 0 || event.Timing.DetectorUS > event.ElapsedUS {
+				return fmt.Errorf("invalid simulated reel plan")
+			}
+			if counts.SimulatedTiming == nil {
+				counts.SimulatedTiming = &simulatedTimingSummary{Profile: header.TimingProfile, Canceled: map[string]int{}}
+			}
+			counts.SimulatedTiming.Planned++
+			if len(result.detections) > 0 && result.detector != event.Timing.Detector {
+				result.mixedDetectors = true
+			}
+			result.detector = event.Timing.Detector
+			result.detections = append(result.detections, event.Timing.DetectorUS)
+			run.pending[*event.EventID] = event.Timing.DetectorUS
+		case playtrace.ReelReleased:
+			if counts.SimulatedTiming == nil || run.press == nil || event.EventID == nil || *event.EventID != *run.press.EventID {
+				return fmt.Errorf("simulated reel release has no matching press")
+			}
+			counts.SimulatedTiming.Released++
+			group.holds = append(group.holds, event.ElapsedUS-run.press.ElapsedUS)
+			result.released = append(result.released, [2]int64{run.press.ElapsedUS, event.ElapsedUS})
+			run.press, run.release = nil, &event.ElapsedUS
+		case playtrace.ReelCanceled:
+			if counts.SimulatedTiming == nil || event.EventID == nil {
+				return fmt.Errorf("simulated reel cancellation has no plan")
+			}
+			counts.SimulatedTiming.Canceled[event.Outcome]++
+			delete(run.pending, *event.EventID)
+			run.press = nil
 		case playtrace.BiteAvailable:
 			counts.BitesAvailable++
 			if header.Source == playtrace.FakeGame {
@@ -243,7 +303,13 @@ func readTrace(path string, cast, reel manualBinding) (loadedTrace, error) {
 			counts.BitesDetected++
 		case playtrace.ReelAttempt, playtrace.ReelDispatched:
 			reelTime, isReel = event.ElapsedUS, true
+			if header.Source == playtrace.AppDryRun && event.Type == playtrace.ReelDispatched {
+				run.gameplay.reel(reelTime)
+			}
 			if event.EventID != nil {
+				if counts.SimulatedTiming != nil && event.Type == playtrace.ReelDispatched {
+					run.press = &event
+				}
 				if available, ok := run.pending[*event.EventID]; ok {
 					group.delays = append(group.delays, reelTime-available)
 					delete(run.pending, *event.EventID)
@@ -287,6 +353,9 @@ func readTrace(path string, cast, reel manualBinding) (loadedTrace, error) {
 	}
 	for _, run := range runs {
 		run.flushReels()
+		if header.Source == playtrace.AppDryRun && run.summary.summary.Runs == 1 {
+			run.summary.summary.Gameplay = run.gameplay.total.result()
+		}
 	}
 	if len(names) == 0 {
 		groups[""] = &traceAccumulator{summary: traceSummary{File: path, Source: header.Source, Clock: header.Clock, Session: header.SessionID}}
@@ -300,6 +369,9 @@ func readTrace(path string, cast, reel manualBinding) (loadedTrace, error) {
 		}
 		a.summary.ReelSpacing, a.summary.InternalDelay = describe(a.intervals), describe(a.delays)
 		a.summary.ClickHold, a.summary.DragHold = describe(a.clicks), describe(a.drags)
+		if timing := a.summary.SimulatedTiming; timing != nil {
+			timing.Hold, timing.ReleaseToCast = describe(a.holds), describe(a.cooldowns)
+		}
 		result.summaries = append(result.summaries, a.summary)
 	}
 	return result, nil
@@ -333,35 +405,74 @@ func readLegacyRecords(decoder *json.Decoder, first json.RawMessage, source stri
 }
 
 type alignedSummary struct {
-	Session        string        `json:"session_id"`
-	GroundFile     string        `json:"ground_file"`
-	ResponseFile   string        `json:"response_file"`
-	Source         string        `json:"source"`
-	BitesInOverlap int           `json:"bites_in_overlap"`
-	Matched        *distribution `json:"matched_bite_to_reel,omitempty"`
+	Session          string        `json:"session_id"`
+	GroundFile       string        `json:"ground_file"`
+	ResponseFile     string        `json:"response_file"`
+	Source           string        `json:"source"`
+	BitesInOverlap   int           `json:"bites_in_overlap"`
+	Matched          *distribution `json:"matched_bite_to_reel,omitempty"`
+	BitesWithRelease *int          `json:"bites_with_matched_reel_release,omitempty"`
+	Missed           int           `json:"unmatched_bites"`
+	UnmatchedReels   int           `json:"unmatched_reels"`
+	TimingProfile    string        `json:"timing_profile,omitempty"`
+	CursorProfile    string        `json:"cursor_profile,omitempty"`
+	Detector         string        `json:"detector,omitempty"`
+	DetectorDelayUS  []int64       `json:"matched_cue_to_detector_us,omitempty"`
+	GroundStatus     string        `json:"ground_status"`
+	ResponseStatus   string        `json:"response_status"`
 }
 
 func alignReels(ground, response loadedTrace, window time.Duration) alignedSummary {
 	result := alignedSummary{Session: ground.header.SessionID, GroundFile: ground.path,
-		ResponseFile: response.path, Source: response.header.Source}
+		ResponseFile: response.path, Source: response.header.Source, TimingProfile: response.header.TimingProfile,
+		CursorProfile: response.header.CursorProfile,
+		GroundStatus:  ground.status, ResponseStatus: response.status}
+	bites, responses, delays := alignTimes(ground, response, response.responses, window)
+	result.BitesInOverlap = bites
+	result.Matched = describe(delays)
+	result.Missed = bites - len(delays)
+	result.UnmatchedReels = responses - len(delays)
+	for _, summary := range response.summaries {
+		if summary.SimulatedTiming == nil {
+			continue
+		}
+		overlapEnd := min(ground.header.StartedUTC.UnixMicro()+ground.end, response.header.StartedUTC.UnixMicro()+response.end)
+		var pressTimes []int64
+		for _, click := range response.released {
+			if response.header.StartedUTC.UnixMicro()+click[1] <= overlapEnd {
+				pressTimes = append(pressTimes, click[0])
+			}
+		}
+		_, _, released := alignTimes(ground, response, pressTimes, window)
+		count := len(released)
+		result.BitesWithRelease = &count
+		break
+	}
+	if response.detector != "" && !response.mixedDetectors {
+		result.Detector = response.detector
+		_, _, result.DetectorDelayUS = alignTimes(ground, response, response.detections, window)
+	}
+	return result
+}
+
+func alignTimes(ground, response loadedTrace, times []int64, window time.Duration) (bites, responses int, delays []int64) {
 	groundStart, responseStart := ground.header.StartedUTC.UnixMicro(), response.header.StartedUTC.UnixMicro()
 	overlapEnd := min(groundStart+ground.end, responseStart+response.end)
-	slices.Sort(response.responses)
-	var delays []int64
+	slices.Sort(times)
 	next := 0
 	for i, event := range ground.ground {
 		at := groundStart + event
 		if at < responseStart || at > overlapEnd {
 			continue
 		}
-		result.BitesInOverlap++
-		for next < len(response.responses) && responseStart+response.responses[next] < at {
+		bites++
+		for next < len(times) && responseStart+times[next] < at {
 			next++
 		}
-		if next == len(response.responses) {
+		if next == len(times) {
 			continue
 		}
-		reply := responseStart + response.responses[next]
+		reply := responseStart + times[next]
 		if reply > overlapEnd || reply-at > window.Microseconds() ||
 			i+1 < len(ground.ground) && reply >= groundStart+ground.ground[i+1] {
 			continue
@@ -369,8 +480,13 @@ func alignReels(ground, response loadedTrace, window time.Duration) alignedSumma
 		delays = append(delays, reply-at)
 		next++
 	}
-	result.Matched = describe(delays)
-	return result
+	overlapStart := max(groundStart, responseStart)
+	for _, t := range times {
+		if at := responseStart + t; at >= overlapStart && at <= overlapEnd {
+			responses++
+		}
+	}
+	return bites, responses, delays
 }
 
 func runTraceComparison(paths []string, castSpec, reelSpec string, window time.Duration, asJSON bool, out io.Writer) error {
@@ -455,14 +571,28 @@ func runTraceComparison(paths []string, castSpec, reelSpec string, window time.D
 			p.Counts["wheel"], formatActivityNumber(p.ActionsPerMinute, 1, ""))
 	}
 	if len(report.Aligned) != 0 {
-		table.WriteString("\n## Aligned fake-game bites\n\n| Session | Fake-game file | Response file | Matched / bites in overlap | Delay p50 / p95 |\n|---|---|---|---:|---|\n")
+		table.WriteString("\n## Aligned fake-game bites\n\n| Session | Fake-game file | Response file | Matched / bites in overlap | With release | Unmatched reels | Delay p50 / p95 |\n|---|---|---|---:|---:|---:|---|\n")
 		for _, row := range report.Aligned {
 			count := 0
 			if row.Matched != nil {
 				count = row.Matched.Samples
 			}
-			fmt.Fprintf(&table, "| %s | %s | %s | %d / %d | %s |\n", cell(row.Session), cell(row.GroundFile),
-				cell(row.ResponseFile), count, row.BitesInOverlap, formatDistribution(row.Matched))
+			released := "—"
+			if row.BitesWithRelease != nil {
+				released = strconv.Itoa(*row.BitesWithRelease)
+			}
+			fmt.Fprintf(&table, "| %s | %s | %s | %d / %d | %s | %d | %s |\n", cell(row.Session), cell(row.GroundFile),
+				cell(row.ResponseFile), count, row.BitesInOverlap, released, row.UnmatchedReels, formatDistribution(row.Matched))
+		}
+	}
+	for _, row := range report.Traces {
+		if gameplay := row.Gameplay; gameplay != nil {
+			fmt.Fprintf(&table, "\nGameplay for %s: %d of %d complete cast cycles had a reel, %d of %d scored motifs repeated.\n",
+				cell(row.File), gameplay.ReeledCycles, gameplay.Cycles, gameplay.RepeatedMotifs, gameplay.ScoredMotifs)
+		}
+		if timing := row.SimulatedTiming; timing != nil {
+			fmt.Fprintf(&table, "\nSimulated timing for %s (%s): %d planned, %d released, hold %s, release to cast %s.\n",
+				cell(row.File), timing.Profile, timing.Planned, timing.Released, formatDistribution(timing.Hold), formatDistribution(timing.ReleaseToCast))
 		}
 	}
 	_, err = io.WriteString(out, table.String())

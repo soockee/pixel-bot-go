@@ -3,6 +3,7 @@ package desktop
 import (
 	"context"
 	"image"
+	"image/color"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -141,15 +142,31 @@ func TestRecordingsStayInTheFolder(t *testing.T) {
 	}
 }
 
-func TestSelectionStartsCentredWithoutASelection(t *testing.T) {
-	cfg := config.DefaultConfig()
-	s := NewSelection(cfg, filepath.Join(t.TempDir(), "c.json"), nil)
-	screen := image.Rect(-1920, 0, 0, 1080)
-	if got, want := s.Start(screen), image.Rect(-1600, 240, -320, 840); got != want {
-		t.Errorf("start = %v, want %v", got, want)
+func TestShrinkKeepsPreviewsSmall(t *testing.T) {
+	game := image.NewRGBA(image.Rect(0, 0, 3440, 1440))
+	game.Set(3439, 1439, color.RGBA{R: 255, A: 255})
+	if got := shrink(game, previewWidth).Bounds().Size(); got != image.Pt(1146, 480) {
+		t.Errorf("3440x1440 shrinks to %v, want 1146x480", got)
 	}
-	s.Set(image.Rect(10, 20, 110, 220))
-	if got := s.Start(screen); got != image.Rect(10, 20, 110, 220) || cfg.SelectionW != 100 {
-		t.Errorf("start = %v, saved width %d", got, cfg.SelectionW)
+	small := image.NewRGBA(image.Rect(0, 0, 560, 420))
+	if shrink(small, previewWidth) != small {
+		t.Error("a narrow capture was copied")
+	}
+}
+
+func TestUploadRefusesUnsafeNames(t *testing.T) {
+	var uploaded []string
+	s := &Service{recordings: NewRecordings(func() string { return "datasets" }),
+		cmds: Commands{Upload: func(dir string) error { uploaded = append(uploaded, dir); return nil }}}
+	for _, name := range []string{"", ".", "..", `..\x`, "a/b"} {
+		if err := s.Upload(name); err == nil {
+			t.Errorf("Upload(%q) accepted", name)
+		}
+	}
+	if err := s.Upload("20261108-012132"); err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join("datasets", "20261108-012132"); len(uploaded) != 1 || uploaded[0] != want {
+		t.Errorf("uploaded %v, want [%s]", uploaded, want)
 	}
 }

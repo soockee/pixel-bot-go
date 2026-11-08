@@ -26,9 +26,10 @@ func newGuardFixture() *guardFixture {
 		CursorPos:  func() (int, int, bool) { return f.cursor.X, f.cursor.Y, true },
 		OnTakeover: func() { f.takeovers++ },
 		Press:      func(byte) { f.sent = append(f.sent, "press") },
-		Move: func(x, y int) {
+		Move: func(x, y int) bool {
 			f.cursor = image.Pt(x, y)
 			f.sent = append(f.sent, "move")
+			return true
 		},
 		Click: func() { f.sent = append(f.sent, "click") },
 	}
@@ -70,6 +71,36 @@ func TestGuardKeepsMovesInsideTheArea(t *testing.T) {
 	f.MoveCursor(150, 150)
 	if len(f.sent) != 0 {
 		t.Errorf("sent = %v, want nothing", f.sent)
+	}
+}
+
+func TestGuardChecksTimedPressAndAllowsReleaseAfterFocusLoss(t *testing.T) {
+	f := newGuardFixture()
+	f.BeginHold = func() func() {
+		f.sent = append(f.sent, "down")
+		return func() { f.sent = append(f.sent, "up") }
+	}
+	f.MoveCursor(150, 150)
+	release := f.HoldRight()
+	if release == nil {
+		t.Fatal("valid target should allow a hold")
+	}
+	f.inFront = false
+	release()
+	if f.HoldRight() != nil || !slices.Equal(f.sent, []string{"move", "down", "up"}) {
+		t.Fatalf("unexpected input after focus loss: %v", f.sent)
+	}
+}
+
+func TestGuardDetectsTakeoverBeforeFirstWaypoint(t *testing.T) {
+	f := newGuardFixture()
+	f.cursor = image.Pt(150, 150)
+	if _, _, ok := f.BeginCursor(); !ok {
+		t.Fatal("expected a plan to start inside the window")
+	}
+	f.cursor.X++
+	if f.TryMoveCursor(image.Pt(160, 150)) || f.takeovers != 1 || len(f.sent) != 0 {
+		t.Fatalf("takeover did not stop the waypoint: sent=%v takeovers=%d", f.sent, f.takeovers)
 	}
 }
 

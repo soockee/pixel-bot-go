@@ -1,10 +1,12 @@
 package app
 
 import (
+	"image"
 	"math"
 	"sync"
 	"time"
 
+	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/internal/playtrace"
 	"github.com/soocke/pixel-bot-go/internal/traceobserver"
 )
@@ -62,6 +64,39 @@ func (s *liveTrace) bite() func() {
 		s.record(now, id, traceobserver.ActionReply, 1, traceobserver.OutcomeDryRunDispatched)
 		s.record(now, id, traceobserver.ActionClose, 1, traceobserver.OutcomeDryRunDispatched)
 	}
+}
+
+func (s *liveTrace) reelTiming(event fishing.ReelTimingEvent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id := s.castID
+	row := playtrace.Event{Type: event.Kind, EventID: &id, ElapsedUS: s.elapsedUS(), Outcome: event.Reason}
+	if event.Kind == playtrace.ReelPlanned {
+		row.Timing = &playtrace.ReelTiming{
+			Detector:   event.Detector,
+			DetectorUS: max(0, event.DetectorAt.Sub(s.start).Microseconds()),
+			DelayUS:    event.Delay.Microseconds(), HoldUS: event.Timing.Hold.Microseconds(),
+			CooldownUS: event.Timing.Cooldown.Microseconds(),
+		}
+	}
+	// Writer reports the first error again when the session closes.
+	_ = s.output.Write(row)
+}
+
+func (s *liveTrace) timingGap(next fishing.FishingState) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.output.Write(playtrace.Event{Type: playtrace.TimingGap, ElapsedUS: s.elapsedUS(), Outcome: next.String()})
+}
+
+func (s *liveTrace) cursorWaypoint(p image.Point, area image.Rectangle) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_ = s.output.Write(playtrace.Event{
+		Type: "move", ElapsedUS: s.elapsedUS(),
+		Position: &playtrace.Position{X: int32(p.X - area.Min.X), Y: int32(p.Y - area.Min.Y),
+			Width: int32(area.Dx()), Height: int32(area.Dy())},
+	})
 }
 
 func (s *liveTrace) record(now int64, id int, action string, attempt int, outcome string) {

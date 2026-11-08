@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"image"
 	"log/slog"
 	"net/http"
 	"time"
@@ -14,6 +13,8 @@ import (
 	"github.com/soocke/pixel-bot-go/debug"
 	"github.com/soocke/pixel-bot-go/domain/action"
 	"github.com/soocke/pixel-bot-go/frontend"
+	"github.com/soocke/pixel-bot-go/internal/cloud"
+	"github.com/soocke/pixel-bot-go/internal/update"
 	"github.com/soocke/pixel-bot-go/ui/desktop"
 )
 
@@ -31,7 +32,11 @@ type app struct {
 	loop      *desktop.Loop
 	wails     *application.App
 	main      *application.WebviewWindow
-	overlay   *application.WebviewWindow // the selection overlay while it is open; loop only
+	cloud     *cloud.Client  // nil while sign-in is not configured
+	session   *cloud.Session // the signed-in account, nil when signed out; used on the loop
+	updates   *update.Client
+	release   update.Release // the newer release on offer, zero when none; used on the loop
+	restart   string         // the executable to start once the app quit, after an update
 }
 
 // NewApp builds the components and the window.
@@ -39,6 +44,8 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 	a := &app{logger: logger}
 	a.container = BuildContainer(cfg, logger, trace, func(s desktop.State) { a.wails.Event.Emit(desktop.StateEvent, s) })
 	c := a.container
+	a.cloud = a.newCloud()
+	a.updates = update.New()
 	a.loop = desktop.NewLoop(a.tick)
 	service := desktop.NewService(a.loop, c.View, desktop.Commands{
 		ListWindows: func() []string {
@@ -48,15 +55,16 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 			}
 			return titles
 		},
-		SetWindow:        a.setWindow,
-		ToggleCapture:    a.toggleCapture,
-		ToggleRecord:     c.RecordPresenter.Toggle,
-		OpenSelection:    a.openSelection,
-		ConfirmSelection: a.confirmSelection,
-		CloseSelection:   a.closeSelection,
-		Running:          c.Capture.Enabled,
-		Exit:             func() { go a.wails.Quit() }, // Quit waits for the loop, which runs this
-	}, c.Selection, c.Recordings, cfg, config.FilePath, logger)
+		SetWindow:     a.setWindow,
+		ToggleCapture: a.toggleCapture,
+		ToggleRecord:  c.RecordPresenter.Toggle,
+		Running:       c.Capture.Enabled,
+		Exit:          func() { go a.wails.Quit() }, // Quit waits for the loop, which runs this
+		SignIn:        a.signIn,
+		SignOut:       a.signOut,
+		Upload:        a.upload,
+		Update:        a.installUpdate,
+	}, c.Recordings, cfg, config.FilePath, logger)
 
 	assets := http.NewServeMux()
 	assets.Handle(desktop.FramesPath, c.Frames)
@@ -98,10 +106,11 @@ func (a *app) Run() error {
 	if cfg.AutoWindow != "" {
 		a.setWindow(cfg.AutoWindow)
 	}
-	c.View.SetInfo(cfg.DryRun, cfg.StopKey, cfg.DarkMode)
-	c.View.SetSelection(desktop.RectOf(c.Selection.ActiveRect()), false)
+	c.View.SetInfo(cfg.DryRun, cfg.Debug, cfg.StopKey, cfg.DarkMode)
 	c.View.SetStatus("Ready")
 	a.watchStopKey()
+	a.restoreAccount()
+	a.checkUpdate()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -113,34 +122,47 @@ func (a *app) Run() error {
 	}
 	if cfg.AutoStart {
 		a.logger.Info("auto-start requested", "window", c.Capture.Window())
-		time.AfterFunc(500*time.Millisecond, func() { a.loop.Do(a.toggleCapture) })
+		a.autoStart(60)
 	}
-	return a.wails.Run()
+	err := a.wails.Run()
+	if a.restart != "" {
+		if rerr := update.Restart(a.restart); rerr != nil {
+			a.logger.Error("restart after update failed", "error", rerr)
+		}
+	}
+	return err
+}
+
+// autoStart starts capture in half a second, trying again while the game
+// window is not open yet, at most tries times.
+func (a *app) autoStart(tries int) {
+	time.AfterFunc(500*time.Millisecond, func() {
+		a.loop.Do(func() {
+			if tries > 1 && a.container.startProblem() != "" {
+				a.autoStart(tries - 1)
+				return
+			}
+			a.toggleCapture()
+		})
+	})
 }
 
 // tick runs the presenters and sends the state; it runs on the loop.
 func (a *app) tick() {
 	c := a.container
 	c.Loop.Tick()
-	x, y, locked := c.FSM.TargetCoordinates()
-	var p desktop.Point
-	if sel := c.Selection.ActiveRect(); locked && sel != nil {
-		p = desktop.Point{X: x - sel.Min.X, Y: y - sel.Min.Y}
-	}
-	c.View.SetTarget(p, locked && c.Capture.Enabled())
+	run := c.FSM.Stats()
+	c.View.SetRun(run.Casts, run.Reels, run.FailedInRow, c.Config.MaxFailedCasts, c.Config.MaxSessionMinutes)
 	c.View.Flush()
 }
 
 // shutdown stops recording and capture before the app exits.
 func (a *app) shutdown() {
+	a.container.FSM.Close()
 	a.loop.Do(func() {
-		if a.overlay != nil {
-			a.overlay.Close()
-		}
 		a.container.RecordPresenter.Stop()
 		a.container.Engine.Stop()
 	})
-	a.container.FSM.Close()
 }
 
 func (a *app) setWindow(title string) {
@@ -152,6 +174,12 @@ func (a *app) setWindow(title string) {
 func (a *app) toggleCapture() {
 	c := a.container
 	if !c.Capture.Enabled() {
+		// A dry run sends no input, so tests and agents need no account.
+		if !c.Config.DryRun && !a.can(cloud.PermFish) {
+			a.logger.Warn("start refused: the account may not fish", "signed_in", a.session != nil)
+			c.View.SetStatus("Sign in with an account whose role may fish")
+			return
+		}
 		if problem := c.startProblem(); problem != "" {
 			a.logger.Error("start refused: " + problem)
 			c.View.SetStatus("Cannot start: " + problem)
@@ -160,61 +188,6 @@ func (a *app) toggleCapture() {
 	}
 	c.View.SetStatus("Ready")
 	c.CapturePresenter.Toggle()
-}
-
-// openSelection shows the overlay that sets the capture area, over the
-// current selection or centred on the configured screen.
-func (a *app) openSelection() {
-	if a.overlay != nil {
-		a.overlay.Focus()
-		return
-	}
-	screen, ok := action.ScreenBounds(a.container.Config.Screen)
-	if !ok {
-		screen = image.Rect(0, 0, 1920, 1080)
-	}
-	r := a.container.Selection.Start(screen)
-	w := a.wails.Window.NewWithOptions(application.WebviewWindowOptions{
-		Name: "selection", Title: "Selection", URL: "/selection.html",
-		Frameless: true, AlwaysOnTop: true, BackgroundType: application.BackgroundTypeTransparent,
-		Windows: application.WindowsWindow{HiddenOnTaskbar: true}, Hidden: true,
-	})
-	bounds := application.Rect{X: r.Min.X, Y: r.Min.Y, Width: r.Dx(), Height: r.Dy()}
-	w.SetPhysicalBounds(bounds)
-	w.Show()
-	w.SetPhysicalBounds(bounds) // the first Show sizes a window to its options
-	a.logger.Debug("selection overlay opened", "want", bounds, "got", w.PhysicalBounds())
-	w.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
-		go a.loop.Do(func() { a.forgetOverlay(w) })
-	})
-	a.overlay = w
-	a.container.View.SetSelection(desktop.RectOf(a.container.Selection.ActiveRect()), true)
-}
-
-// confirmSelection selects the overlay's area and closes it.
-func (a *app) confirmSelection() {
-	if a.overlay == nil {
-		return
-	}
-	b := a.overlay.PhysicalBounds()
-	a.container.Selection.Set(image.Rect(b.X, b.Y, b.X+b.Width, b.Y+b.Height))
-	a.closeSelection()
-}
-
-func (a *app) closeSelection() {
-	if w := a.overlay; w != nil {
-		a.forgetOverlay(w)
-		w.Close()
-	}
-}
-
-// forgetOverlay drops w, unless a newer overlay replaced it.
-func (a *app) forgetOverlay(w *application.WebviewWindow) {
-	if a.overlay != w {
-		return
-	}
-	a.overlay = nil
-	a.container.View.SetSelection(desktop.RectOf(a.container.Selection.ActiveRect()), false)
 }
 
 // watchStopKey registers the global stop hotkey, which also ends a recording.

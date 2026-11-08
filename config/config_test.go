@@ -135,7 +135,6 @@ func TestLoadKeepsOldReelKey(t *testing.T) {
 func TestSaveRoundTripSkipsRuntimeFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	want := DefaultConfig()
-	want.SelectionX, want.SelectionY, want.SelectionW, want.SelectionH = -1920, 148, 560, 420
 	want.CastKey = "R"
 	saved := *want
 	saved.DryRun, saved.AutoStart, saved.AutoWindow = true, true, "Fake Game"

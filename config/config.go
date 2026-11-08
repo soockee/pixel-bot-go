@@ -21,7 +21,7 @@ type Config struct {
 	DryRun bool `json:"-"`
 	// AutoWindow preselects the target window title and AutoStart starts capture
 	// shortly after launch (headless runs). Set by flags; never persisted. The
-	// capture region comes from selection_x/y/w/h in the config file.
+	// app captures that window's client area.
 	AutoWindow string `json:"-"`
 	AutoStart  bool   `json:"-"`
 	// Detection parameters
@@ -31,12 +31,6 @@ type Config struct {
 	Threshold float64 `json:"threshold"`
 	Stride    int     `json:"stride"`
 	Refine    bool    `json:"refine"`
-
-	// Selection rectangle persistence (Phase2)
-	SelectionX int `json:"selection_x"`
-	SelectionY int `json:"selection_y"`
-	SelectionW int `json:"selection_w"`
-	SelectionH int `json:"selection_h"`
 
 	// CastKey is the key that casts (e.g. "F3" or "R").
 	CastKey string `json:"cast_key"`
@@ -54,6 +48,12 @@ type Config struct {
 	RecordDir string `json:"record_dir"`
 	// RecordKeys records keys in the selected window as well as the mouse.
 	RecordKeys bool `json:"record_keys"`
+	// CloudURL is the vrl-recordings upload service, and OAuthClientID and
+	// OAuthClientSecret its Desktop OAuth client (not confidential for
+	// installed apps). Sign-in is off while CloudURL or OAuthClientID is empty.
+	CloudURL          string `json:"cloud_url"`
+	OAuthClientID     string `json:"oauth_client_id"`
+	OAuthClientSecret string `json:"oauth_client_secret"`
 
 	// Bite detection configuration (only actively used fields retained).
 	ROISizePx int `json:"roi_size_px"` // square ROI side length in pixels

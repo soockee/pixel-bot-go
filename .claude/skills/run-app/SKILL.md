@@ -23,21 +23,19 @@ Open every test window on screen 2 (`-screen 2`) to keep the primary desktop sep
 ./pixel-bot-go.exe -list-screens      # e.g. [{"screen":2,"x":-1920,"y":148,"w":1920,"h":1080,...}]
 ```
 
-The app writes `pixel_bot_logs.json` and reads `pixle_bot_config.json` (misspelled on purpose) from its working directory. Run from a scratch directory, not the repo. Selection coordinates are absolute and can be negative (screen 2 may sit left of the main screen). Place the fake game at `-pos 1350,50` (right side of screen 2, clear of the bot window) and select the area around it: screen origin plus (1330, 30), size 560x420.
+The app writes `pixel_bot_logs.json` and reads `pixle_bot_config.json` (misspelled on purpose) from its working directory. Run from a scratch directory, not the repo. There is no capture area to set: the app captures the window named by `-auto-window`. Place the fake game at `-pos 1350,50` (right side of screen 2, clear of the bot window).
 
 ```bash
 RUN="$SCRATCH/pixelbot-run"; mkdir -p "$RUN"
 (cd frontend && npm ci && npm run build)   # the window is empty without it
 go build -o "$RUN/pixel-bot-go.exe" . && go build -o "$RUN/fakegame.exe" ./cmd/fakegame
 cd "$RUN"
-# OX, OY = x and y of screen 2 from -list-screens
 cat > pixle_bot_config.json <<EOF2
-{"debug": true, "screen": 2, "selection_x": $((OX+1330)), "selection_y": $((OY+30)), "selection_w": 560, "selection_h": 420,
- "cooldown_seconds": 3, "threshold": 0.80}
+{"debug": true, "screen": 2, "cooldown_seconds": 3}
 EOF2
 ```
 
-`debug: true` enables `/debug/state` on `localhost:6060` and detection score logs. `-auto-start` is refused if the selection lies outside the configured screen, so a mistake cannot capture or click on the main screen. Dry-run is still mandatory for tests.
+`debug: true` enables `/debug/state` on `localhost:6060` and detection score logs. `-auto-start` is refused if the game window lies outside the configured screen, so a mistake cannot capture or click on the main screen. Dry-run is still mandatory for tests.
 
 ## 3. Launch headless (no clicking, no Administrator)
 
@@ -52,7 +50,7 @@ sleep 2; (./fakegame.exe -screen 2 -pos 1350,50 > fakegame.out 2>&1 &)
 
 ## 3b. Drive the UI (optional)
 
-With `debug: true` the WebView2 DevTools listen on `localhost:9222`. `curl -s localhost:9222/json` lists the pages (`/` and, while open, `selection.html`). Send `Runtime.evaluate` over the page's `webSocketDebuggerUrl` to click by id (`#tab-live`, `#tab-recorder`, `#tab-settings`, `#start`, `#record`, `#select-area`) and `Page.captureScreenshot` to see a page; Node 24 has `fetch` and `WebSocket` built in, so a 20-line script does it. Run every call with a timeout. GDI screen captures (PowerShell `CopyFromScreen`) miss the transparent selection overlay and are only correct when the capturing process is per-monitor DPI aware.
+With `debug: true` the WebView2 DevTools listen on `localhost:9222`. `curl -s localhost:9222/json` lists the page. Send `Runtime.evaluate` over the page's `webSocketDebuggerUrl` to click by id (`#tab-live`, `#tab-recorder`, `#tab-settings`, `#start`, `#record`) and `Page.captureScreenshot` to see a page; Node 24 has `fetch` and `WebSocket` built in, so a 20-line script does it. Run every call with a timeout. GDI screen captures (PowerShell `CopyFromScreen`) are only correct when the capturing process is per-monitor DPI aware.
 
 ## 4. Stop
 

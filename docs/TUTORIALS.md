@@ -4,8 +4,8 @@ Hands-on walkthroughs to achieve common first wins. Derived from existing detect
 
 ---
 ## 1. First Simulator Run
-1. Build the frontend once with `npm ci` and `npm run build` in `frontend/`. Launch the simulator with `go run ./cmd/fakegame` and the desktop app with `go run . -dry-run`. Keep the simulator window visible.
-2. On the **Live** tab, click **Select** and drag the overlay over the simulator, then press Enter.
+1. Launch the simulator with `go run ./cmd/fakegame` and the desktop app with `.un.ps1 -dry-run`, which builds the frontend and the app first. Keep the simulator window visible.
+2. On the **Fishing** tab, pick **Fake Game** as the game window.
 3. Start capture; watch state: `waiting_focus → searching`.
 4. When `monitoring` appears, a match was found; observe ROI stability.
 5. Wait for a splash and check the log for the recorded reel and recast actions.
@@ -45,7 +45,7 @@ Compare the timestamps for one full response cycle with the simulator event log.
 | ------------------ | ------------------------------------------------- |
 | No matches         | Lower `Threshold`, verify scale range covers size |
 | Many false matches | Raise `Threshold`, keep refine enabled            |
-| Slow scan          | Narrow the selection and scales                   |
+| Slow scan          | Narrow the scales, or use a smaller game window   |
 | Memory pressure    | Reduce scale count; profile heap                  |
 
 ---

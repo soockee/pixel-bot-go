@@ -168,3 +168,28 @@ func TestListenersSeeEveryTransition(t *testing.T) {
 		}
 	})
 }
+
+func TestStatsCountCastsReelsAndFailures(t *testing.T) {
+	fsmTest(t, func(t *testing.T, m *FishingFSM, _ *actionLog) {
+		startMonitoring(t, m)
+		m.EventTargetLost() // a cast without a reel
+		wantState(t, m, StateSearching)
+		if got, want := m.Stats(), (Stats{Casts: 1, FailedInRow: 1}); got != want {
+			t.Fatalf("after a lost target: %+v, want %+v", got, want)
+		}
+		m.EventTargetAcquiredAt(10, 10)
+		wantState(t, m, StateMonitoring)
+		m.EventFishBite()
+		time.Sleep(reelClickDelay + time.Second)
+		wantState(t, m, StateSearching)
+		if got, want := m.Stats(), (Stats{Casts: 2, Reels: 1}); got != want {
+			t.Fatalf("after a reel and recast: %+v, want %+v", got, want)
+		}
+		m.EventHalt()
+		m.EventAwaitFocus()
+		wantState(t, m, StateWaitingFocus)
+		if got := m.Stats(); got != (Stats{}) {
+			t.Fatalf("a new run starts at %+v", got)
+		}
+	})
+}

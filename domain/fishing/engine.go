@@ -18,9 +18,12 @@ const (
 	searchInterval = 65 * time.Millisecond // a search can use every core, so leave gaps
 )
 
-// FrameSource delivers the current image of the watched region.
+// FrameSource captures the game. Window is the game window's client area in
+// screen pixels. Window must be safe for concurrent calls to validate a target
+// before input. Grab captures any area of the screen.
 type FrameSource interface {
-	Next() (capture.Frame, error)
+	Window() (image.Rectangle, error)
+	Grab(area image.Rectangle) (capture.Frame, error)
 }
 
 // SoundSource streams the game's sound to emit until ctx ends. The first sample
@@ -33,10 +36,13 @@ type soundPacket struct {
 	at  time.Time
 }
 
-// Preview is the latest image for display. ROI is nil outside monitoring.
+// Preview is the latest image for display. While a bobber is watched only its
+// box is captured, so Frame is the last view of the whole window and ROI, at
+// ROIBox in Frame's pixels, is live. ROI is nil outside monitoring.
 type Preview struct {
-	Frame *image.RGBA
-	ROI   *image.RGBA
+	Frame  *image.RGBA
+	ROI    *image.RGBA
+	ROIBox image.Rectangle
 }
 
 // Engine runs the pipeline on one goroutine: it grabs a frame, runs the
@@ -97,15 +103,17 @@ func (e *Engine) Preview() *Preview { return e.preview.Load() }
 
 // run holds the state of one Start to Stop span. Only its goroutine touches it.
 type run struct {
-	engine     *Engine
-	locator    detect.Locator
-	bite       detect.BiteDetector
-	listener   detect.SoundBiteDetector // bite, when it also listens
-	target     image.Rectangle          // locked area in screen coordinates
-	lastSearch time.Time
-	searches   int
-	monitoring bool
-	lastErr    string
+	engine       *Engine
+	locator      detect.Locator
+	bite         detect.BiteDetector
+	listener     detect.SoundBiteDetector // bite, when it also listens
+	target       image.Rectangle          // locked area in screen coordinates
+	targetWindow image.Rectangle          // client area when the target was found
+	window       capture.Frame            // the last capture of the whole game window
+	lastSearch   time.Time
+	searches     int
+	monitoring   bool
+	lastErr      string
 }
 
 func (r *run) loop(ctx context.Context, done chan<- struct{}) {
@@ -160,9 +168,28 @@ func (r *run) hear(p soundPacket) {
 	}
 }
 
+// step captures and runs the detection the FSM state calls for. A search
+// needs the whole game window; watching a bobber needs only its box, which
+// captures as fast as any small area, so a bite is seen as soon as before.
 func (r *run) step() {
 	e := r.engine
-	frame, err := e.frames.Next()
+	state := e.fsm.Current()
+	watching := state == StateMonitoring && !r.target.Empty() && r.window.Image != nil
+	window, err := e.frames.Window()
+	if (watching || state == StateReeling && !r.target.Empty()) && (err != nil || window != r.targetWindow) {
+		r.monitoring = false
+		e.preview.Store(&Preview{Frame: r.window.Image})
+		e.fsm.send(evtTargetInvalidated{})
+		return
+	}
+	area := window
+	if watching {
+		area = r.target
+	}
+	var frame capture.Frame
+	if err == nil {
+		frame, err = e.frames.Grab(area)
+	}
 	if err != nil {
 		if err.Error() != r.lastErr { // a failure can last for thousands of ticks
 			e.logger.Error("capture failed", "error", err)
@@ -171,18 +198,20 @@ func (r *run) step() {
 		return
 	}
 	r.lastErr = ""
-	preview := &Preview{Frame: frame.Image}
-	switch e.fsm.Current() {
-	case StateSearching:
+	if !watching {
+		r.window = frame
 		r.monitoring = false
-		r.search(frame)
-	case StateMonitoring:
-		preview.ROI = r.monitor(frame)
+		if state == StateSearching {
+			r.search(frame, window)
+		}
+		e.preview.Store(&Preview{Frame: frame.Image})
+		return
 	}
-	e.preview.Store(preview)
+	roi := r.monitor(frame)
+	e.preview.Store(&Preview{Frame: r.window.Image, ROI: roi, ROIBox: r.target.Sub(r.window.Origin)})
 }
 
-func (r *run) search(frame capture.Frame) {
+func (r *run) search(frame capture.Frame, window image.Rectangle) {
 	if time.Since(r.lastSearch) < searchInterval {
 		return
 	}
@@ -196,17 +225,29 @@ func (r *run) search(frame capture.Frame) {
 	}
 	if found {
 		r.target = match.Box.Add(frame.Origin)
-		e.fsm.EventTargetAcquiredAt(frame.Origin.X+match.X, frame.Origin.Y+match.Y)
+		r.targetWindow = window
+		e.fsm.send(evtTargetAcquiredAt{
+			x: frame.Origin.X + match.X, y: frame.Origin.Y + match.Y,
+			valid: func() bool {
+				current, err := e.frames.Window()
+				return err == nil && current == window
+			},
+		})
 	}
 }
 
 func (r *run) monitor(frame capture.Frame) *image.RGBA {
 	e := r.engine
+	box := r.target.Sub(frame.Origin)
+	if !box.In(frame.Image.Bounds()) {
+		r.monitoring = false
+		return nil
+	}
 	if !r.monitoring {
 		r.bite.Reset()
 		r.monitoring = true
 	}
-	roi := frame.Image.SubImage(r.target.Sub(frame.Origin)).(*image.RGBA)
+	roi := frame.Image.SubImage(box).(*image.RGBA)
 	if r.bite.Feed(roi, frame.CapturedAt) {
 		e.fsm.EventFishBite()
 	}

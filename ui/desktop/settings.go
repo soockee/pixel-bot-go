@@ -62,6 +62,9 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	check(castOK, "Cast key")
 	_, stopOK := action.ParseVK(s.StopKey)
 	check(stopOK, "Stop key")
+	if sameKey(s.CastKey, s.StopKey) {
+		return c, errors.New("the Cast and Stop keys must be different")
+	}
 	check(slices.Contains(detect.LocatorNames(), s.Locator), "Locator")
 	check(slices.Contains(detect.BiteDetectorNames(), s.BiteDetector), "Bite detector")
 	check(strings.TrimSpace(s.RecordDir) != "", "Recording folder")
@@ -75,4 +78,10 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	c.RecordDir, c.RecordKeys = strings.TrimSpace(s.RecordDir), s.RecordKeys
 	c.ROISizePx, c.CooldownSeconds, c.MaxCastDurationSeconds = s.ROISizePx, s.CooldownSeconds, s.MaxCastDurationSeconds
 	return c, c.Validate()
+}
+
+func sameKey(a, b string) bool {
+	av, aOK := action.ParseVK(a)
+	bv, bOK := action.ParseVK(b)
+	return aOK && bOK && av == bv
 }

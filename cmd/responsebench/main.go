@@ -28,6 +28,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/soocke/pixel-bot-go/internal/inputtiming"
 	"github.com/soocke/pixel-bot-go/internal/playtrace"
 	"github.com/soocke/pixel-bot-go/internal/traceobserver"
 )
@@ -56,7 +57,37 @@ func main() {
 	manualCast := flag.String("manual-cast", "", "optional manual cast binding, for example mouse:x1")
 	manualReel := flag.String("manual-reel", "", "optional manual reel binding, for example mouse:right")
 	matchWindow := flag.Duration("match-window", 1500*time.Millisecond, "maximum aligned bite-to-response delay")
+	inputTiming := flag.Bool("input-timing", false, "report candidate and reviewed timing from recording directories as JSON")
+	timingTrain := flag.String("timing-train", "", "comma-separated training directory names; remaining sessions are held out")
+	timingModel := flag.String("timing-model-out", "", "new file for a frozen dry-run timing model")
+	timingCalibration := flag.String("timing-calibration", "", "JSON comparison of fixed simulator runs used to measure detector lag")
+	cursorFit := flag.Bool("cursor-fit", false, "fit and compare cursor paths against held-out recording directories")
+	cursorTrain := flag.String("cursor-train", "", "comma-separated training directory names; remaining sessions are held out")
+	cursorModel := flag.String("cursor-model-out", "", "new file for a frozen cursor profile")
 	flag.Parse()
+	if *cursorFit {
+		if err := runCursorFit(flag.Args(), *manualCast, *manualReel, *cursorTrain, *cursorModel, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "responsebench:", err)
+			os.Exit(1)
+		}
+		return
+	}
+	if *inputTiming {
+		var calibration *inputtiming.Calibration
+		if *timingCalibration != "" {
+			var err error
+			calibration, err = readTimingCalibration(*timingCalibration)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, "responsebench: timing calibration:", err)
+				os.Exit(1)
+			}
+		}
+		if err := runInputTiming(flag.Args(), *manualCast, *manualReel, *timingTrain, *timingModel, calibration, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "responsebench:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if *compareTraces {
 		if err := runTraceComparison(flag.Args(), *manualCast, *manualReel, *matchWindow, *asJSON, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "responsebench:", err)

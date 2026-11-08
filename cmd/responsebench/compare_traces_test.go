@@ -36,6 +36,7 @@ func TestCompareFourTraceSources(t *testing.T) {
 	start := time.Unix(10000, 0).UTC()
 	later := start.Add(500 * time.Millisecond)
 	id := 0
+	canceled := 1
 	writeComparisonFixture(t, ground, playtrace.Header{Source: playtrace.FakeGame, Clock: playtrace.Monotonic, SessionID: "A", StartedUTC: &start},
 		[]playtrace.Event{{Type: playtrace.BiteAvailable, ElapsedUS: 1_000_000, EventID: &id},
 			{Type: playtrace.BiteAvailable, ElapsedUS: 2_000_000, EventID: &id}}, 3_000_000)
@@ -45,9 +46,17 @@ func TestCompareFourTraceSources(t *testing.T) {
 			{Type: "click", ElapsedUS: 850_000, Button: "right", Gesture: &playtrace.Gesture{DurationUS: 50_000}},
 			{Type: "drag", ElapsedUS: 1_800_000, Button: "right", Gesture: &playtrace.Gesture{DurationUS: 90_000}},
 		}, 2_500_000)
-	writeComparisonFixture(t, app, playtrace.Header{Source: playtrace.AppDryRun, Clock: playtrace.Monotonic, SessionID: "A", StartedUTC: &later},
-		[]playtrace.Event{{Type: playtrace.BiteDetected, ElapsedUS: 600_000, EventID: &id},
-			{Type: playtrace.ReelDispatched, ElapsedUS: 900_000, EventID: &id}}, 2_500_000)
+	writeComparisonFixture(t, app, playtrace.Header{Source: playtrace.AppDryRun, Clock: playtrace.Monotonic, SessionID: "A", StartedUTC: &later, TimingProfile: "fitted"},
+		[]playtrace.Event{{Type: playtrace.CastDispatched, ElapsedUS: 200_000, EventID: &id},
+			{Type: playtrace.BiteDetected, ElapsedUS: 600_000, EventID: &id},
+			{Type: playtrace.ReelPlanned, ElapsedUS: 600_000, EventID: &id, Timing: &playtrace.ReelTiming{DetectorUS: 590_000, Detector: "motion"}},
+			{Type: playtrace.ReelDispatched, ElapsedUS: 900_000, EventID: &id},
+			{Type: playtrace.ReelReleased, ElapsedUS: 1_020_000, EventID: &id},
+			{Type: playtrace.CastDispatched, ElapsedUS: 1_820_000, EventID: &canceled},
+			{Type: playtrace.BiteDetected, ElapsedUS: 1_900_000, EventID: &canceled},
+			{Type: playtrace.ReelPlanned, ElapsedUS: 1_900_000, EventID: &canceled, Timing: &playtrace.ReelTiming{DetectorUS: 1_890_000, Detector: "motion"}},
+			{Type: playtrace.ReelCanceled, ElapsedUS: 2_000_000, EventID: &canceled, Outcome: "focus"},
+			{Type: playtrace.TimingGap, ElapsedUS: 2_000_000}}, 2_500_000)
 	var events []playtrace.Event
 	for _, r := range []Record{
 		{ScenarioID: "sc1", Controller: "base", Action: actionArrive, TMs: 10},
@@ -74,13 +83,25 @@ func TestCompareFourTraceSources(t *testing.T) {
 		t.Fatalf("comparison: %s", output.String())
 	}
 	m, a, b := result.Traces[1], result.Traces[2], result.Traces[3]
-	if m.Casts != 1 || m.Reels != 1 || m.Drags != 1 || a.Completed != 0 || a.InternalDelay.P50US != 300_000 ||
+	if m.Casts != 1 || m.Reels != 1 || m.Drags != 1 || a.Completed != 0 || a.InternalDelay.P50US != 310_000 ||
 		b.Runs != 2 || b.Completed != 1 || b.ReelSpacing != nil || b.InternalDelay.P50US != 25_000 {
 		t.Fatalf("unexpected source metrics: %s", output.String())
 	}
+	if s := a.SimulatedTiming; s == nil || s.Profile != "fitted" || s.Planned != 2 || s.Released != 1 ||
+		s.Canceled["focus"] != 1 || s.Hold.P50US != 120_000 || s.ReleaseToCast.P50US != 800_000 {
+		t.Fatalf("unexpected simulated timing: %s", output.String())
+	}
+	if g := a.Gameplay; g == nil || g.Cycles != 1 || g.ReeledCycles != 1 || g.RepeatFraction != nil {
+		t.Fatalf("unexpected cast cycles: %+v", g)
+	}
 	if result.Aligned[0].Matched.P50US != 300_000 || result.Aligned[1].Matched.P50US != 400_000 ||
-		result.Aligned[0].BitesInOverlap != 2 || result.Aligned[0].Matched.Samples != 1 {
+		result.Aligned[0].BitesInOverlap != 2 || result.Aligned[0].Matched.Samples != 1 ||
+		result.Aligned[1].Missed != 1 || result.Aligned[1].UnmatchedReels != 0 ||
+		result.Aligned[0].BitesWithRelease != nil || result.Aligned[1].BitesWithRelease == nil || *result.Aligned[1].BitesWithRelease != 1 {
 		t.Fatalf("unexpected time alignment: %s", output.String())
+	}
+	if lag := result.Aligned[1].DetectorDelayUS; len(lag) != 2 || lag[0] != 90_000 || lag[1] != 390_000 {
+		t.Fatalf("unexpected cue-to-detector delays: %v", lag)
 	}
 }
 

@@ -29,6 +29,10 @@ const (
 	CastRequested  = "cast_requested"
 	CastDispatched = "cast_dispatched"
 	ReelDispatched = "reel_dispatched"
+	ReelPlanned    = "reel_planned"
+	ReelReleased   = "reel_released"
+	ReelCanceled   = "reel_canceled"
+	TimingGap      = "timing_gap"
 	ReelAttempt    = "reel_attempt"
 	ReelReply      = "reel_reply"
 	BiteClosed     = "bite_closed"
@@ -37,16 +41,19 @@ const (
 // Header identifies the producer and clock. A shared SessionID explicitly
 // opts wall-clock streams into alignment. Benchmark runs use virtual time.
 type Header struct {
-	Type       string     `json:"type"`
-	Format     string     `json:"format"`
-	Schema     int        `json:"schema"`
-	Source     string     `json:"source"`
-	Clock      string     `json:"clock"`
-	SessionID  string     `json:"session_id,omitempty"`
-	StartedUTC *time.Time `json:"started_utc,omitempty"`
-	Keyboard   bool       `json:"keyboard,omitempty"`
-	DragPixels int        `json:"drag_pixels,omitempty"`
-	DragCounts int        `json:"drag_counts,omitempty"`
+	Type          string     `json:"type"`
+	Format        string     `json:"format"`
+	Schema        int        `json:"schema"`
+	Source        string     `json:"source"`
+	Clock         string     `json:"clock"`
+	SessionID     string     `json:"session_id,omitempty"`
+	StartedUTC    *time.Time `json:"started_utc,omitempty"`
+	Keyboard      bool       `json:"keyboard,omitempty"`
+	DragPixels    int        `json:"drag_pixels,omitempty"`
+	DragCounts    int        `json:"drag_counts,omitempty"`
+	TimingProfile string     `json:"timing_profile,omitempty"`
+	TimingSeed    *uint64    `json:"timing_seed,omitempty"`
+	CursorProfile string     `json:"cursor_profile,omitempty"`
 }
 
 // Event is one observation. ElapsedUS is relative to the header anchor for
@@ -71,6 +78,16 @@ type Event struct {
 	Key        *Key        `json:"key,omitempty"`
 	Gesture    *Gesture    `json:"gesture,omitempty"`
 	Status     string      `json:"status,omitempty"`
+	Timing     *ReelTiming `json:"timing,omitempty"`
+}
+
+// ReelTiming records the detector timestamp and plan for a simulated reel.
+type ReelTiming struct {
+	Detector   string `json:"detector,omitempty"`
+	DetectorUS int64  `json:"detector_us"`
+	DelayUS    int64  `json:"delay_us"`
+	HoldUS     int64  `json:"hold_us"`
+	CooldownUS int64  `json:"cooldown_us"`
 }
 
 // Position uses client pixels and includes dimensions for normalization.

@@ -11,64 +11,61 @@
   <header class="topbar">
     <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Visual Response Lab</div>
     <nav class="tabs" role="tablist" aria-label="Views">
-      <button role="tab" id="tab-live" aria-controls="view-live" data-tab="live">Live</button>
-      <button role="tab" id="tab-recorder" aria-controls="view-recorder" data-tab="recorder">Recorder</button>
+      <button role="tab" id="tab-live" aria-controls="view-live" data-tab="live">Fishing</button>
+      <button role="tab" id="tab-recorder" aria-controls="view-recorder" data-tab="recorder" hidden>Recorder</button>
       <button role="tab" id="tab-settings" aria-controls="view-settings" data-tab="settings">Settings</button>
     </nav>
     <div class="topbar-end">
-      <span class="run-state" id="run-state"><span class="dot" aria-hidden="true"></span><span id="run-label">Stopped</span></span>
-      <button class="icon-button" id="theme" type="button" aria-label="Switch theme"></button>
+      <button class="button" id="update" type="button" hidden></button>
+      <span class="muted small" id="account" hidden></span>
+      <button class="button" id="sign-in" type="button">Sign in with Google</button>
     </div>
   </header>
 
   <main>
     <section class="view live" id="view-live" role="tabpanel" aria-labelledby="tab-live">
       <div class="panel capture">
-        <div class="panel-head">
-          <h2>Capture</h2>
-          <span class="meta" id="capture-meta"></span>
-        </div>
         <div class="stage" id="stage">
           <div class="frame" id="frame">
-            <img id="capture-img" alt="Live capture of the selected area">
-            <div class="lock" id="lock" aria-hidden="true"></div>
+            <img id="capture-img" alt="Live capture of the fishing area">
+            <div class="lock" id="lock" aria-hidden="true"><img id="lock-img" alt=""></div>
             <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
           </div>
           <div class="empty" id="capture-empty">
-            <p id="capture-empty-text">Pick a window and a capture area, then start</p>
+            <p id="capture-empty-text">Start to see the fishing area here</p>
           </div>
+          <p class="caption" id="caption" hidden><span class="dot" aria-hidden="true"></span><span id="caption-text"></span><span class="mono" id="caption-time"></span></p>
         </div>
+        <ol class="track" id="cycle" aria-label="Fishing cycle"></ol>
       </div>
 
       <aside class="side">
         <div class="panel">
-          <div class="field">
-            <label for="window">Target window</label>
-            <div class="inline">
-              <select id="window"></select>
-              <button class="icon-button" id="refresh" type="button" aria-label="Refresh windows"></button>
-            </div>
+          <button class="button primary wide" id="start" type="button">Start fishing</button>
+          <p class="muted small" id="start-hint" hidden></p>
+          <div class="setup">
+            <label for="window">Game window</label>
+            <select id="window"></select>
           </div>
-          <div class="field">
-            <span class="label">Capture area</span>
-            <div class="inline">
-              <span class="value mono" id="area">None</span>
-              <button class="button" id="select-area" type="button">Select</button>
-              <button class="icon-button" id="clear-area" type="button" aria-label="Clear capture area"></button>
-            </div>
-          </div>
-          <button class="button primary wide" id="start" type="button">Start</button>
         </div>
 
-        <div class="panel">
-          <div class="panel-head">
-            <h2>Cycle</h2>
-            <span class="meta mono" id="timers"></span>
+        <div class="panel catch">
+          <div class="figure">
+            <span class="big mono" id="reels">0</span>
+            <span class="muted" id="reels-label">catches this run</span>
           </div>
-          <ol class="cycle" id="cycle"></ol>
+          <p class="muted small" id="casts">No casts yet</p>
+          <div class="meter" id="meter-session">
+            <div class="meter-head"><span>Session</span><span class="mono" id="session-text"></span></div>
+            <div class="bar"><i id="session-bar"></i></div>
+          </div>
+          <div class="meter" id="meter-failed">
+            <div class="meter-head"><span>Casts without a bite</span><span class="mono" id="failed-text"></span></div>
+            <div class="bar"><i id="failed-bar"></i></div>
+          </div>
         </div>
 
-        <div class="panel watch">
+        <div class="panel watch" id="watch-panel" hidden>
           <div class="panel-head">
             <h2>Bite watch</h2>
             <span class="meta mono" id="target"></span>
@@ -84,7 +81,7 @@
     <section class="view recorder" id="view-recorder" role="tabpanel" aria-labelledby="tab-recorder" hidden>
       <aside class="panel list-panel">
         <button class="button primary wide" id="record" type="button">Record</button>
-        <p class="muted small" id="record-hint">Records the capture area, plus your mouse, keys and sound in the target window</p>
+        <p class="muted small" id="record-hint">Records the game window, plus your mouse, keys and sound in the target window</p>
         <div class="panel-head list-head">
           <h2>Recordings</h2>
           <button class="icon-button" id="refresh-recordings" type="button" aria-label="Refresh recordings"></button>
@@ -97,6 +94,7 @@
             <h1 id="trace-title">No recording open</h1>
             <p class="muted" id="trace-status">Record a session or pick one from the list</p>
           </div>
+          <button class="button" id="upload" type="button" hidden>Upload</button>
         </div>
         <dl class="stats" id="stats"></dl>
         <div class="trace-body" id="trace-body">

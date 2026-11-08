@@ -51,48 +51,58 @@ func (v *View) SetRecording(dir string) {
 	}
 }
 
-// SetSession shows the session and total capture durations.
-func (v *View) SetSession(session, total time.Duration) {
-	v.state.SessionSeconds, v.state.TotalSeconds = int(session.Seconds()), int(total.Seconds())
+// SetSession shows the session duration; the window has no use for the total.
+func (v *View) SetSession(session, _ time.Duration) { v.state.SessionSeconds = int(session.Seconds()) }
+
+// SetRun shows the run's counts and the limits that stop it.
+func (v *View) SetRun(casts, reels, failedInRow, maxFailed, sessionLimit int) {
+	v.state.Casts, v.state.Reels, v.state.FailedInRow = casts, reels, failedInRow
+	v.state.MaxFailed, v.state.SessionLimit = maxFailed, sessionLimit
 }
 
-// UpdateCapture shows a captured frame.
+// UpdateCapture shows a capture of the game window.
 func (v *View) UpdateCapture(img *image.RGBA) {
-	v.frames.Put("capture", img)
+	v.frames.Put("capture", shrink(img, previewWidth))
 	v.seq++
-	v.state.Frame = v.seq
+	size := img.Bounds().Size()
+	v.state.Frame, v.state.FrameSize = v.seq, Point{X: size.X, Y: size.Y}
 }
 
-// UpdateDetection shows the area watched for a bite.
-func (v *View) UpdateDetection(img *image.RGBA) {
+// UpdateDetection shows the live box watched for a bite, at box on the
+// capture, or none when img is nil.
+func (v *View) UpdateDetection(img *image.RGBA, box image.Rectangle) {
+	if img == nil {
+		v.state.ROI, v.state.ROIBox = 0, Rect{}
+		return
+	}
 	v.frames.Put("roi", img)
 	v.seq++
-	v.state.ROI = v.seq
+	v.state.ROI, v.state.ROIBox = v.seq, Rect{X: box.Min.X, Y: box.Min.Y, W: box.Dx(), H: box.Dy()}
 }
 
 // PreviewReset clears the previews.
 func (v *View) PreviewReset() {
 	v.frames.Clear()
-	v.state.Frame, v.state.ROI, v.state.Locked = 0, 0, false
-}
-
-// SetTarget shows the locked bobber in frame pixels, or none.
-func (v *View) SetTarget(p Point, locked bool) {
-	if !locked {
-		p = Point{}
-	}
-	v.state.Target, v.state.Locked = p, locked
+	v.state.Frame, v.state.ROI, v.state.ROIBox = 0, 0, Rect{}
 }
 
 // SetWindow shows the target window title.
 func (v *View) SetWindow(title string) { v.state.Window = title }
 
-// SetSelection shows the capture area and whether the overlay is open.
-func (v *View) SetSelection(r Rect, selecting bool) {
-	v.state.Selection, v.state.Selecting = r, selecting
+// SetAccount shows the signed-in account and what its role may do; an empty
+// email means signed out.
+func (v *View) SetAccount(email, role string, canFish, canUpload bool) {
+	v.state.Account, v.state.Role, v.state.CanFish, v.state.CanUpload = email, role, canFish, canUpload
 }
 
+// SetUploading shows the recording being uploaded, "" when none.
+func (v *View) SetUploading(name string) { v.state.Uploading = name }
+
+// SetUpdate shows the newer release on offer, "" when none, and whether it
+// is being installed.
+func (v *View) SetUpdate(tag string, updating bool) { v.state.Update, v.state.Updating = tag, updating }
+
 // SetInfo shows fixed run facts and the theme.
-func (v *View) SetInfo(dryRun bool, stopKey string, dark bool) {
-	v.state.DryRun, v.state.StopKey, v.state.Dark = dryRun, stopKey, dark
+func (v *View) SetInfo(dryRun, debug bool, stopKey string, dark bool) {
+	v.state.DryRun, v.state.Debug, v.state.StopKey, v.state.Dark = dryRun, debug, stopKey, dark
 }

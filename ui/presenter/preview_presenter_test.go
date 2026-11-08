@@ -14,8 +14,12 @@ func (s *mockPreviewSource) Preview() *fishing.Preview { return s.preview }
 
 type mockPreviewView struct{ captures, rois int }
 
-func (v *mockPreviewView) UpdateCapture(*image.RGBA)   { v.captures++ }
-func (v *mockPreviewView) UpdateDetection(*image.RGBA) { v.rois++ }
+func (v *mockPreviewView) UpdateCapture(*image.RGBA) { v.captures++ }
+func (v *mockPreviewView) UpdateDetection(img *image.RGBA, _ image.Rectangle) {
+	if img != nil {
+		v.rois++
+	}
+}
 
 func TestPreviewPresenterLimitsTheUpdateRate(t *testing.T) {
 	frame := image.NewRGBA(image.Rect(0, 0, 1, 1))
@@ -36,9 +40,10 @@ func TestPreviewPresenterLimitsTheUpdateRate(t *testing.T) {
 		t.Fatalf("captures=%d rois=%d, want 1 and 0", view.captures, view.rois)
 	}
 
+	// Watching keeps the capture and sends only the live box.
 	source.preview = &fishing.Preview{Frame: frame, ROI: frame}
 	p.Tick(start.Add(previewInterval))
-	if view.captures != 2 || view.rois != 1 {
-		t.Fatalf("captures=%d rois=%d, want 2 and 1", view.captures, view.rois)
+	if view.captures != 1 || view.rois != 1 {
+		t.Fatalf("captures=%d rois=%d, want 1 and 1", view.captures, view.rois)
 	}
 }

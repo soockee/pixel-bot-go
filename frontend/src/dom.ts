@@ -41,3 +41,6 @@ export const storage = {
     try { localStorage.setItem(key, value); } catch { /* not kept */ }
   },
 };
+
+/** keyLabel shows a stored key name: Mouse4 reads as Mouse 4. */
+export const keyLabel = (name: string) => name.replace(/^Mouse(\d)$/, "Mouse $1");

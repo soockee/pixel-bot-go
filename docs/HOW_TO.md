@@ -19,7 +19,7 @@ With debug enabled, compare `/debug/pprof/goroutine` and `/debug/pprof/heap` ove
 | Symptom             | Adjust                                |
 | ------------------- | ------------------------------------- |
 | False positives     | Raise `Threshold`, enable `Refine`    |
-| Slow detection      | Narrow selection and scale range      |
+| Slow detection      | Narrow the scale range                |
 | Miss different size | Expand `MinScale..MaxScale`           |
 | Memory spike        | Reduce scale count / reuse buffers    |
 
@@ -105,21 +105,45 @@ New-Item -ItemType Junction -Path "C:\Program Files (x86)\World of Warcraft\_for
 
 Restart the game or type `/reload`. In NaowhForever's Glimmer settings, switch off the Fishing Bobber highlight, because both addons use the same nameplate. Then cast: magenta brackets appear around your bobber and vanish when you reel. If the bobber is not in the middle of the box, move it with `/bobbermarker y <pixels>`; negative moves it down, and `/bobbermarker` shows the current value.
 
-## Record a Session
-A recording saves the screen and your input together, on the same clock, and sends no input.
+### Set the Fishing cast key
 
-1. Start the app. On the **Live** tab, pick the target window (the refresh button reloads the list) and click **Select** to set the capture area.
+Open **Settings → Keys** in Visual Response Lab. Click the current **Cast key**, then press the same key or mouse side button you use to cast Fishing in game. The app saves it automatically. Use an unmodified letter, top-row digit, F1–F12, Mouse 4, or Mouse 5.
+
+## Sign In
+Fishing with real input and uploading recordings need a Google account with a role; a dry run needs none.
+
+1. Click **Sign in with Google** in the top bar. The browser opens Google sign-in; pick your account and return to the app.
+2. The top bar shows your email and role. Without a role, **Start fishing** stays disabled: ask the owner to give your account a role that may fish, then sign out and in again.
+
+The app keeps you signed in (`pixel_bot_account.bin`, encrypted for your Windows user) and checks your role on each start. **Sign out** forgets it and stops a real run. Sign-in needs `cloud_url` and `oauth_client_id` in the config.
+
+## Update the App
+At each start a release build asks GitHub for the latest release of `soockee/pixel-bot-go`. When it is newer, the top bar shows **Update to vX.Y.Z**.
+
+1. Stop the run, the recording and any upload; the button stays disabled until then.
+2. Click **Update to vX.Y.Z**. The status bar shows the download; the app checks the build against the release's `CHECKSUMS.txt`, refuses it on a mismatch, then replaces itself and restarts with the same flags.
+
+The replaced build stays beside the exe as `pixel-bot-go.exe.old` until the next start removes it. Local builds (`go build`) report version `dev` and never check. To try a version, build with `-ldflags "-X github.com/soocke/pixel-bot-go/internal/update.Version=v1.0.0"`.
+
+## Record a Session
+A recording saves the screen and your input together, on the same clock, and sends no input. The Recorder tab is a developer tool: it appears with `"debug": true` in `pixle_bot_config.json`.
+
+1. Start the app. On the **Fishing** tab, pick the game window (the list reloads when you open it).
 2. Open the **Recorder** tab and click **Record**. The new recording opens and follows your input live.
 3. Focus the game and play by hand.
 4. Press the stop hotkey (default F10), or click **Stop recording** in the app.
 
-Each recording gets a new timestamped folder holding `frames/`, `input.jsonl` and the game's sound in `audio.wav`. You still hear the game while it records, and music or voice chat from other programs is not recorded. Set **Recording folder** and **Record keys** on the **Settings** tab. The default `datasets/` folder is ignored by git. Start stays disabled while recording, and Record while the bot runs.
+Each recording gets a new timestamped folder holding `frames/`, `input.jsonl` and the game's sound in `audio.wav`. You still hear the game while it records, and music or voice chat from other programs is not recorded. Set **Recording folder** and **Record keys** on the **Settings** tab (debug mode). The default `datasets/` folder is ignored by git. Start stays disabled while recording, and Record while the bot runs.
 
-For scripts and agents, the same recording runs without a window: `pixel-bot-go.exe -record <dir> -window "<title>"`, stopped with Ctrl+C, using the selection saved in the config. Leave out `-window` to record frames only, which then need `labels.json` written by hand, and add `-no-keys` to skip keys. `-list-windows` prints the titles.
+For scripts and agents, the same recording runs without a window: `pixel-bot-go.exe -record <dir> -window "<title>"`, stopped with Ctrl+C. It records the window's client area where it is at the start. Add `-no-keys` to skip keys. `-list-windows` prints the titles.
 
 The recorder stores client-area cursor positions, relative mouse counts, both wheel axes, and press and release events for left, right, middle, Mouse 4, and Mouse 5. It also records key down and up with virtual-key and scan codes, repeat status, and shortcuts such as Shift+B. Mouse capture requires the pointer over the selected client area. Keyboard capture follows the selected foreground window, including its chat or text fields. Use `-no-keys` for mouse-only sessions. Keyboard input Windows marks as injected is skipped.
 
 The JSONL keeps the raw button transitions and adds one gesture per completed hold. A hold becomes a drag if it moves at least 6 client pixels or reaches at least 8 raw counts away from its start. Gesture rows include duration, endpoints, total raw travel, and maximum excursions. A right-button camera drag can be detected even with a stationary cursor. Holds cut off by a capture gap are marked interrupted. A final `session_end` row reports the event counts and whether the file finished cleanly. The recorder captures input and key bindings. Bite and cast annotations are separate.
+
+### Upload a recording
+
+Open a finished recording on the **Recorder** tab and click **Upload**. It needs a role with `recordings.upload`. The status bar counts the files; anything already uploaded is skipped, so start it again after a failure. Uploaded files cannot be replaced.
 
 ### View a recording
 
@@ -148,7 +172,7 @@ This compares every registered technique, one column each. Use `-locator` or `-b
 1. Implement `detect.Locator` or `detect.BiteDetector`.
 2. Add one line for it in `domain/detect/registry.go`.
 3. Run `detecteval`. The new technique appears as a column.
-4. To use it in the app, pick it on the **Settings** tab, under **Locator** or **Bite detector**.
+4. To use it in the app, set `"debug": true` and pick it on the **Settings** tab, under **Locator** or **Bite detector**.
 
 ### Export data for training
 
@@ -189,7 +213,7 @@ Investige profile `.pb.gz` files; Compare both baseline and later snapshots plus
 ## Operating Tips
 * Always run as Administrator for input injection reliability.
 * Keep game window focused; alt-tab can delay key events.
-* Narrow selection area for speed & fewer false positives.
+* Play in a smaller window for faster searches; watching for a bite captures only the bobber's box either way.
 * Pause before changing settings; apply then resume.
 * Use dark mode if the UI is distracting in low light.
 
@@ -198,7 +222,7 @@ Investige profile `.pb.gz` files; Compare both baseline and later snapshots plus
 | ------------------------ | ---------------------------------------------------- |
 | Cursor doesn't move      | Run as Administrator; confirm cast key binding.      |
 | Never finds bobber       | Lower `Threshold`; ensure scale range brackets size. |
-| Triggers on wrong pixels | Raise `Threshold`; refine ON; narrow selection area. |
+| Triggers on wrong pixels | Raise `Threshold`; refine ON. |
 | Wants to fish forever    | Check `max_cast_duration_seconds` isn't too large.   |
 | Reset config             | Delete `pixle_bot_config.json` while app closed.     |
 

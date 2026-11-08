@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"runtime"
 	"time"
 	"unsafe"
 
@@ -66,9 +67,19 @@ type bitmapInfo struct {
 // on a second monitor can have negative coordinates.
 func (s Source) Next() (Frame, error) {
 	sel := s.Region()
-	if sel == nil || sel.Empty() {
+	if sel == nil {
 		return Frame{}, errors.New("capture: no region selected")
 	}
+	return Grab(*sel)
+}
+
+// Grab captures area, clipped to the virtual desktop, in physical pixels.
+func Grab(area image.Rectangle) (Frame, error) {
+	sel := &area
+	if sel.Empty() {
+		return Frame{}, errors.New("capture: empty area")
+	}
+	defer physicalPixels()()
 	vx, vy := int(getSystemMetric(smXVirtual)), int(getSystemMetric(smYVirtual))
 	screen := image.Rect(vx, vy, vx+int(getSystemMetric(smCxVirtual)), vy+int(getSystemMetric(smCyVirtual)))
 	r := sel.Intersect(screen)
@@ -151,4 +162,56 @@ func captureRect(r image.Rectangle) (*image.RGBA, error) {
 func getSystemMetric(idx int) int32 {
 	v, _, _ := procGetSystemMetrics.Call(uintptr(idx))
 	return int32(v)
+}
+
+var (
+	procFindWindow       = user32.NewProc("FindWindowW")
+	procGetClientRect    = user32.NewProc("GetClientRect")
+	procClientToScreen   = user32.NewProc("ClientToScreen")
+	procSetThreadDPI     = user32.NewProc("SetThreadDpiAwarenessContext")
+	perMonitorAwareV2DPI = ^uintptr(3) // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+)
+
+// physicalPixels makes the calling thread use physical pixels, so window
+// positions and captures agree on every monitor scale. Call the returned
+// function to restore it.
+func physicalPixels() func() {
+	runtime.LockOSThread()
+	previous, _, _ := procSetThreadDPI.Call(perMonitorAwareV2DPI)
+	return func() {
+		if previous != 0 {
+			procSetThreadDPI.Call(previous)
+		}
+		runtime.UnlockOSThread()
+	}
+}
+
+// WindowArea returns the client area of the window titled title, in
+// physical screen pixels: what a game draws into, without its frame.
+func WindowArea(title string) (image.Rectangle, error) {
+	name, err := windows.UTF16PtrFromString(title)
+	if err != nil {
+		return image.Rectangle{}, err
+	}
+	defer physicalPixels()()
+	hwnd, _, _ := procFindWindow.Call(0, uintptr(unsafe.Pointer(name)))
+	if hwnd == 0 {
+		return image.Rectangle{}, fmt.Errorf("no window titled %q", title)
+	}
+	var client struct{ Left, Top, Right, Bottom int32 }
+	if ok, _, err := procGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&client))); ok == 0 {
+		return image.Rectangle{}, fmt.Errorf("window %q: %w", title, err)
+	}
+	var origin struct{ X, Y int32 }
+	if ok, _, err := procClientToScreen.Call(hwnd, uintptr(unsafe.Pointer(&origin))); ok == 0 {
+		return image.Rectangle{}, fmt.Errorf("window %q: %w", title, err)
+	}
+	if origin.X <= -32000 && origin.Y <= -32000 {
+		return image.Rectangle{}, fmt.Errorf("window %q is minimized", title)
+	}
+	area := image.Rect(0, 0, int(client.Right), int(client.Bottom)).Add(image.Pt(int(origin.X), int(origin.Y)))
+	if area.Empty() {
+		return image.Rectangle{}, fmt.Errorf("window %q has no client area", title)
+	}
+	return area, nil
 }

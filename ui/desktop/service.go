@@ -16,11 +16,14 @@ type Commands struct {
 	SetWindow     func(title string)
 	ToggleCapture func()
 	ToggleRecord  func()
-	// OpenSelection shows the selection overlay; ConfirmSelection selects
-	// its area and CloseSelection closes it without a change.
-	OpenSelection, ConfirmSelection, CloseSelection func()
-	Running                                         func() bool
-	Exit                                            func()
+	Running       func() bool
+	Exit          func()
+	// SignIn, SignOut, Upload and Update run on the caller's goroutine:
+	// sign-in waits for the browser, an upload and an update for the network.
+	SignIn  func() error
+	SignOut func()
+	Upload  func(dir string) error
+	Update  func() error
 }
 
 // Service is what the frontend calls. Every method runs on the UI loop, so
@@ -29,7 +32,6 @@ type Service struct {
 	loop       *Loop
 	view       *View
 	cmds       Commands
-	selection  *Selection
 	recordings *Recordings
 	cfg        *config.Config
 	cfgPath    string
@@ -38,8 +40,8 @@ type Service struct {
 }
 
 // NewService returns the frontend's service.
-func NewService(loop *Loop, view *View, cmds Commands, selection *Selection, recordings *Recordings, cfg *config.Config, cfgPath string, logger *slog.Logger) *Service {
-	return &Service{loop: loop, view: view, cmds: cmds, selection: selection, recordings: recordings, cfg: cfg, cfgPath: cfgPath, logger: logger,
+func NewService(loop *Loop, view *View, cmds Commands, recordings *Recordings, cfg *config.Config, cfgPath string, logger *slog.Logger) *Service {
+	return &Service{loop: loop, view: view, cmds: cmds, recordings: recordings, cfg: cfg, cfgPath: cfgPath, logger: logger,
 		picked: cfg.AutoWindow != ""}
 }
 
@@ -91,23 +93,6 @@ func (s *Service) ToggleCapture() { _ = s.do(s.cmds.ToggleCapture) }
 // ToggleRecord starts or stops a recording.
 func (s *Service) ToggleRecord() { _ = s.do(s.cmds.ToggleRecord) }
 
-// OpenSelection opens the selection overlay.
-func (s *Service) OpenSelection() { _ = s.do(s.cmds.OpenSelection) }
-
-// ConfirmSelection selects the overlay's area and closes it.
-func (s *Service) ConfirmSelection() { _ = s.do(s.cmds.ConfirmSelection) }
-
-// CloseSelection closes the overlay without a change.
-func (s *Service) CloseSelection() { _ = s.do(s.cmds.CloseSelection) }
-
-// ClearSelection removes the capture area.
-func (s *Service) ClearSelection() {
-	_ = s.do(func() {
-		s.selection.Clear()
-		s.view.SetSelection(Rect{}, s.view.State().Selecting)
-	})
-}
-
 // Settings returns the settings form.
 func (s *Service) Settings() (form SettingsForm) {
 	_ = s.do(func() { form = newSettingsForm(s.cfg) })
@@ -126,11 +111,15 @@ func (s *Service) SaveSettings(values Settings) (saved Settings, err error) {
 		if next, err = values.apply(*s.cfg); err != nil {
 			return
 		}
-		*s.cfg = next
-		if err = s.cfg.Save(s.cfgPath); err != nil {
+		if next.CastKey != s.cfg.CastKey && sameKey(next.CastKey, s.view.State().StopKey) {
+			err = errors.New("the Cast key matches the active Stop hotkey")
+			return
+		}
+		if err = next.Save(s.cfgPath); err != nil {
 			s.logger.Error("config save failed", "error", err)
 			return
 		}
+		*s.cfg = next
 		s.logger.Info("config saved", "path", s.cfgPath)
 		s.view.SetStatus("Settings saved")
 		saved = settingsOf(s.cfg)
@@ -145,7 +134,7 @@ func (s *Service) SetDark(dark bool) {
 	_ = s.do(func() {
 		s.cfg.DarkMode = dark
 		st := s.view.State()
-		s.view.SetInfo(st.DryRun, st.StopKey, dark)
+		s.view.SetInfo(st.DryRun, st.Debug, st.StopKey, dark)
 		if err := s.cfg.Save(s.cfgPath); err != nil {
 			s.logger.Error("persist theme failed", "error", err)
 		}
@@ -159,6 +148,24 @@ func (s *Service) Recordings() ([]Recording, error) { return s.recordings.List()
 func (s *Service) RecordingEvents(name string, offset int64) (recorder.EventPage, error) {
 	return s.recordings.Events(name, offset)
 }
+
+// SignIn signs in with Google in the browser. It returns once signed in.
+func (s *Service) SignIn() error { return s.cmds.SignIn() }
+
+// SignOut forgets the signed-in account.
+func (s *Service) SignOut() { s.cmds.SignOut() }
+
+// Upload sends recording name to the upload service and returns when done.
+func (s *Service) Upload(name string) error {
+	dir, err := s.recordings.path(name)
+	if err != nil {
+		return err
+	}
+	return s.cmds.Upload(dir)
+}
+
+// Update downloads, verifies and installs the newer release, then restarts.
+func (s *Service) Update() error { return s.cmds.Update() }
 
 // Exit closes the app.
 func (s *Service) Exit() { _ = s.do(s.cmds.Exit) }

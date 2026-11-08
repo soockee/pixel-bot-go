@@ -65,10 +65,10 @@ func (c *CapturePresenter) Disable() {
 	if !c.model.Enabled() {
 		return
 	}
+	c.fsm.EventHalt()
 	c.pipeline.Stop()
 	c.model.SetEnabled(false)
 	c.view.PreviewReset()
-	c.fsm.EventHalt()
 	c.view.SetRunning(false)
 }
 

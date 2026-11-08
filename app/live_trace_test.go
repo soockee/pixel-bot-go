@@ -90,6 +90,8 @@ func TestDryRunExportsCorrelatedEventsWithoutDetectorModel(t *testing.T) {
 		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
 			PressKey: press, MoveCursor: move, ClickRight: click, ParseVK: func(string) (byte, bool) { return 0x72, true },
 			ObserveCast: trace.cast, ObserveReel: trace.bite,
+			PlanReel:          func(string) fishing.ReelTiming { return fishing.ReelTiming{Hold: 60 * time.Millisecond} },
+			ObserveReelTiming: trace.reelTiming,
 		})
 		defer fsm.Close()
 		fsm.EventAwaitFocus()
@@ -127,7 +129,8 @@ func TestDryRunExportsCorrelatedEventsWithoutDetectorModel(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{playtrace.CastRequested, playtrace.CastDispatched, playtrace.BiteDetected, playtrace.ReelDispatched, "session_end"}
+	want := []string{playtrace.CastRequested, playtrace.CastDispatched, playtrace.BiteDetected,
+		playtrace.ReelPlanned, playtrace.ReelDispatched, playtrace.ReelReleased, "session_end"}
 	if len(rows) != len(want) {
 		t.Fatalf("events = %+v", rows)
 	}
@@ -136,7 +139,11 @@ func TestDryRunExportsCorrelatedEventsWithoutDetectorModel(t *testing.T) {
 			t.Fatalf("unexpected event %d: %+v", i, row)
 		}
 	}
-	if rows[3].ElapsedUS-rows[2].ElapsedUS != 300_000 || rows[3].Outcome != traceobserver.OutcomeDryRunDispatched {
-		t.Fatalf("unexpected reel dispatch: %+v", rows[3])
+	if plan := rows[3].Timing; plan == nil || plan.HoldUS != 60_000 || plan.DelayUS != 300_000 || plan.CooldownUS != 8_000_000 {
+		t.Fatalf("unexpected reel plan: %+v", plan)
+	}
+	if rows[4].ElapsedUS-rows[2].ElapsedUS != 300_000 || rows[4].Outcome != traceobserver.OutcomeDryRunDispatched ||
+		rows[5].ElapsedUS-rows[4].ElapsedUS != 60_000 {
+		t.Fatalf("unexpected reel dispatch or release: %+v", rows[4:6])
 	}
 }

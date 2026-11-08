@@ -40,7 +40,7 @@ For WoW: Forever (Interface 16001). It shows the brackets only while you channel
 
 Console variables persist in `WTF/Config.wtf`, so disabling the addon does not undo the set-once values. Glimmer turns the same nameplate on and off for its own highlights, so switch off its Fishing Bobber highlight while you use Bobber Marker.
 
-The box centre is the click point and the box is the area watched for a bite. The whole box must fit inside the selection. If the addon is off or its colour changes, nothing is found and the run halts after `max_failed_casts`. `roi_size_px` and the matching settings apply only to `detecteval -locator ncc`.
+The box centre is the click point and the box is the area watched for a bite. The whole box must fit inside the game window. If the addon is off or its colour changes, nothing is found and the run halts after `max_failed_casts`. `roi_size_px` and the matching settings apply only to `detecteval -locator ncc`.
 
 ## Template Matching (Evaluation Only)
 Locate template (small) within frame (large) returning (x,y,score,scale,found?). Score threshold gates action.
@@ -72,35 +72,41 @@ return (x,y,score,scale,found?)
 | Stride                      | Pixel step while scanning, capped at a quarter of the template short side | Above the cap it has no effect |
 | Refine                      | Precise second pass around best coarse spot | Slight cost, better accuracy           |
 | MinScale/MaxScale/ScaleStep | Scale search range                          | Wide + tiny step = heavier workload    |
-| CastKey (`cast_key`)        | Key that casts: F1 to F12 or a letter       | An unknown key halts the run           |
-| StopKey (`stop_key`)        | Global hotkey that halts the run            | Hidden from other apps; read at start  |
+| CastKey (`cast_key`)        | Unmodified key that casts: F1 to F12, a letter, a top-row digit, `Mouse4` or `Mouse5` | An unknown key halts the run           |
+| StopKey (`stop_key`)        | Global hotkey that halts the run; accepts the same unmodified keys as CastKey | Hidden from other apps; read at start  |
 | MaxFailedCasts              | Casts in a row without a reel before halting | Default 5                             |
 | MaxSessionMinutes           | Run length; halts at the next cast after it | Default 60                             |
 | Locator (`locator`)         | Technique that finds the bobber             | `marker` by default; see `detect.LocatorNames` |
 | BiteDetector (`bite_detector`) | Technique that recognises a bite        | `motion` by default, `splash`, or `splash_sound` (splash plus the bite sound; listens to the selected window's process) |
 | RecordDir (`record_dir`)    | Folder for new recordings                   | Default `datasets`                     |
 | RecordKeys (`record_keys`)  | Record keys as well as the mouse            | Default true                           |
+| CloudURL (`cloud_url`)      | Upload service URL, from the owner | Empty turns sign-in off |
+| OAuthClientID / OAuthClientSecret (`oauth_client_id`, `oauth_client_secret`) | Google Desktop OAuth client the app signs in with | Not confidential for desktop apps; empty client ID turns sign-in off |
+
+Set the cast key in **Settings → Keys**. It must differ from the Stop hotkey.
 
 ## Capabilities
 * Watch a screen region for the bobber template.
 * Multi-scale template matching with stride + refine pass.
 * Response state machine (cast → search → monitor → reel → cooldown).
 * Bite detection via grayscale ROI motion heuristics (`motion`), or the splash brightening the centre of the marker box (`splash`).
-* Desktop window with Live, Recorder and Settings tabs, dark and light themes, and a selection overlay for the capture area.
+* Desktop window focused on fishing: the live capture with the locked bobber, the cycle, catches this run, and progress toward the session and failed-cast limits. Settings holds keys, run limits and the theme. With `"debug": true` a Recorder tab, the bite watch and the detection settings appear. The app finds the game window itself: it searches the window's client area and, once the bobber is locked, captures only its box.
 * JSON config persistence and structured event logging.
+* In-app update: a release build checks the latest GitHub Release at start and offers **Update to vX.Y.Z** in the top bar. The update downloads only `pixel-bot-go-windows-amd64.exe` and `CHECKSUMS.txt` over HTTPS from that release's `github.com/soockee/pixel-bot-go/releases/download/<tag>/` URLs, refuses the build unless its SHA-256 matches, renames the running exe to `<exe>.old`, puts the new one in place and restarts with the same arguments. It is refused during a run, a recording or an upload. The version comes from `-ldflags -X github.com/soocke/pixel-bot-go/internal/update.Version=vX.Y.Z`, set by `auto-release.yml`; any other value (`dev` by default) skips the check.
+* Google sign-in with role-based access: a real run needs a role with `fishing.run`, uploading a recording `recordings.upload`. The owner assigns roles; an account nobody gave a role may do nothing. Dry runs need no account.
 
 ## Command-Line Flags
 | Flag / variable                 | Effect                                                                                      |
 | ------------------------------- | ------------------------------------------------------------------------------------------- |
 | `-dry-run` / `PIXELBOT_DRY_RUN=1` | Log key presses, cursor moves and clicks as `dry-run action` instead of sending them; no Administrator needed |
-| `-screen N` / config `screen`   | Open windows and the selection overlay on monitor N (1 = primary, others left to right); 0 = default placement |
+| `-screen N` / config `screen`   | Open the window on monitor N (1 = primary, others left to right) and refuse a run whose game window is elsewhere; 0 = default placement |
 | `-list-screens`                 | Print the monitors as JSON (`screen`, `x`, `y`, `w`, `h`, `primary`) and exit               |
-| `-record <dir>`                 | Record the saved selection into a new directory at about 10 fps until Ctrl+C; opens no app window and sends no input |
-| `-window "<title>"`             | With `-record`: also record your mouse and key input in that window to `input.jsonl` and the sound of its process to `audio.wav` |
+| `-record <dir>`                 | With `-window`: record that window's client area into a new directory at about 10 fps until Ctrl+C; opens no app window and sends no input |
+| `-window "<title>"`             | With `-record`: the window to record, plus your mouse and key input in it to `input.jsonl` and the sound of its process to `audio.wav` |
 | `-no-keys`                      | With `-record`: record only mouse input |
 | `-list-windows`                 | Print visible window titles and exit |
 | `-auto-window "<title>"`        | Preselect the target window title (must match the window title exactly, case-insensitive)   |
-| `-auto-start`                   | Start capture 0.5 s after launch; refused unless `selection_x/y/w/h` are saved in the config |
+| `-auto-start`                   | Start capture 0.5 s after launch; refused unless the `-auto-window` window is open |
 
 With `"debug": true` in the config, `http://localhost:6060/debug/state` returns the live FSM state as JSON, the window's WebView2 DevTools listen on `localhost:9222`, and `detection.search` entries (found, score, scale, position; misses sampled 1 in 10) are written to the log. `go run ./cmd/fakegame` opens a scripted simulator scene for local testing (`-scenario file.json`, `-pos x,y`, `-title`).
 
@@ -109,6 +115,8 @@ With `"debug": true` in the config, `http://localhost:6060/debug/state` returns 
 | ----------------------- | ---------------------------------------- | ------------------------------------------------------- |
 | `pixle_bot_config.json` | Persist user settings between runs       | Safe to edit while app closed; delete to reset defaults |
 | `pixel_bot_logs.json`   | Structured log of events & state changes | Can be deleted; recreated automatically                 |
+| `<exe>.old`, `<exe>.new` | The build an update replaced, and one being downloaded | `.old` is removed on the next start, `.new` when the download fails |
+| `pixel_bot_account.bin` | Google refresh token of the signed-in account | DPAPI-encrypted for this Windows user; deleted on Sign out; never commit |
 
 ## Response Benchmark
 `cmd/responsebench` compares two pacing and retry policies on seeded synthetic workloads with a virtual clock. It does not use the desktop app, its state machine or OS input. All values are synthetic and are not measured from a real system.
@@ -135,7 +143,7 @@ Selection rule, applied to the dev split only: stay within `max_actions_per_even
 | Do I need to tweak settings first run? | No, defaults usually work.                                                |
 | Why run as Administrator?              | Required for reliable mouse movement and key injection on Windows.        |
 | It misses bites or reels late          | Lower `Threshold` slightly or reduce `Stride`; ensure refine enabled.     |
-| False positives on water ripples       | Raise `Threshold` or narrow selection area.                               |
+| False positives on water ripples       | Raise `Threshold`.                                                        |
 | Slow over time                         | Reapply settings or reduce scale range; profile for hotspots.             |
 | How to reset everything?               | Close app, delete `pixle_bot_config.json` (and optionally logs), restart. |
 
@@ -228,6 +236,65 @@ The comparison reports completed clicks and drags, ordinary key presses, shortcu
 The activity-mix score is Shannon entropy over the six action counts, divided by the maximum entropy for six categories and scaled to 0–100. Zero means one category accounts for all counted actions. A higher value means activity is spread more evenly. This is a description of the recording. Compare sessions with similar tasks, devices, and keyboard capture settings. The score is available for manual traces with gesture labels. The capture-minute rate uses closed foreground segments of completed traces.
 
 The profile also reports the drag fraction of completed mouse gestures, total raw travel across drags, and right-button drag count, hold time, and raw travel. Raw device counts depend on mouse settings and should be compared using the same device configuration.
+
+## Recorded Input Timing
+
+`responsebench -input-timing` reads manual recordings and emits a JSON report. It reconstructs the press time from each completed mouse gesture. Casts can include a side-button drag, and reels exclude camera drags. The report lists all candidate reels per cast and stops pairing at focus and capture gaps. Existing `labels.json` values appear as review evidence only, since their bite times may come from a fixed offset.
+
+```powershell
+go run ./cmd/responsebench -input-timing -manual-cast mouse:x1 -manual-reel mouse:right datasets/20261108-012132 datasets/20261108-035820
+```
+
+To verify a cast, look at the frames and audio around its candidates and save a `timing-review.json` next to `input.jsonl`. Use the reported press timestamps in microseconds. The review supplies that session's bindings. The example timestamps are illustrative.
+
+```json
+{
+  "cast_binding": "mouse:x1",
+  "reel_binding": "mouse:right",
+  "casts": [
+    {"cast_us": 1000000, "outcome": "reeled", "reel_us": 5000000,
+     "cue": {"earliest_us": 4500000, "latest_us": 4600000, "source": "visual"}},
+    {"cast_us": 8000000, "outcome": "missed",
+     "cue": {"earliest_us": 12000000, "latest_us": 12100000, "source": "audio"}}
+  ]
+}
+```
+
+Outcomes are `reeled`, `missed`, `no_bite` and `uncertain`. Only a reeled row takes `reel_us`. An independently verified cue may use `visual`, `audio`, or `simulator` and reports a response interval. Leave the cue out when its onset is unknown. Record device, sensitivity and client size alongside new sessions so you can interpret changes in timing or movement.
+
+Pass `-timing-train name1,name2 -timing-model-out <new-file>` to freeze a model. The names are recording directory basenames. The command requires at least one held-out session and a reviewed mouse hold from a complete training trace. It keeps reel hold and cooldown paired where the next cast was also reviewed in the same uninterrupted span. Hold samples must be within 10–500 ms and cooldowns within 250 ms–60 s. The model records trace and review hashes for both splits. A missing cooldown uses the app's configured value. Cue intervals are reported for analysis.
+
+Run the app with `-dry-run -timing-model <file> -timing-seed 1 -trace-out <new-jsonl>` to sample the frozen profile. For a fixed comparison, use the same scenario and omit `-timing-model`. The fixed profile uses the 300 ms reel delay, a 30 ms simulated right-button hold and the configured cooldown. Give the app and fake game the same `-trace-session` label within each trial and a different label for each trial.
+
+Use `responsebench -compare -json <game-and-app-traces...>` to compare simulated holds, release-to-cast gaps, and detector-to-press times with reviewed human sessions. An aligned unmatched bite or reel is a timing association, and a simulated release describes the app's callback sequence. Review the cancellation reasons and check missed bites and unmatched reels before comparing timing distributions.
+
+The aligned comparison counts bites with a matched simulated reel release separately from matched reel presses. The press must follow the cue within the match window and the release must be within the overlapping recording. These counts describe the dry-run callbacks.
+
+`-input-timing` reports gameplay patterns over consecutive reviewed casts. `-compare` reports the same pattern statistics for a dry-run app trace. A complete cycle starts at a cast and ends at the next cast. The latest two cycles are compared against earlier nonoverlapping pairs from the last 16 cycles. A match requires the same reel counts and cycle lengths, cast-to-first-reel times, and last-reel-to-cast times within 250 ms. Focus or capture gaps break the sequence, as do uncertain or unreviewed casts in manual recordings. Fewer than four contiguous cycles leave the repeat fraction unscored.
+
+For optional reaction timing, run independent fixed simulator trials using the same bite detector and pass their JSON comparison to `-input-timing -timing-calibration <comparison.json>` when exporting the model. The fitter needs five matched cues and uses their median cue-to-detector delay. For reviewed visual or simulator cues precise to 250 ms, the app subtracts that detector delay and time already spent since detection from the sampled response interval midpoint. The fixed delay applies to samples without a usable cue or when the detector changes.
+
+Use the headless paired replay to check a new model against three scripted bites with the real engine and FSM. Supply the model's absolute path in `VRL_TIMING_REPLAY_MODEL` and run `go test ./domain/fishing -run TestPairedTimingReplay -count=1 -v`.
+
+`-live-timing -timing-model <file>` explicitly enables the model's holds and cooldowns for live input. Live runs keep the fixed reel delay because the detector calibration is from the simulator. The input guard checks focus, window bounds and pointer position before pressing. Stop, focus loss, geometry changes and shutdown release a pending hold. Live timing uses a fresh seed on launch unless `-timing-seed` is supplied.
+
+## Recorded Cursor Movement
+
+`responsebench -cursor-fit` uses reviewed reel press times from `timing-review.json` to find free cursor approaches within each cast. It splits movement at capture gaps, mouse buttons, wheel input and keyboard presses. An approach must cover at least 20 pixels and end near the reviewed click. A separate small movement toward that click can supply a settling correction.
+
+```powershell
+go run ./cmd/responsebench -cursor-fit -cursor-train 20261108-012132 -cursor-model-out responsebench-results/cursor-profile.json datasets/20261108-012132 datasets/20261108-035820
+```
+
+Only named training sessions supply paths to the model. For each held-out reach, the report compares a direct move and 12 seeded fitted paths against the same human start and target. It reports errors in approach duration, travel divided by straight-line distance, and peak sideways deviation as a fraction of that distance. Correction counts are separate. Repeated seeds measure variation from the model and share the same human reference. A small split is suitable for pilot comparisons.
+
+The `reach_audits` section keeps each held-out session separate. It reports peak normalized speed, when that peak occurred, and mean step interval. For path repetition, it resamples each reach to 32 points on a normalized clock and compares it with up to 16 earlier reaches using band-limited dynamic time warping. A smaller nearest distance means a more similar preceding path. Each fitted seed runs through the entire session with its own planner. Direct jumps have zero duration and are counted separately. The fitted values describe planned waypoints without optional settling. These exploratory scores have no alert threshold.
+
+The planner samples paths weighted by reach distance, rotates and scales their recorded waypoints, and clips them to the client area. It spaces the approach steps evenly at roughly 16 ms and gradually corrects for any difference between the recorded endpoint and the intended destination. On some monitoring approaches it pauses near the bobber and makes one final correction. The final waypoint is the exact reel target. A bite replaces any unfinished approach and waits for the new path to reach the target. Stop, focus loss, a changed client area or user takeover cancel pending waypoints. Additional gestures are limited to that observed pointer correction. The separate timing profile can also vary reel holds and recast waits.
+
+Use `-dry-run -cursor-model <file> -trace-out <new-jsonl>` for simulated movement. `-live-cursor -cursor-model <file>` explicitly enables real pointer movement and requires the pointer to start inside the selected client area. Both can be combined with their respective timing-profile flags. `-timing-seed` controls both profiles in a dry run.
+
+Set `VRL_CURSOR_REPLAY_MODEL` to the model's absolute path and run `go test ./domain/fishing -run TestPairedCursorReplay -count=1 -v` to compare direct and fitted paths using the real FSM and capture engine with scripted frames.
 
 ## Streaming Trace Feedback
 

@@ -22,7 +22,7 @@ export interface Recording {
 }
 
 /**
- * Rect is a screen rectangle in physical pixels. A zero width means none.
+ * Rect is a rectangle in screen pixels. A zero width means none.
  */
 export interface Rect {
     "x": number;
@@ -82,7 +82,31 @@ export interface State {
     "status": string;
     "window": string;
     "sessionSeconds": number;
-    "totalSeconds": number;
+
+    /**
+     * minutes; the run stops at the first cast after it
+     */
+    "sessionLimit": number;
+
+    /**
+     * this run's casts
+     */
+    "casts": number;
+
+    /**
+     * this run's reels, each a bite answered
+     */
+    "reels": number;
+
+    /**
+     * casts in a row without a reel
+     */
+    "failedInRow": number;
+
+    /**
+     * the run stops when FailedInRow reaches it
+     */
+    "maxFailed": number;
 
     /**
      * version of /frames/capture; 0 means none
@@ -90,26 +114,60 @@ export interface State {
     "frame": number;
 
     /**
-     * version of /frames/roi; 0 means none
+     * the capture's size in screen pixels; the image may be smaller
+     */
+    "frameSize": Point;
+
+    /**
+     * version of /frames/roi, the live box around the bobber; 0 means none
      */
     "roi": number;
 
     /**
-     * Target holds the locked bobber
+     * where the ROI sits on the capture, in screen pixels
      */
-    "locked": boolean;
-
-    /**
-     * in capture frame pixels
-     */
-    "target": Point;
-    "selection": Rect;
-
-    /**
-     * the selection overlay is open
-     */
-    "selecting": boolean;
+    "roiBox": Rect;
     "dryRun": boolean;
     "stopKey": string;
     "dark": boolean;
+
+    /**
+     * show the developer views
+     */
+    "debug": boolean;
+
+    /**
+     * signed-in Google email, or ""
+     */
+    "account": string;
+
+    /**
+     * the account's role, "" when nobody gave it one
+     */
+    "role": string;
+
+    /**
+     * the role may start a run (dry runs need no role)
+     */
+    "canFish": boolean;
+
+    /**
+     * the role may upload recordings
+     */
+    "canUpload": boolean;
+
+    /**
+     * recording being uploaded, or ""
+     */
+    "uploading": string;
+
+    /**
+     * newer release tag on offer, or ""
+     */
+    "update": string;
+
+    /**
+     * the update downloads or installs
+     */
+    "updating": boolean;
 }

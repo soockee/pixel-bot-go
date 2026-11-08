@@ -39,6 +39,17 @@ export function setupRecorder(isVisible: () => boolean): { onState: (s: State) =
   let loading = 0; // generation, so a stale load stops
   let error = "";
   let queued = false;
+  let state: State | undefined;
+  const upload = $<HTMLButtonElement>("upload");
+
+  // Upload shows for a finished recording; the role decides whether it works.
+  function renderUpload() {
+    upload.hidden = !open || open === live || !state;
+    if (!state) return;
+    upload.disabled = !state.canUpload || state.uploading !== "";
+    upload.textContent = state.uploading === open ? "Uploading…" : "Upload";
+    upload.title = state.canUpload ? "Upload this recording" : "Your role may not upload recordings";
+  }
 
   async function refreshList() {
     try {
@@ -65,6 +76,7 @@ export function setupRecorder(isVisible: () => boolean): { onState: (s: State) =
 
   async function select(name: string) {
     open = name;
+    renderUpload();
     trace = new Trace();
     offset = 0;
     error = "";
@@ -162,6 +174,8 @@ export function setupRecorder(isVisible: () => boolean): { onState: (s: State) =
   }
 
   record.addEventListener("click", () => void Service.ToggleRecord());
+  // Go reports progress and failures in the status bar.
+  upload.addEventListener("click", () => void Service.Upload(open).catch(() => undefined));
   $("refresh-recordings").addEventListener("click", () => void refreshList());
   for (const input of Object.values(layers)) input.addEventListener("change", request);
   const resize = new ResizeObserver(request);
@@ -174,13 +188,14 @@ export function setupRecorder(isVisible: () => boolean): { onState: (s: State) =
 
   return {
     onState(s) {
+      state = s;
       record.textContent = s.recording ? "Stop recording" : "Record";
       record.classList.toggle("primary", !s.recording);
       record.classList.toggle("stop", s.recording);
       record.disabled = s.running;
       $("record-hint").textContent = s.running
         ? "Stop the run to record"
-        : "Records the capture area, plus your mouse, keys and sound in the target window";
+        : "Records the game window, plus your mouse, keys and sound in the target window";
       if (s.recordingName !== live) {
         const started = s.recordingName;
         live = started;
@@ -189,6 +204,7 @@ export function setupRecorder(isVisible: () => boolean): { onState: (s: State) =
           else if (open) void select(open); // reload the finished one with its footer
         });
       }
+      renderUpload();
     },
     shown: request,
   };

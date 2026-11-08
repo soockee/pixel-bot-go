@@ -55,3 +55,26 @@ func (f *Frames) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(data)
 }
+
+// previewWidth is the widest capture the window gets; it shows the capture
+// smaller than that, and encoding a whole game window would cost far more.
+const previewWidth = 1280
+
+// shrink returns img scaled down by a whole factor to at most width pixels
+// wide, sampling every n-th pixel, or img when it is narrow enough.
+func shrink(img *image.RGBA, width int) *image.RGBA {
+	b := img.Bounds()
+	n := (b.Dx() + width - 1) / width
+	if n <= 1 {
+		return img
+	}
+	out := image.NewRGBA(image.Rect(0, 0, b.Dx()/n, b.Dy()/n))
+	for y := range out.Rect.Dy() {
+		row := img.Pix[img.PixOffset(b.Min.X, b.Min.Y+y*n):]
+		dst := out.Pix[y*out.Stride:]
+		for x := range out.Rect.Dx() {
+			copy(dst[x*4:x*4+4], row[x*n*4:x*n*4+4])
+		}
+	}
+	return out
+}
