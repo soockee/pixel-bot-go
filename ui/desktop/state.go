@@ -50,4 +50,5 @@ type State struct {
 	Uploading      string `json:"uploading"` // recording being uploaded, or ""
 	Update         string `json:"update"`    // newer release tag on offer, or ""
 	Updating       bool   `json:"updating"`  // the update downloads or installs
+	Version        string `json:"version"`   // the running build's release tag, "dev" for local builds
 }

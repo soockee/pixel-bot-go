@@ -102,6 +102,9 @@ func (v *View) SetUploading(name string) { v.state.Uploading = name }
 // is being installed.
 func (v *View) SetUpdate(tag string, updating bool) { v.state.Update, v.state.Updating = tag, updating }
 
+// SetVersion shows the running build's version.
+func (v *View) SetVersion(version string) { v.state.Version = version }
+
 // SetInfo shows fixed run facts and the theme.
 func (v *View) SetInfo(dryRun, debug bool, stopKey string, dark bool) {
 	v.state.DryRun, v.state.Debug, v.state.StopKey, v.state.Dark = dryRun, debug, stopKey, dark

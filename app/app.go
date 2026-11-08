@@ -108,6 +108,7 @@ func (a *app) Run() error {
 	}
 	c.View.SetInfo(cfg.DryRun, cfg.Debug, cfg.StopKey, cfg.DarkMode)
 	c.View.SetStatus("Ready")
+	c.View.SetVersion(update.Version)
 	a.watchStopKey()
 	a.restoreAccount()
 	a.checkUpdate()

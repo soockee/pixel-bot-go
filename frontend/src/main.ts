@@ -88,6 +88,7 @@ onState((s: State) => {
   update.textContent = s.updating ? `Updating to ${s.update}…` : `Update to ${s.update}`;
 
   $("status").textContent = s.status;
+  $("version").textContent = s.version;
   $("dry-run").hidden = !s.dryRun;
   $("stop-key").textContent = keyLabel(s.stopKey);
   $("stop-hint").hidden = !s.stopKey;

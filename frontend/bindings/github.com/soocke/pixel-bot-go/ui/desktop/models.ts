@@ -170,4 +170,9 @@ export interface State {
      * the update downloads or installs
      */
     "updating": boolean;
+
+    /**
+     * the running build's release tag, "dev" for local builds
+     */
+    "version": string;
 }
