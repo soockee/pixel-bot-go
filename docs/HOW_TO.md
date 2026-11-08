@@ -104,7 +104,7 @@ A recording saves the screen and your input together, on the same clock, and sen
 3. Focus the game and play by hand.
 4. Press the stop hotkey (default F10), or click **Stop Recording** in the app.
 
-Each recording gets a new timestamped folder holding `frames/` and `input.jsonl`. Set **Recording Folder** and **Record Keys** under Show Config. The default `datasets/` folder is ignored by git. Start stays disabled while recording, and Record while the bot runs.
+Each recording gets a new timestamped folder holding `frames/`, `input.jsonl` and the game's sound in `audio.wav`. You still hear the game while it records, and music or voice chat from other programs is not recorded. Set **Recording Folder** and **Record Keys** under Show Config. The default `datasets/` folder is ignored by git. Start stays disabled while recording, and Record while the bot runs.
 
 For scripts and agents, the same recording runs without a window: `pixel-bot-go.exe -record <dir> -window "<title>"`, stopped with Ctrl+C, using the selection saved in the config. Leave out `-window` to record frames only, which then need `labels.json` written by hand, and add `-no-keys` to skip keys. `-list-windows` prints the titles.
 

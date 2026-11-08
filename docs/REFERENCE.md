@@ -83,7 +83,7 @@ return (x,y,score,scale,found?)
 | `-screen N` / config `screen`   | Open windows and the selection overlay on monitor N (1 = primary, others left to right); 0 = default placement |
 | `-list-screens`                 | Print the monitors as JSON (`screen`, `x`, `y`, `w`, `h`, `primary`) and exit               |
 | `-record <dir>`                 | Record the saved selection into a new directory at about 10 fps until Ctrl+C; opens no app window and sends no input |
-| `-window "<title>"`             | With `-record`: also record your mouse and key input in that window to `input.jsonl`, and serve the dashboard |
+| `-window "<title>"`             | With `-record`: also record your mouse and key input in that window to `input.jsonl`, the sound of its process to `audio.wav`, and serve the dashboard |
 | `-no-keys`                      | With `-record`: record only mouse input |
 | `-listen <addr>`                | Dashboard address, loopback only (default `127.0.0.1:6070`); empty disables it |
 | `-view <path>`                  | Open the dashboard for a saved session directory or trace file |
@@ -153,7 +153,7 @@ Selection rule, applied to the dev split only: stay within `max_actions_per_even
 | EventHalt                | Stop, hotkey, input guard | any → halt                 |
 
 ## Detection Datasets
-`-record` writes `frames/<elapsed ms>.png`, and `input.jsonl` with `-window`. Frame names and trace times count from the same start, and `session.json` holds the offset from window positions to frame pixels. Coordinates in `labels.json` are pixels in the frames. Write it by hand or generate it with `detecteval -label`.
+`-record` writes `frames/<elapsed ms>.png`, and `input.jsonl` and `audio.wav` with `-window`. Frame names, trace times and audio count from the same start: sample n of `audio.wav` (16-bit PCM, stereo, 44.1 kHz) played n/44100 s after it, and silence fills the time the game played nothing. The sound is a copy of the game process and its child processes only (Windows process loopback, Windows 10 2004 or later); the game stays audible and no other program's sound is recorded. If the sound cannot be captured, the status says so and the recording continues without it. and `session.json` holds the offset from window positions to frame pixels. Coordinates in `labels.json` are pixels in the frames. Write it by hand or generate it with `detecteval -label`.
 
 ```json
 {

@@ -1,6 +1,7 @@
 // Package recorder records a play session into one dataset directory: screen
 // frames plus, when a window is named, the user's own mouse and key input in
-// that window. It only observes; it never sends input.
+// that window and the sound its process plays. It only observes; it never sends
+// input, and the game stays audible.
 package recorder
 
 import (
@@ -13,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	framecapture "github.com/soocke/pixel-bot-go/domain/capture"
 	"github.com/soocke/pixel-bot-go/internal/dataset"
 	"github.com/soocke/pixel-bot-go/internal/playtrace"
 )
@@ -24,7 +26,7 @@ const DefaultListen = "127.0.0.1:6070"
 type Session struct {
 	Dir    string              // new dataset directory
 	Frames dataset.FrameSource // screen capture
-	Window string              // exact title of the window to record input from; empty records frames only
+	Window string              // exact title of the window to record input and sound from; empty records frames only
 	Listen string              // loopback dashboard address; empty disables it
 	Label  string              // shared with other traces from this playtest
 	Keys   bool                // record keys as well as the mouse
@@ -68,7 +70,7 @@ func (s Session) Run(parent context.Context) error {
 	defer cancel()
 	start := time.Now()
 	var frames int
-	var frameErr, inputErr error
+	var frameErr, inputErr, audioErr error
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		defer cancel()
@@ -79,10 +81,27 @@ func (s Session) Run(parent context.Context) error {
 			defer cancel()
 			inputErr = run(ctx, target, dataset.InputPath(s.Dir), s.Status, listener, s.Keys, s.Label, start, dataset.FramesPath(s.Dir))
 		})
+		wg.Go(func() {
+			// Frames and input matter more than sound, so a sound failure does not stop them.
+			if err := recordAudio(ctx, target.pid, s.Dir, start); err != nil {
+				fmt.Fprintf(s.Status, "Recording without sound: %v\n", err)
+				audioErr = fmt.Errorf("frames and input were saved, but not the sound: %w", err)
+			}
+		})
 	}
 	wg.Wait()
 	fmt.Fprintf(s.Status, "Saved %d frames to %s.\n", frames, s.Dir)
-	return errors.Join(frameErr, inputErr)
+	return errors.Join(frameErr, inputErr, audioErr)
+}
+
+// recordAudio saves the sound of process pid until ctx ends.
+func recordAudio(ctx context.Context, pid uint32, dir string, start time.Time) (err error) {
+	w, err := dataset.CreateAudio(dir, start)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, w.Close()) }()
+	return framecapture.CaptureAudio(ctx, pid, w.Write)
 }
 
 // sessionInfo works out how to turn a position in the window into a frame pixel.
