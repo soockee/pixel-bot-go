@@ -14,7 +14,7 @@ Go Fish is a Windows Go application for visual event and response experiments. I
 ./run.ps1 [app flags]               # PowerShell: build frontend and app, then start it (e.g. ./run.ps1 -dry-run)
 (cd frontend && npm ci && npm run build)   # frontend, embedded by go build; needed once and after frontend changes
 (cd frontend && npm run bindings)   # regenerate frontend/bindings after changing ui/desktop types or Service methods (needs wails3 CLI v3.1.0)
-go build -o pixel-bot-go.exe .      # build
+go build -o pixel-bot-go.exe .      # build (console program; releases and run.ps1 add -ldflags '-H=windowsgui', so no terminal opens)
 go test ./...                       # run all tests
 go vet ./...                        # static checks
 gofmt -l .                          # must print nothing

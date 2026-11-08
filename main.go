@@ -28,6 +28,7 @@ import (
 )
 
 func main() {
+	attachConsole()
 	cfg, loadErr := config.Load(config.FilePath)
 	if loadErr != nil {
 		cfg = config.DefaultConfig()
