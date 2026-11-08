@@ -36,6 +36,7 @@ There is no Makefile. `.github/workflows/ci.yml` runs gofmt, vet, tests and the 
 | `ui/model` `ui/presenter` `ui/view` | MVP-style UI: models hold state, presenters connect domain to views, views are Tk widgets |
 | `ui/images`, `ui/theme` | PNG encoding for Tk, theming |
 | `debug/` | `/debug/state` handler |
+| `addon/BobberMarker/` | WoW: Forever addon (Lua) that draws the magenta brackets `MarkerLocator` finds, only while fishing. No Lua tooling in the repo; check it in the client |
 | `assets/` | Embedded `fishing_target.png` template (`embed.go`), used by the simulator and NCC evaluation |
 | `cmd/detecteval/` | Compares every registered `Locator` and `BiteDetector` on recorded datasets, writes `labels.json` from a session with `-label`, and exports each cast's watched area with `-export`. See `docs/REFERENCE.md` |
 | `internal/dataset/` | Dataset format, labels and the frame loop |

@@ -17,6 +17,8 @@ Use profiling endpoints to confirm counts remain stable; runaway worker spawning
 ## Why the Bobber Comes from the Addon
 Real footage showed the template failing: the bobber is larger than the template, it changes with the camera, and other players' bobbers look the same. The addon already knows which object is ours and marks it, so reading its brackets is simpler and more reliable than recognising the object. It also gives the area to watch, which keeps the bite detector off the rest of the water. The cost is a dependency on the addon being on, with its colour unchanged.
 
+The first addon used, NaowhForever's Glimmer, draws soft brackets blended additively with the scene, so their colour shifts from day to night, and its box sits about 20 px below the bobber. The project's own Bobber Marker draws opaque magenta in exact screen pixels, centred on the bobber, and only while Fishing is channelled. The locator then sees one fixed colour, the click lands on the bobber, the splash falls in the centre of the watched box, and no marker lingers after a reel to be locked on by the next cast.
+
 ## Detection Mental Model
 Imagine laying the template on every possible position on the frame (like a stencil) and asking “How similar is this patch?” Keep the highest score. Brute force plus shortcuts (stride, integral images, early stop, parallel scales) keeps it fast.
 

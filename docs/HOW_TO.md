@@ -96,6 +96,15 @@ Invoke-RestMethod http://localhost:6060/debug/state | ConvertTo-Json -Depth 8
 
 Select the local simulator in the app and start capture. The response includes the usual FSM fields and a `trace_observer` object with both detectors' totals and the last 32 alerts. Each alert has its elapsed time, score, cutoff, triggering record, and cast IDs. The model flag enables debug for that process and requires dry-run.
 
+## Install the Bobber Marker Addon
+The bot finds your bobber by the brackets the Bobber Marker addon draws around it while you fish. Link the addon into the game, so a `git pull` updates it:
+
+```powershell
+New-Item -ItemType Junction -Path "C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\BobberMarker" -Target "$PWD\addon\BobberMarker"
+```
+
+Restart the game or type `/reload`. In NaowhForever's Glimmer settings, switch off the Fishing Bobber highlight, because both addons use the same nameplate. Then cast: magenta brackets appear around your bobber and vanish when you reel. If the bobber is not in the middle of the box, move it with `/bobbermarker y <pixels>`; negative moves it down, and `/bobbermarker` shows the current value.
+
 ## Record a Session
 A recording saves the screen and your input together, on the same clock, and sends no input.
 

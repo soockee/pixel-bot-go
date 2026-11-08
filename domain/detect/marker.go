@@ -5,10 +5,9 @@ import (
 	"image/color"
 )
 
-// markerColor is the colour of the addon's brackets around the player's bobber
-// over a bright scene. They are partly transparent, so a dark scene darkens green
-// and blue, down to about (255, 144, 141) at night.
-var markerColor = color.RGBA{255, 178, 163, 255}
+// markerColor is the colour of the brackets the Bobber Marker addon (addon/)
+// draws around the player's bobber: opaque, so exact over any scene.
+var markerColor = color.RGBA{255, 0, 255, 255}
 
 const (
 	markerMinArm    = 10  // shorter strokes are not a bracket
@@ -109,11 +108,15 @@ func (l *MarkerLocator) load(frame *image.RGBA) {
 	}
 }
 
-// isMarkerColor accepts the brackets over any scene: red near full, green and
-// blue well below it and close together. Gold and orange have far more green
-// than blue, so the bobber's feather and similar effects fail.
+// isMarkerColor accepts the Bobber Marker's magenta, and the salmon brackets of
+// NaowhForever's Glimmer that older recordings show. Glimmer's are blended with
+// the scene, from (255, 178, 163) by day to about (255, 144, 141) at night: red
+// near full, green and blue well below it and close together. Gold and orange
+// have far more green than blue, so the bobber's feather and similar effects fail.
 func isMarkerColor(r, g, b uint8) bool {
-	return r >= 230 && int(r)-int(g) >= 50 && abs(int(g)-int(b)) <= 35
+	magenta := r >= 200 && b >= 200 && g <= 60
+	glimmer := r >= 230 && int(r)-int(g) >= 50 && abs(int(g)-int(b)) <= 35
+	return magenta || glimmer
 }
 
 func (l *MarkerLocator) at(x, y int) bool {

@@ -31,16 +31,25 @@ func paint(frame *image.RGBA, r image.Rectangle, c color.RGBA) {
 	}
 }
 
-func TestMarkerLocatorFindsTheBoxAtNight(t *testing.T) {
-	frame := noiseFrame()
-	DrawMarker(frame, testBox)
-	for i := 0; i < len(frame.Pix); i += 4 {
-		if frame.Pix[i] == markerColor.R && frame.Pix[i+1] == markerColor.G {
-			frame.Pix[i+1], frame.Pix[i+2] = 144, 141 // measured over a night scene
-		}
-	}
-	if got, found := NewMarkerLocator().Locate(frame); !found || got.Box != testBox {
-		t.Errorf("got %+v found=%v, want box %v", got, found, testBox)
+// Older recordings show NaowhForever Glimmer's brackets, which take on the
+// scene's colour; values measured in real frames.
+func TestMarkerLocatorFindsGlimmerBrackets(t *testing.T) {
+	for name, c := range map[string]color.RGBA{
+		"day":   {255, 178, 163, 255},
+		"night": {255, 144, 141, 255},
+	} {
+		t.Run(name, func(t *testing.T) {
+			frame := noiseFrame()
+			DrawMarker(frame, testBox)
+			for i := 0; i < len(frame.Pix); i += 4 {
+				if frame.Pix[i] == markerColor.R && frame.Pix[i+1] == markerColor.G {
+					frame.Pix[i], frame.Pix[i+1], frame.Pix[i+2] = c.R, c.G, c.B
+				}
+			}
+			if got, found := NewMarkerLocator().Locate(frame); !found || got.Box != testBox {
+				t.Errorf("got %+v found=%v, want box %v", got, found, testBox)
+			}
+		})
 	}
 }
 
