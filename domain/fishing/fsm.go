@@ -2,6 +2,7 @@ package fishing
 
 import (
 	"context"
+	"fmt"
 	"image"
 	"log/slog"
 	"runtime/debug"
@@ -52,6 +53,7 @@ type FishingFSM struct {
 	stopped       chan struct{}
 	cancel        context.CancelFunc
 	listeners     []FishingStateListener
+	haltReason    atomic.Pointer[string] // why the run halted on its own; nil when the person stopped it
 }
 
 // NewFSM creates and starts a FishingFSM in StateHalt. A nil logger discards
@@ -80,6 +82,8 @@ func (f *FishingFSM) loop() {
 	defer func() {
 		if r := recover(); r != nil {
 			f.logger.Error("fsm panic; halting", "error", r, "stack", string(debug.Stack()))
+			reason := "an internal error; see pixel_bot_logs.json"
+			f.haltReason.Store(&reason)
 			f.cancel()
 			f.transition(StateHalt)
 		}
@@ -119,6 +123,9 @@ func (f *FishingFSM) handle(ev any) {
 			f.castFailed()
 		}
 	case evtHalt:
+		if e.reason != "" {
+			f.why(e.reason)
+		}
 		f.halt()
 	case evtFishBite:
 		if f.state == StateMonitoring {
@@ -136,6 +143,7 @@ func (f *FishingFSM) handle(ev any) {
 	case evtAwaitFocus:
 		if f.state == StateHalt {
 			f.cfg = e.cfg
+			f.haltReason.Store(nil)
 			f.failedCasts = 0
 			f.stats.casts.Store(0)
 			f.stats.reels.Store(0)
@@ -170,7 +178,7 @@ type (
 	}
 	evtTargetInvalidated struct{}
 	evtTargetLost        struct{}
-	evtHalt              struct{}
+	evtHalt              struct{ reason string }
 	evtFishBite          struct{ at time.Time }
 	evtFocusAcquired     struct{}
 	evtFocusLost         struct{}
@@ -239,6 +247,7 @@ func (f *FishingFSM) wake() {
 		f.cursorSteps = f.cursorSteps[n:]
 		// Skip elapsed intermediate points instead of sending a burst.
 		if !f.actions.Cursor.Move(point) {
+			f.why("the pointer was moved away, or the game was not in front")
 			f.halt()
 			return
 		}
@@ -266,7 +275,7 @@ func (f *FishingFSM) castFailed() {
 	f.failedCasts++
 	f.stats.failedInRow.Store(int32(f.failedCasts))
 	if f.failedCasts >= f.cfg.MaxFailedCasts {
-		f.logger.Warn("halting: too many failed casts", "limit", f.cfg.MaxFailedCasts)
+		f.why(fmt.Sprintf("%d casts in a row got no bite", f.cfg.MaxFailedCasts))
 		f.halt()
 		return
 	}
@@ -275,7 +284,7 @@ func (f *FishingFSM) castFailed() {
 
 func (f *FishingFSM) recast() {
 	if time.Now().After(f.sessionEnd) {
-		f.logger.Warn("halting: session limit reached", "minutes", f.cfg.MaxSessionMinutes)
+		f.why(fmt.Sprintf("the %d minute session limit was reached", f.cfg.MaxSessionMinutes))
 		f.halt()
 		return
 	}
@@ -285,6 +294,22 @@ func (f *FishingFSM) recast() {
 func (f *FishingFSM) halt() {
 	f.setCoords(0, 0, false)
 	f.transition(StateHalt)
+}
+
+// why records the reason for a halt that the person did not ask for, before
+// halt notifies the listeners that show it.
+func (f *FishingFSM) why(reason string) {
+	f.logger.Warn("halting: " + reason)
+	f.haltReason.Store(&reason)
+}
+
+// HaltReason says why the last run halted on its own, or "" when the person
+// stopped it. Safe from any goroutine.
+func (f *FishingFSM) HaltReason() string {
+	if reason := f.haltReason.Load(); reason != nil {
+		return *reason
+	}
+	return ""
 }
 
 func (f *FishingFSM) setCoords(x, y int, set bool) {
@@ -336,7 +361,7 @@ func (f *FishingFSM) transition(next FishingState) {
 func (f *FishingFSM) pressCast() bool {
 	vk, ok := f.actions.ParseVK(f.cfg.CastKey)
 	if !ok {
-		f.logger.Error("halting: unknown cast key", "key", f.cfg.CastKey)
+		f.why(fmt.Sprintf("%q is not a Cast key Go Fish can press", f.cfg.CastKey))
 		return false
 	}
 	var dispatched func()
@@ -422,7 +447,7 @@ func (f *FishingFSM) beginCursor(settle bool) bool {
 	target := image.Pt(f.coordX, f.coordY)
 	steps, ok := f.actions.Cursor.Plan(target, settle)
 	if !ok || len(steps) == 0 || steps[len(steps)-1].Point != target {
-		f.logger.Warn("halting: cursor path unavailable")
+		f.why("the pointer could not be moved onto the bobber; you may have moved it, or the game was not in front")
 		f.halt()
 		return false
 	}
@@ -444,7 +469,7 @@ func (f *FishingFSM) finishReel() {
 		if f.cfg.ReelMethod == config.ReelInteractKey {
 			vk, ok := f.interactVK(f.cfg)
 			if !ok {
-				f.logger.Warn("halting: Interact key unavailable")
+				f.why("the Interact key is not set, or it matches the Cast or Stop key")
 				f.halt()
 				return
 			}
@@ -471,7 +496,7 @@ func (f *FishingFSM) finishReel() {
 			f.actions.ClickRight()
 		}
 		if needsRelease && f.releaseInput == nil {
-			f.logger.Warn("halting: timed reel press was blocked")
+			f.why("the reel press was blocked; the game was not in front")
 			f.halt()
 			return
 		}
@@ -501,11 +526,11 @@ func (f *FishingFSM) hardwareKeyboard() bool {
 
 func (f *FishingFSM) tapKeyboard(vk byte) bool {
 	if f.actions.TapKeyboard == nil {
-		f.logger.Warn("halting: ESP32 keyboard unavailable")
+		f.why("the ESP32 keyboard is not available")
 		return false
 	}
 	if err := f.actions.TapKeyboard(vk); err != nil {
-		f.logger.Error("halting: ESP32 keyboard action failed", "error", err)
+		f.why("the ESP32 keyboard failed: " + err.Error())
 		return false
 	}
 	return true
@@ -566,10 +591,13 @@ func (f *FishingFSM) Current() FishingState              { return FishingState(f
 func (f *FishingFSM) EventTargetAcquiredAt(x, y int)     { f.send(evtTargetAcquiredAt{x: x, y: y}) }
 func (f *FishingFSM) EventTargetLost()                   { f.send(evtTargetLost{}) }
 func (f *FishingFSM) EventHalt()                         { f.send(evtHalt{}) }
-func (f *FishingFSM) EventFishBite()                     { f.send(evtFishBite{at: time.Now()}) }
-func (f *FishingFSM) EventFocusAcquired()                { f.send(evtFocusAcquired{}) }
-func (f *FishingFSM) EventFocusLost()                    { f.send(evtFocusLost{}) }
-func (f *FishingFSM) ForceCast()                         { f.send(evtForceCast{}) }
+
+// EventHaltBecause halts and says why, for the UI to show.
+func (f *FishingFSM) EventHaltBecause(reason string) { f.send(evtHalt{reason: reason}) }
+func (f *FishingFSM) EventFishBite()                 { f.send(evtFishBite{at: time.Now()}) }
+func (f *FishingFSM) EventFocusAcquired()            { f.send(evtFocusAcquired{}) }
+func (f *FishingFSM) EventFocusLost()                { f.send(evtFocusLost{}) }
+func (f *FishingFSM) ForceCast()                     { f.send(evtForceCast{}) }
 
 // EventAwaitFocus starts a run with a copy of the current config. Call it from
 // the goroutine that owns the config.

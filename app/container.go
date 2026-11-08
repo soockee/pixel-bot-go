@@ -115,7 +115,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		guard := &action.Guard{
 			Logger: logger, InFront: inFront, Area: c.gameArea, CursorPos: action.CursorPos,
 			// The guard runs on the FSM goroutine, which must not wait on its own queue.
-			OnTakeover: func() { go c.FSM.EventHalt() },
+			OnTakeover: func() { go c.FSM.EventHaltBecause("the mouse was moved") },
 			Press:      action.PressKey, Move: action.MoveCursor, Click: action.ClickRight,
 			BeginHold: action.BeginRightHold, BeginKeyHold: action.BeginKeyHold,
 		}

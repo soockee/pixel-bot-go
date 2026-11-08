@@ -17,7 +17,23 @@ import (
 const (
 	frameInterval  = 33 * time.Millisecond
 	searchInterval = 65 * time.Millisecond // a search can use every core, so leave gaps
+	// staleFor is how long after a cast a marker where the last bobber was is
+	// taken for that bobber, which the game is still fading out.
+	staleFor = 3 * time.Second
 )
+
+// markerIsStale reports whether a marker found since a cast (the time since
+// the search began) is the last bobber's, not a new one: it sits on the last
+// bobber's box, the fade is not over, and the marker has not been missing
+// since the cast. A new bobber at the same spot comes after a gap, because the
+// old one vanishes before the new one lands.
+func markerIsStale(box, last image.Rectangle, since time.Duration, gone bool) bool {
+	if last.Empty() || gone || since >= staleFor {
+		return false
+	}
+	overlap := box.Intersect(last)
+	return overlap.Dx()*overlap.Dy()*4 > last.Dx()*last.Dy() // more than a quarter of the old box
+}
 
 // FrameSource captures the game. Window is the game window's client area in
 // screen pixels. Grab captures an area of the screen. Both methods must be safe
@@ -136,8 +152,10 @@ type run struct {
 	locator      detect.Locator
 	bite         detect.BiteDetector
 	listener     detect.SoundBiteDetector // bite, when it also listens
-	target       image.Rectangle          // locked area in screen coordinates
+	target       image.Rectangle          // locked area in screen coordinates; the last bobber's while searching
 	targetWindow image.Rectangle          // client area when the target was found
+	searchStart  time.Time                // when this search began, zero outside searching
+	markerGone   bool                     // no marker has been seen since this search began
 	window       capture.Frame            // the last capture of the whole game window
 	lastSearch   time.Time
 	searches     int
@@ -207,6 +225,11 @@ func (r *run) hear(p soundPacket) {
 func (r *run) step() {
 	e := r.engine
 	state := e.fsm.Current()
+	if state != StateSearching {
+		r.searchStart = time.Time{}
+	} else if r.searchStart.IsZero() {
+		r.searchStart, r.markerGone = time.Now(), false
+	}
 	watching := state == StateMonitoring && !r.target.Empty() && r.window.Image != nil
 	window, err := e.frames.Window()
 	if (watching || state == StateReeling && !r.target.Empty()) && (err != nil || window != r.targetWindow) {
@@ -252,6 +275,12 @@ func (r *run) search(frame capture.Frame, window image.Rectangle) {
 	e := r.engine
 	match, found := r.locator.Locate(frame.Image)
 	r.searches++
+	if !found {
+		r.markerGone = true
+	} else if markerIsStale(match.Box.Add(frame.Origin), r.target, time.Since(r.searchStart), r.markerGone) {
+		e.logger.Debug("detection.search ignored the last bobber's marker", "x", match.X, "y", match.Y)
+		found = false
+	}
 	if found || r.searches%10 == 0 {
 		e.logger.Debug("detection.search", "found", found, "score", match.Score, "scale", match.Scale, "x", match.X, "y", match.Y,
 			"frame_w", frame.Image.Bounds().Dx(), "frame_h", frame.Image.Bounds().Dy(), "dur_ms", time.Since(r.lastSearch).Milliseconds())
