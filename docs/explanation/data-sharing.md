@@ -18,7 +18,7 @@ Nothing about your fishing. The pictures it looks at, the casts and the catches 
 
 Recording is off unless you switch on **Share recordings** in Settings, start a recording, and later click **Upload**. See [Record and share a session](../how-to/share-recordings.md). A recording holds:
 
-- pictures of the **game window only**, about ten a second, never the rest of your screen;
+- pictures of the **game window only**, never the rest of your screen: the whole window every ten seconds, and while your bobber is out, the small area around it about ten times a second;
 - your **mouse**: where it is and what you click, while it is over the game;
 - your **keys** while the game is in front, including what you type in chat, unless you switch off **Record keys**;
 - the **game's sound** only, not music, voice chat or other programs.

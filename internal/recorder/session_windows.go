@@ -13,6 +13,7 @@ import (
 	"time"
 
 	framecapture "github.com/soocke/pixel-bot-go/domain/capture"
+	"github.com/soocke/pixel-bot-go/domain/detect"
 	"github.com/soocke/pixel-bot-go/internal/dataset"
 	"github.com/soocke/pixel-bot-go/internal/playtrace"
 )
@@ -62,7 +63,7 @@ func (s Session) Run(parent context.Context) error {
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		defer cancel()
-		frames, frameErr = dataset.Record(ctx, s.Frames, s.Dir, start)
+		frames, frameErr = dataset.Record(ctx, s.Frames, detect.NewMarkerLocator(), s.Dir, start)
 	})
 	if s.Window != "" {
 		wg.Go(func() {

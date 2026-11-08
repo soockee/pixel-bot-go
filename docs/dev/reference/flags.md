@@ -9,7 +9,7 @@ order: 3
 | `-dry-run` / `PIXELBOT_DRY_RUN=1` | Log key presses, cursor moves and clicks as `dry-run action` instead of sending them; no Administrator needed |
 | `-screen N` / config `screen`   | Open the window on monitor N (1 = primary, others left to right) and refuse a run whose game window is elsewhere; 0 = default placement |
 | `-list-screens`                 | Print the monitors as JSON (`screen`, `x`, `y`, `w`, `h`, `primary`) and exit               |
-| `-record <dir>`                 | With `-window`: record that window's client area into a new directory at about 10 fps until Ctrl+C; opens no app window and sends no input |
+| `-record <dir>`                 | With `-window`: record that window's client area into a new directory until Ctrl+C (whole frames every 10 s, the bobber's square at about 10 fps, see Detection datasets); opens no app window and sends no input |
 | `-window "<title>"`             | With `-record`: the window to record, plus your mouse and key input in it to `input.jsonl` and the sound of its process to `audio.wav` |
 | `-no-keys`                      | With `-record`: record only mouse input |
 | `-list-windows`                 | Print visible window titles and exit |

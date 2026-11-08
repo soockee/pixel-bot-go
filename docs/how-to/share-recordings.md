@@ -17,7 +17,7 @@ Open **Settings** and switch on **Share recordings** under **Data sharing**. A *
 3. Switch to the game and fish by hand as usual: cast, wait, click the bobber when it splashes. A few minutes in one spot is plenty; different places and times of day help most.
 4. Press **F10**, or click **Stop recording**.
 
-While it records, Go Fish saves a picture of the game window about ten times a second, your mouse, your keys while the game is in front, and the game's sound. Keys include what you type in chat. If you'd rather not record keys, switch off **Record keys** under **Settings → Recording** first. That group appears once sharing is on.
+While it records, Go Fish saves a picture of the whole game window every ten seconds and, while your bobber is out, the area around the bobber about ten times a second, your mouse, your keys while the game is in front, and the game's sound. Keys include what you type in chat. If you'd rather not record keys, switch off **Record keys** under **Settings → Recording** first. That group appears once sharing is on.
 
 Recordings stay on your PC, in the `datasets` folder next to Go Fish, until you share them.
 

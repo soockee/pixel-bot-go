@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/soocke/pixel-bot-go/domain/capture"
+	"github.com/soocke/pixel-bot-go/domain/detect"
 )
 
 type countingFrames struct {
@@ -29,7 +30,8 @@ func (f *countingFrames) Next() (capture.Frame, error) {
 		img.Pix[i] = 255 // frames are opaque
 	}
 	img.Pix[0] = byte(f.calls)
-	return capture.Frame{Image: img, CapturedAt: time.Now()}, nil
+	// fullEvery apart, so every frame is a whole one.
+	return capture.Frame{Image: img, CapturedAt: time.Unix(0, 0).Add(time.Duration(f.calls) * fullEvery)}, nil
 }
 
 func writeLabels(t *testing.T, dir, labels string) {
@@ -47,7 +49,7 @@ func TestRecordThenLoad(t *testing.T) {
 	if err := Create(dir); err != nil {
 		t.Fatal(err)
 	}
-	n, err := Record(ctx, &countingFrames{limit: 3, cancel: cancel}, dir, time.Now())
+	n, err := Record(ctx, &countingFrames{limit: 3, cancel: cancel}, detect.NewMarkerLocator(), dir, time.Unix(0, 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,6 +76,75 @@ func TestRecordThenLoad(t *testing.T) {
 	}
 }
 
+// scriptedFrames plays images captured at the given milliseconds.
+type scriptedFrames struct {
+	images []*image.RGBA
+	ms     []int64
+	calls  int
+	cancel context.CancelFunc
+}
+
+func (f *scriptedFrames) Next() (capture.Frame, error) {
+	i := f.calls
+	f.calls++
+	if f.calls == len(f.images) {
+		f.cancel()
+	}
+	return capture.Frame{Image: f.images[i], CapturedAt: time.UnixMilli(f.ms[i])}, nil
+}
+
+func TestRecordKeepsOnlyTheBobberBetweenWholeFrames(t *testing.T) {
+	scene := func(marker bool) *image.RGBA {
+		img := image.NewRGBA(image.Rect(0, 0, 800, 600))
+		for i := range img.Pix {
+			img.Pix[i] = 90 // grey, so black shows what was dropped
+		}
+		if marker {
+			detect.DrawMarker(img, image.Rect(500, 300, 560, 360))
+		}
+		return img
+	}
+	// A whole frame, one with the bobber, one without, and fullEvery later a whole one.
+	images := []*image.RGBA{scene(true), scene(true), scene(false), scene(false)}
+	last := 100 + fullEvery.Milliseconds()
+	ms := []int64{100, 200, 300, last}
+
+	dir := filepath.Join(t.TempDir(), "session")
+	if err := Create(dir); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	n, err := Record(ctx, &scriptedFrames{images: images, ms: ms, cancel: cancel}, detect.NewMarkerLocator(), dir, time.UnixMilli(0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeLabels(t, dir, `{"casts":[]}`)
+	d, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 3 || len(d.Frames) != 3 || d.Frames[0].MS != 100 || d.Frames[1].MS != 200 || d.Frames[2].MS != last {
+		t.Fatalf("wrote %d frames: %v; want the whole one at 100, the bobber at 200, the whole one at %d", n, d.Frames, last)
+	}
+	bobber, err := d.Frames[1].Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bobber.Bounds() != images[1].Bounds() {
+		t.Fatalf("bobber frame is %v, want the window's %v", bobber.Bounds(), images[1].Bounds())
+	}
+	if got := bobber.RGBAAt(530, 330); got != images[1].RGBAAt(530, 330) {
+		t.Errorf("inside the bobber square: %v, want the scene", got)
+	}
+	if got := bobber.RGBAAt(10, 10); got.R != 0 || got.A != 0 {
+		t.Errorf("far from the bobber: %v, want black", got)
+	}
+	if _, found := detect.NewMarkerLocator().Locate(bobber); !found {
+		t.Error("the marker must stay findable in a bobber frame")
+	}
+}
+
 func TestCreateRefusesAnExistingDirectory(t *testing.T) {
 	if err := Create(t.TempDir()); err == nil {
 		t.Error("want an error")
@@ -89,7 +160,7 @@ func TestRecordStopsOnCaptureFailure(t *testing.T) {
 	if err := Create(dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Record(context.Background(), brokenFrames{}, dir, time.Now()); err == nil {
+	if _, err := Record(context.Background(), brokenFrames{}, detect.NewMarkerLocator(), dir, time.Now()); err == nil {
 		t.Error("want an error")
 	}
 }
