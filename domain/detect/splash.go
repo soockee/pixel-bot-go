@@ -3,6 +3,7 @@ package detect
 import (
 	"image"
 	"log/slog"
+	"math"
 	"time"
 )
 
@@ -12,17 +13,18 @@ import (
 // Not safe for concurrent use; call Feed from a single goroutine.
 type SplashBiteDetector struct {
 	logger *slog.Logger
-	base   []float32 // per-pixel luminance that slowly follows the scene
+	base   []float32 // per-pixel luminance that follows the scene with a lag
 	w, h   int
 	start  time.Time
+	last   time.Time
 	fired  bool
 }
 
 const (
-	splashSettle    = 3 * time.Second // landing ripples fade within this time after the lock
-	splashRise      = 35              // luminance above the baseline that counts as brightened
-	splashFollow    = 0.05            // share of each frame the baseline takes on
-	splashMinCentre = 0.04            // share of the centre disc that must brighten
+	splashSettle    = 3 * time.Second        // landing ripples fade within this time after the lock
+	splashRise      = 35                     // luminance above the baseline that counts as brightened
+	splashLag       = 500 * time.Millisecond // the baseline takes on lasting changes, such as the landed bobber or a parked cursor
+	splashMinCentre = 0.04                   // share of the centre disc that must brighten
 )
 
 // NewSplashBiteDetector returns a detector. A nil logger discards logs.
@@ -47,6 +49,8 @@ func (s *SplashBiteDetector) Feed(roi *image.RGBA, t time.Time) bool {
 	if first {
 		s.base, s.w, s.h, s.start = make([]float32, w*h), w, h, t
 	}
+	follow := float32(1 - math.Exp(-float64(t.Sub(s.last))/float64(splashLag)))
+	s.last = t
 	cx, cy, r := w/2, h/2, min(w, h)/4
 	var all, centre, disc int
 	for y := range h {
@@ -69,7 +73,7 @@ func (s *SplashBiteDetector) Feed(roi *image.RGBA, t time.Time) bool {
 					centre++
 				}
 			}
-			s.base[i] += (l - s.base[i]) * splashFollow
+			s.base[i] += (l - s.base[i]) * follow
 		}
 	}
 	if first || t.Sub(s.start) < splashSettle {

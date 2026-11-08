@@ -5,11 +5,12 @@ import (
 	"image/color"
 )
 
-// markerColor is the colour of the addon's brackets around the player's bobber.
+// markerColor is the colour of the addon's brackets around the player's bobber
+// over a bright scene. They are partly transparent, so a dark scene darkens green
+// and blue, down to about (255, 144, 141) at night.
 var markerColor = color.RGBA{255, 178, 163, 255}
 
 const (
-	markerTolerance = 28  // per channel, for blending with the scene
 	markerMinArm    = 10  // shorter strokes are not a bracket
 	markerMinSide   = 30  // pixels
 	markerMaxSide   = 400 // pixels
@@ -103,12 +104,17 @@ func (l *MarkerLocator) load(frame *image.RGBA) {
 	for y := range l.h {
 		pix := frame.Pix[frame.PixOffset(b.Min.X, b.Min.Y+y):]
 		for x := range l.w {
-			l.mask[y*l.w+x] = near(pix[x*4], markerColor.R) && near(pix[x*4+1], markerColor.G) && near(pix[x*4+2], markerColor.B)
+			l.mask[y*l.w+x] = isMarkerColor(pix[x*4], pix[x*4+1], pix[x*4+2])
 		}
 	}
 }
 
-func near(a, b uint8) bool { return abs(int(a)-int(b)) <= markerTolerance }
+// isMarkerColor accepts the brackets over any scene: red near full, green and
+// blue well below it and close together. Gold and orange have far more green
+// than blue, so the bobber's feather and similar effects fail.
+func isMarkerColor(r, g, b uint8) bool {
+	return r >= 230 && int(r)-int(g) >= 50 && abs(int(g)-int(b)) <= 35
+}
 
 func (l *MarkerLocator) at(x, y int) bool {
 	return x >= 0 && y >= 0 && x < l.w && y < l.h && l.mask[y*l.w+x]

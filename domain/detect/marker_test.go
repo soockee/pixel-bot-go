@@ -31,6 +31,19 @@ func paint(frame *image.RGBA, r image.Rectangle, c color.RGBA) {
 	}
 }
 
+func TestMarkerLocatorFindsTheBoxAtNight(t *testing.T) {
+	frame := noiseFrame()
+	DrawMarker(frame, testBox)
+	for i := 0; i < len(frame.Pix); i += 4 {
+		if frame.Pix[i] == markerColor.R && frame.Pix[i+1] == markerColor.G {
+			frame.Pix[i+1], frame.Pix[i+2] = 144, 141 // measured over a night scene
+		}
+	}
+	if got, found := NewMarkerLocator().Locate(frame); !found || got.Box != testBox {
+		t.Errorf("got %+v found=%v, want box %v", got, found, testBox)
+	}
+}
+
 func TestMarkerLocatorSurvivesOneCoveredCorner(t *testing.T) {
 	grey := color.RGBA{60, 60, 60, 255}
 	covers := map[string]image.Rectangle{
