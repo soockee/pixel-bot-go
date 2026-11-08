@@ -14,4 +14,4 @@ Go Fish keeps everything in the folder it runs from.
 | `datasets\` | Your recordings, if you made any | Yes, unless you still want to share them |
 | `pixel-bot-go.exe.old` | The previous version, right after an update | Removed by itself at the next start |
 
-Nothing else is written to your PC, apart from the addon's own setting inside the game's folder.
+Apart from these, Go Fish writes only the Bobber Marker addon into the game's `Interface\AddOns\BobberMarker` folder, when you click **Install**. It touches no other addon.

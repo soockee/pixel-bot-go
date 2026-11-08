@@ -106,6 +106,25 @@ func WindowProcess(title string) (uint32, error) {
 	return pid, nil
 }
 
+// WindowExe returns the full path of the exe that owns the window titled title.
+func WindowExe(title string) (string, error) {
+	pid, err := WindowProcess(title)
+	if err != nil {
+		return "", err
+	}
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+	if err != nil {
+		return "", err
+	}
+	defer windows.CloseHandle(h)
+	buf := make([]uint16, windows.MAX_LONG_PATH)
+	n := uint32(len(buf))
+	if err := windows.QueryFullProcessImageName(h, 0, &buf[0], &n); err != nil {
+		return "", err
+	}
+	return windows.UTF16ToString(buf[:n]), nil
+}
+
 // activateProcessLoopback opens an audio client on the process loopback device.
 func activateProcessLoopback(pid uint32) (unsafe.Pointer, error) {
 	params := activationParams{activationType: 1, pid: pid} // process loopback, include the process tree

@@ -126,6 +126,12 @@ func unix(t time.Time) int64 {
 // SetRecorder shows or hides the Recorder.
 func (v *View) SetRecorder(shown bool) { v.state.Recorder = shown }
 
+// SetAddon shows where the addon goes and its status there; see State.Addon.
+func (v *View) SetAddon(dir, status string) { v.state.AddonDir, v.state.Addon = dir, status }
+
+// SetAddonVersion shows the version of the addon the app carries.
+func (v *View) SetAddonVersion(version string) { v.state.AddonVersion = version }
+
 // SetVersion shows the running build's version.
 func (v *View) SetVersion(version string) { v.state.Version = version }
 

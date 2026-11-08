@@ -208,6 +208,21 @@ export interface State {
     "checking": boolean;
 
     /**
+     * Bobber Marker in the game: "missing", "outdated", "current", or "" when the game was not found
+     */
+    "addon": string;
+
+    /**
+     * where the addon is or goes
+     */
+    "addonDir": string;
+
+    /**
+     * the version the app carries
+     */
+    "addonVersion": string;
+
+    /**
      * the running build's release tag, "dev" for local builds
      */
     "version": string;

@@ -1,4 +1,4 @@
-// Updates panel on the Settings tab: the running version, the latest release
+// Updates and Addon panels on the Settings tab: the running version, the latest release
 // and when the app last asked GitHub. Go checks, verifies and installs.
 import { Info, RefreshCw } from "lucide";
 import { Service, type State } from "./api";
@@ -21,6 +21,11 @@ export function setupUpdates(): (s: State) => void {
   $("check-update").addEventListener("click", () => void Service.CheckUpdate().catch(() => undefined));
   $("install-update").addEventListener("click", () => void Service.Update().catch(() => undefined));
   $("release-notes").addEventListener("click", () => void Service.ReleaseNotes());
+
+  setIcon($("check-addon-icon"), RefreshCw);
+  $("check-addon").addEventListener("click", () => void Service.CheckAddon());
+  // Go shows why an install failed in the status bar.
+  $("install-addon").addEventListener("click", () => void Service.InstallAddon().catch(() => undefined));
 
   let last: State | undefined;
   function render(s: State) {
@@ -54,6 +59,20 @@ export function setupUpdates(): (s: State) => void {
     pill.hidden = offered || (!upToDate && !s.checking);
     pill.textContent = s.checking ? "Checking" : "Up to date";
     pill.classList.toggle("good", upToDate && !s.checking);
+    renderAddon(s);
+  }
+
+  function renderAddon(s: State) {
+    $("addon-where").textContent = s.addonDir ? s.addonDir : "Start World of Warcraft: Forever, then check again";
+    $("addon-detail").textContent = s.addon === "outdated" ? `v${s.addonVersion} ready · an older version is installed`
+      : s.addon === "missing" ? `v${s.addonVersion} · not installed` : `v${s.addonVersion}`;
+    const install = $<HTMLButtonElement>("install-addon");
+    install.hidden = s.addon !== "missing" && s.addon !== "outdated";
+    install.textContent = s.addon === "outdated" ? "Update" : "Install";
+    const pill = $("addon-pill");
+    pill.hidden = s.addon !== "current";
+    pill.textContent = "Up to date";
+    pill.classList.add("good");
   }
   setInterval(() => last && render(last), 30_000); // keeps "… ago" current
   return render;

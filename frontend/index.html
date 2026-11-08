@@ -157,6 +157,25 @@
           </div>
           <p class="hint">Each download is checked against the SHA-256 checksum GitHub publishes with the release before the app replaces itself.</p>
         </section>
+        <section class="updates" aria-labelledby="addon-title">
+          <div class="updates-head">
+            <div>
+              <h2 id="addon-title">Addon</h2>
+              <p class="hint" id="addon-where">Looking for the game</p>
+            </div>
+            <button class="button" id="check-addon" type="button"><span id="check-addon-icon" aria-hidden="true"></span>Check again</button>
+          </div>
+          <div class="update-app">
+            <span class="update-icon" aria-hidden="true"><span class="brand-mark"></span></span>
+            <div class="update-info">
+              <strong>Bobber Marker</strong>
+              <span class="hint" id="addon-detail"></span>
+            </div>
+            <span class="pill" id="addon-pill" hidden></span>
+            <button class="button primary" id="install-addon" type="button" hidden></button>
+          </div>
+          <p class="hint">Draws the pink brackets around your bobber that Go Fish looks for. Go Fish installs it into the game's AddOns folder and touches no other addon.</p>
+        </section>
       </div>
       <form class="settings-form" id="settings" novalidate></form>
     </section>

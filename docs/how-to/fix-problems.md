@@ -13,7 +13,7 @@ The status bar at the bottom of Go Fish usually says what is wrong. These are th
 
 ## It casts, but never finds the bobber
 
-- Check that the pink brackets appear around your bobber in the game. If not, see [Install the Bobber Marker addon](install-addon.md).
+- Check that the pink brackets appear around your bobber in the game. If not, open **Settings → Addon** in Go Fish: it should say **Up to date**. See [Install the Bobber Marker addon](install-addon.md).
 - Keep the bobber visible: no windows, bags or chat over it, and don't turn the camera while fishing.
 - After five casts without finding anything it stops; that's the **Casts without a bite** limit.
 

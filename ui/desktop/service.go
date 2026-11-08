@@ -27,6 +27,8 @@ type Commands struct {
 	// CheckUpdate asks GitHub for the latest release; it also waits for the network.
 	CheckUpdate  func() error
 	ReleaseNotes func()
+	CheckAddon   func()
+	InstallAddon func() error
 }
 
 // Service is what the frontend calls. Every method runs on the UI loop, so
@@ -176,6 +178,17 @@ func (s *Service) CheckUpdate() error { return s.cmds.CheckUpdate() }
 
 // ReleaseNotes opens the latest release's page in the browser.
 func (s *Service) ReleaseNotes() { _ = s.do(s.cmds.ReleaseNotes) }
+
+// CheckAddon looks whether the Bobber Marker addon is installed and current.
+func (s *Service) CheckAddon() { _ = s.do(s.cmds.CheckAddon) }
+
+// InstallAddon installs or updates the Bobber Marker addon in the game.
+func (s *Service) InstallAddon() (err error) {
+	if doErr := s.do(func() { err = s.cmds.InstallAddon() }); doErr != nil {
+		return doErr
+	}
+	return err
+}
 
 // Exit closes the app.
 func (s *Service) Exit() { _ = s.do(s.cmds.Exit) }

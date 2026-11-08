@@ -7,8 +7,8 @@ Go Fish is a Windows app for studying visual event detection and response timing
 ## Install
 
 1. Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest). `CHECKSUMS.txt` beside it lists its SHA-256.
-2. Copy [`addon/BobberMarker`](addon/BobberMarker) into the game's `Interface\AddOns` folder and restart the game.
-3. Start the exe as Administrator; Windows only lets it send input to the game that way.
+2. Start the game, then start the exe as Administrator; Windows only lets it send input to the game that way.
+3. Under **Settings → Addon**, click **Install** to put the Bobber Marker addon into the game, and type `/reload` in the game.
 4. Sign in with Google, set your Fishing key under **Settings → Keys**, cast once in game, then press **Start fishing**.
 
 Go Fish updates itself: it checks GitHub at start and every hour, and **Update to vX.Y.Z** in the top bar or **Settings → Updates** installs a new release after checking its checksum.

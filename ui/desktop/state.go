@@ -57,5 +57,8 @@ type State struct {
 	UpdateChecked  int64  `json:"updateChecked"`  // when the app last asked for releases, Unix seconds; 0 never
 	UpdateError    string `json:"updateError"`    // why the last check failed, or why there is none
 	Checking       bool   `json:"checking"`       // a check runs
+	Addon          string `json:"addon"`          // Bobber Marker in the game: "missing", "outdated", "current", or "" when the game was not found
+	AddonDir       string `json:"addonDir"`       // where the addon is or goes
+	AddonVersion   string `json:"addonVersion"`   // the version the app carries
 	Version        string `json:"version"`        // the running build's release tag, "dev" for local builds
 }

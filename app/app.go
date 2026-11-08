@@ -9,6 +9,7 @@ import (
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
 
+	"github.com/soocke/pixel-bot-go/addon"
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/debug"
 	"github.com/soocke/pixel-bot-go/domain/action"
@@ -66,6 +67,8 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		Update:        a.installUpdate,
 		CheckUpdate:   a.findUpdate,
 		ReleaseNotes:  a.releaseNotes,
+		CheckAddon:    a.checkAddon,
+		InstallAddon:  a.installAddon,
 	}, c.Recordings, cfg, config.FilePath, logger)
 
 	assets := http.NewServeMux()
@@ -110,6 +113,8 @@ func (a *app) Run() error {
 	}
 	c.View.SetInfo(cfg.DryRun, cfg.Debug, cfg.StopKey, cfg.DarkMode)
 	c.View.SetRecorder(cfg.RecorderShown())
+	c.View.SetAddonVersion(addon.Version())
+	a.checkAddon()
 	c.View.SetStatus("Ready")
 	c.View.SetVersion(update.Version)
 	a.watchStopKey()

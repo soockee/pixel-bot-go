@@ -42,7 +42,7 @@ There is no Makefile. Without a frontend build the window is empty (`frontend/di
 | `internal/update/` | In-app update: latest GitHub Release, checksum-verified download, exe swap and restart; `Version` is set by ldflags in `auto-release.yml` (`app/update.go` wires it) |
 | `internal/cloud/` | Google sign-in (desktop OAuth, PKCE, loopback), the account's role from the vrl-recordings service, recording upload through signed URLs, DPAPI token store |
 | `debug/` | `/debug/state` handler |
-| `addon/BobberMarker/` | WoW: Forever addon (Lua) that draws the magenta brackets `MarkerLocator` finds, only while fishing. No Lua tooling in the repo; check it in the client |
+| `addon/` | `BobberMarker/`: the WoW: Forever addon (Lua) that draws the magenta brackets `MarkerLocator` finds, only while fishing. No Lua tooling in the repo; check it in the client. `addon.go` embeds it, so the app installs and updates it in the game (`app/addon.go`, Settings → Addon); the game folder comes from the game window's exe (`capture.WindowExe`) or the default install path |
 | `assets/` | Embedded `fishing_target.png` template (`embed.go`), used by the simulator and NCC evaluation |
 | `cmd/detecteval/` | Compares every registered `Locator` and `BiteDetector` on recorded datasets, writes `labels.json` from a session with `-label`, and exports each cast's watched area with `-export`. See `docs/dev/reference/datasets.md` |
 | `internal/dataset/` | Dataset format, labels and the frame loop |

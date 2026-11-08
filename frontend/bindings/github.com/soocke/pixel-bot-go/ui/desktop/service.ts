@@ -20,6 +20,13 @@ import * as recorder$0 from "../../internal/recorder/models.js";
 import * as $models from "./models.js";
 
 /**
+ * CheckAddon looks whether the Bobber Marker addon is installed and current.
+ */
+export function CheckAddon(): $CancellablePromise<void> {
+    return $Call.ByID(443316537);
+}
+
+/**
  * CheckUpdate looks for a newer release now; the result arrives in State.
  */
 export function CheckUpdate(): $CancellablePromise<void> {
@@ -31,6 +38,13 @@ export function CheckUpdate(): $CancellablePromise<void> {
  */
 export function Exit(): $CancellablePromise<void> {
     return $Call.ByID(1811592007);
+}
+
+/**
+ * InstallAddon installs or updates the Bobber Marker addon in the game.
+ */
+export function InstallAddon(): $CancellablePromise<void> {
+    return $Call.ByID(705835496);
 }
 
 /**

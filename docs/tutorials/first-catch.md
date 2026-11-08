@@ -10,13 +10,13 @@ By the end of this page Go Fish will have cast, waited for a bite and reeled in 
 
 Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest) and put it in a folder of its own, for example `Documents\Go Fish`. Go Fish keeps its settings next to it.
 
-## 2. Add the addon to the game
+## 2. Start Go Fish
 
-Go Fish finds your bobber by the pink brackets the **Bobber Marker** addon draws around it. Follow [Install the Bobber Marker addon](../how-to/install-addon.md), then come back.
+Start World of Warcraft: Forever first. Then right-click the Go Fish exe and choose **Run as administrator**. Windows only lets an app press keys and click in a game, and write into the game's folder, when it runs as administrator.
 
-## 3. Start Go Fish
+## 3. Add the addon to the game
 
-Right-click the exe and choose **Run as administrator**. Windows only lets an app press keys and click in a game when it runs as administrator.
+Go Fish finds your bobber by the pink brackets the **Bobber Marker** addon draws around it. Open **Settings** in Go Fish, click **Install** under **Addon**, then type `/reload` in the game. More in [Install the Bobber Marker addon](../how-to/install-addon.md).
 
 ## 4. Sign in
 

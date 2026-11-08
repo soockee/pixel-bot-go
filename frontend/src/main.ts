@@ -30,6 +30,7 @@ function show(tab: Tab) {
     $(`view-${t}`).hidden = t !== tab;
   }
   if (tab === "recorder") recorder.shown();
+  if (tab === "settings") void Service.CheckAddon(); // the game may have started since
 }
 
 for (const t of tabs) $(`tab-${t}`).addEventListener("click", () => show(t));
