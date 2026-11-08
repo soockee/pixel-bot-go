@@ -13,22 +13,23 @@ plugins:
 relative_links:
   enabled: true
 exclude:
+  - dev
   - ARCHITECTURE_REVIEW.md
 defaults:
   - scope: { path: "" }
     values: { layout: doc }
 
-# The four Diataxis quadrants, in reading order.
+# The four Diataxis quadrants (tutorials, how-to, reference, explanation), in reading order.
 sections:
   - id: tutorials
-    title: Tutorials
-    blurb: Learn by doing. Install Go Fish, land a first fish, and try it safely against the simulator.
+    title: Get started
+    blurb: New to Go Fish? Set it up and land your first fish in about ten minutes.
   - id: how-to
     title: How-to guides
-    blurb: Steps for one task each, from installing the addon to recording sessions and profiling.
+    blurb: Short steps for one thing each, from installing the addon to sharing a recording.
   - id: reference
     title: Reference
-    blurb: Every setting, flag, file, state and format, to look up while you work.
+    blurb: Settings, what the Fishing tab shows, addon commands and the files Go Fish keeps.
   - id: explanation
-    title: Explanation
-    blurb: Why it works the way it does, from finding the bobber to the state machine.
+    title: Understand
+    blurb: How Go Fish sees the bobber, how you stay in control, and what data sharing means.

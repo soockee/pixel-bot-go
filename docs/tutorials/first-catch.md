@@ -1,15 +1,41 @@
 ---
 title: "Your first catch"
-summary: "Install Go Fish and the Bobber Marker addon, sign in, set your Fishing key and let it land a fish."
+summary: "Install Go Fish and the Bobber Marker addon, sign in, set your Fishing key and watch it land a fish. About ten minutes."
 order: 1
 ---
 
-1. Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest). `CHECKSUMS.txt` beside it lists its SHA-256 if you want to check it.
-2. [Install the Bobber Marker addon](../how-to/install-addon.md) and restart World of Warcraft: Forever.
-3. Start the exe as Administrator. Windows only lets an app send input to a game that runs as Administrator this way.
-4. Click **Sign in with Google** in the top bar and finish the sign-in in your browser. The top bar then shows your email and role; you need a role that may fish. See [Sign in](../how-to/sign-in.md).
-5. Open **Settings → Keys**, click **Cast key** and press the key you cast Fishing with in game.
-6. In game, stand at the water. In Go Fish, check that the game window is selected on the **Fishing** tab and press **Start fishing**.
-7. Watch the cycle: the app casts, finds the magenta brackets around your bobber, watches the box, and clicks when the splash comes. The counters show casts and catches.
+By the end of this page Go Fish will have cast, waited for a bite and reeled in a fish for you. You need World of Warcraft: Forever with the Fishing skill and a fishing pole, and a Windows PC.
 
-Press the stop key (F10 by default) to stop at once, from anywhere. The run also stops by itself after the session length or too many casts without a bite; both are under **Settings → Run**.
+## 1. Get the app
+
+Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest) and put it in a folder of its own, for example `Documents\Go Fish`. Go Fish keeps its settings next to it.
+
+## 2. Add the addon to the game
+
+Go Fish finds your bobber by the pink brackets the **Bobber Marker** addon draws around it. Follow [Install the Bobber Marker addon](../how-to/install-addon.md), then come back.
+
+## 3. Start Go Fish
+
+Right-click the exe and choose **Run as administrator**. Windows only lets an app press keys and click in a game when it runs as administrator.
+
+## 4. Sign in
+
+Click **Sign in with Google** in the top bar. Your browser opens; pick your account and return to Go Fish. The top bar now shows your email and your role. If it says *no role*, ask the owner to give your account one; see [Sign in](../how-to/sign-in.md).
+
+## 5. Tell Go Fish your Fishing key
+
+Open **Settings**. Under **Keys**, click **Cast key** and press the key you cast Fishing with in the game, for example `3` or `F3`. It saves at once.
+
+## 6. Fish
+
+1. In the game, stand at the water and face it.
+2. In Go Fish, open the **Fishing** tab. **World of Warcraft** is picked as the game window.
+3. Click **Start fishing** and switch to the game.
+
+Go Fish casts, finds the pink brackets around your bobber and watches the box. When the fish bites and the water splashes, it clicks the bobber, waits a moment and casts again. The Fishing tab shows each step and counts your catches.
+
+## 7. Stop
+
+Press **F10** at any time, wherever you are, or click **Stop** in Go Fish. It also stops by itself after an hour, or after five casts in a row without a bite. You can change both under [Settings](../reference/settings.md).
+
+That's it. Next, [change keys and limits](../how-to/settings.md) to suit you, or read [how Go Fish works](../explanation/how-it-works.md).

@@ -1,17 +1,30 @@
 ---
 title: "Install the Bobber Marker addon"
-summary: "Link the addon into the game, so the bot can find your bobber, and set the key you cast with."
+summary: "Copy the addon into the game's AddOns folder; it draws the pink brackets Go Fish looks for while you fish."
 order: 1
 ---
 
-The bot finds your bobber by the brackets the Bobber Marker addon draws around it while you fish. Link the addon into the game, so a `git pull` updates it:
+The Bobber Marker addon draws pink brackets around your own bobber while you fish, and nothing else. Without it Go Fish can't find the bobber.
 
-```powershell
-New-Item -ItemType Junction -Path "C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns\BobberMarker" -Target "$PWD\addon\BobberMarker"
-```
+1. On the [Go Fish GitHub page](https://github.com/soockee/pixel-bot-go), click **Code → Download ZIP** and unpack it.
+2. Copy the folder `addon\BobberMarker` into the game's AddOns folder:
+   `World of Warcraft\_forever_\Interface\AddOns\`
+   You should end up with `...\Interface\AddOns\BobberMarker\BobberMarker.toc`.
+3. Restart the game, or type `/reload` if it is running.
+4. On the character screen, check that **Bobber Marker** is ticked under **AddOns**.
 
-Restart the game or type `/reload`. In NaowhForever's Glimmer settings, switch off the Fishing Bobber highlight, because both addons use the same nameplate. Then cast: magenta brackets appear around your bobber and vanish when you reel. If the bobber is not in the middle of the box, move it with `/bobbermarker y <pixels>`; negative moves it down, and `/bobbermarker` shows the current value.
+## Check that it works
 
-## Set the Fishing cast key
+Cast Fishing. Pink brackets appear around your bobber and disappear when you reel in.
 
-Open **Settings → Keys** in Go Fish. Click the current **Cast key**, then press the same key or mouse side button you use to cast Fishing in game. The app saves it automatically. Use an unmodified letter, top-row digit, F1–F12, Mouse 4, or Mouse 5.
+**No brackets?** If you use NaowhForever, open its Glimmer settings and switch off the **Fishing Bobber** highlight; both addons use the same marker spot above the bobber.
+
+**Bobber not in the middle of the brackets?** Move the box with `/bobbermarker y <pixels>`. Negative numbers move it down. `/bobbermarker` shows the current value. See [Addon commands](../reference/addon-commands.md).
+
+## What the addon changes in your game
+
+To put a marker on the bobber, the addon uses the game's soft targeting. The first time you fish it switches on **Enable Interact Key** and lets world objects get a nameplate, and those settings stay as you leave them afterwards. The bobber's nameplate is only on while you fish; then it goes back to how you had it. The addon sends nothing anywhere.
+
+## Update the addon
+
+Download the ZIP again and replace the `BobberMarker` folder.

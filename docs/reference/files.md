@@ -1,12 +1,17 @@
 ---
-title: "Generated files"
-summary: "The files Go Fish writes beside itself, and which are safe to delete."
+title: "Files on your PC"
+summary: "What Go Fish keeps next to its exe, and what is safe to delete."
 order: 4
 ---
 
-| File                    | Purpose                                  | Notes                                                   |
-| ----------------------- | ---------------------------------------- | ------------------------------------------------------- |
-| `pixle_bot_config.json` | Persist user settings between runs       | Safe to edit while app closed; delete to reset defaults |
-| `pixel_bot_logs.json`   | Structured log of events & state changes | Can be deleted; recreated automatically                 |
-| `<exe>.old`, `<exe>.new` | The build an update replaced, and one being downloaded | `.old` is removed on the next start, `.new` when the download fails |
-| `pixel_bot_account.bin` | Google refresh token of the signed-in account | DPAPI-encrypted for this Windows user; deleted on Sign out; never commit |
+Go Fish keeps everything in the folder it runs from.
+
+| File | Holds | Safe to delete? |
+| --- | --- | --- |
+| `pixle_bot_config.json` | Your settings | Yes, Go Fish starts with the defaults |
+| `pixel_bot_logs.json` | What Go Fish did in its last run; replaced at each start | Yes |
+| `pixel_bot_account.bin` | Your saved sign-in, encrypted for your Windows user | Yes, you sign in again |
+| `datasets\` | Your recordings, if you made any | Yes, unless you still want to share them |
+| `pixel-bot-go.exe.old` | The previous version, right after an update | Removed by itself at the next start |
+
+Nothing else is written to your PC, apart from the addon's own setting inside the game's folder.

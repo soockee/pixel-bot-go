@@ -44,10 +44,10 @@ There is no Makefile. Without a frontend build the window is empty (`frontend/di
 | `debug/` | `/debug/state` handler |
 | `addon/BobberMarker/` | WoW: Forever addon (Lua) that draws the magenta brackets `MarkerLocator` finds, only while fishing. No Lua tooling in the repo; check it in the client |
 | `assets/` | Embedded `fishing_target.png` template (`embed.go`), used by the simulator and NCC evaluation |
-| `cmd/detecteval/` | Compares every registered `Locator` and `BiteDetector` on recorded datasets, writes `labels.json` from a session with `-label`, and exports each cast's watched area with `-export`. See `docs/reference/datasets.md` |
+| `cmd/detecteval/` | Compares every registered `Locator` and `BiteDetector` on recorded datasets, writes `labels.json` from a session with `-label`, and exports each cast's watched area with `-export`. See `docs/dev/reference/datasets.md` |
 | `internal/dataset/` | Dataset format, labels and the frame loop |
 | `internal/recorder/` | `-record` sessions (frames plus mouse and key input in one window) and `ReadEvents` for the Recorder tab |
-| `cmd/responsebench/` | Standalone virtual-clock benchmark of pacing and retry policies; run `go run ./cmd/responsebench`. See `docs/reference/benchmark.md`. Output goes to the git-ignored `responsebench-results/` |
+| `cmd/responsebench/` | Standalone virtual-clock benchmark of pacing and retry policies; run `go run ./cmd/responsebench`. See `docs/dev/reference/benchmark.md`. Output goes to the git-ignored `responsebench-results/` |
 
 ## Architecture notes
 
@@ -64,8 +64,8 @@ There is no Makefile. Without a frontend build the window is empty (`frontend/di
 - Follow `.github/instructions/go.instructions.md` (idiomatic Go, early returns, documented exports, no emoji, English comments, exactly one `package` line per file when editing).
 - Tests are table-friendly `_test.go` files beside the code (`fsm_test.go`, `engine_test.go`, `bite_detector_test.go`, presenter/model tests). Add or update tests for FSM, detector and presenter changes; run `go test ./...` before finishing.
 - Windows-specific code goes in `*_windows.go` files.
-- Config changes: update `Config`, `DefaultConfig`, `Validate`, and `docs/reference/config.md` together.
-- Docs follow Diataxis, one page per topic under `docs/tutorials`, `docs/how-to`, `docs/reference` and `docs/explanation`, each with `title`, `summary` (shown as "In short") and `order` front matter. GitHub Pages builds `docs/` with Jekyll (`_config.yml`, `_layouts/`, `assets/`) at https://soockee.github.io/pixel-bot-go/. Put new content on the matching page or add a page.
+- Config changes: update `Config`, `DefaultConfig`, `Validate`, and `docs/dev/reference/config.md` together, plus `docs/reference/settings.md` when the setting is on the Settings tab.
+- Docs follow Diataxis. `docs/tutorials`, `docs/how-to`, `docs/reference` and `docs/explanation` are the player guide, plain language with nothing technical, published by GitHub Pages (Jekyll: `_config.yml`, `_layouts/`, `assets/`) at https://soockee.github.io/pixel-bot-go/. Each page has `title`, `summary` (shown as "In short") and `order` front matter. `docs/dev/` holds the technical docs in the same four folders and is not published. Put new content on the matching page or add one; keep the player guide's data sharing page true when what the app sends changes.
 
 ## Agentic testing and signals
 

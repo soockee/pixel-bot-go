@@ -32,16 +32,16 @@ go run ./cmd/fakegame          # the simulator, in one terminal
 go test ./...
 ```
 
-Pick **Fake Game** as the game window and press **Start fishing**; the log `pixel_bot_logs.json` shows each state change and the clicks a real run would send. [AGENTS.md](AGENTS.md) describes the layout and conventions.
+Pick **Fake Game** as the game window and press **Start fishing**; the log `pixel_bot_logs.json` shows each state change and the clicks a real run would send. [AGENTS.md](AGENTS.md) describes the layout and conventions, and [`docs/dev`](docs/dev) holds the technical docs: detection, config and flags, the benchmark, profiling.
 
 ## Documentation
 
-The docs follow [Diataxis](https://diataxis.fr/) and live in [`docs/`](docs), one page per topic:
+The player guide follows [Diataxis](https://diataxis.fr/):
 
-* [Tutorials](https://soockee.github.io/pixel-bot-go/#tutorials): your first catch, and a first run with the simulator.
-* [How-to guides](https://soockee.github.io/pixel-bot-go/#how-to): install the addon, sign in, update, record, debug, troubleshoot.
-* [Reference](https://soockee.github.io/pixel-bot-go/#reference): config, flags, files, states and events, detection, formats.
-* [Explanation](https://soockee.github.io/pixel-bot-go/#explanation): how detection works and why it is built this way.
+* [Get started](https://soockee.github.io/pixel-bot-go/tutorials/first-catch/): your first catch.
+* [How-to guides](https://soockee.github.io/pixel-bot-go/#how-to): install the addon, sign in, change settings, update, share a recording, fix problems.
+* [Reference](https://soockee.github.io/pixel-bot-go/#reference): settings, the Fishing tab, addon commands, files.
+* [Understand](https://soockee.github.io/pixel-bot-go/#explanation): how Go Fish works, and [what data sharing means](https://soockee.github.io/pixel-bot-go/explanation/data-sharing/).
 
 ## License
 

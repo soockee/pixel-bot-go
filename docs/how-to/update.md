@@ -1,12 +1,17 @@
 ---
-title: "Update the app"
-summary: "Go Fish finds new releases by itself; one click downloads, verifies and installs them."
-order: 3
+title: "Update Go Fish"
+summary: "Go Fish tells you when a new version is out; one click downloads, checks and installs it, then restarts."
+order: 4
 ---
 
-At start and then every hour, a release build asks GitHub for the latest release of `soockee/pixel-bot-go`. When it is newer, the top bar shows **Update to vX.Y.Z**. **Settings > Updates** shows the installed and latest version, when the app last checked, a **Check for updates** button and **What's new**, which opens the release notes.
+Go Fish looks for a new version when it starts and every hour while it is open. When there is one, an **Update to v1.2.3** button appears in the top bar.
 
-1. Stop the run, the recording and any upload; the button stays disabled until then.
-2. Click **Update to vX.Y.Z**. The status bar shows the download; the app checks the build against the release's `CHECKSUMS.txt`, refuses it on a mismatch, then replaces itself and restarts with the same flags.
+1. Stop fishing first. The button stays greyed out while Go Fish fishes, records or uploads.
+2. Click **Update to v1.2.3**. The status bar at the bottom shows the download.
+3. Go Fish checks that the download is exactly the file that was published, installs it and restarts by itself. Your settings and sign-in stay.
 
-The replaced build stays beside the exe as `pixel-bot-go.exe.old` until the next start removes it. Local builds (`go build`) report version `dev` and never check. To try a version, build with `-ldflags "-X github.com/soocke/pixel-bot-go/internal/update.Version=v1.0.0"`.
+If the check fails, Go Fish keeps the version you have and says so in the status bar.
+
+## Check by hand
+
+Open **Settings → Updates**. It shows the version you have, the newest version and when Go Fish last looked. Click **Check for updates** to look now, or **What's new** to read what changed.

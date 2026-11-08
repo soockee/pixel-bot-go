@@ -1,31 +1,28 @@
 ---
-title: "How detection works"
-summary: "Why the addon marks the bobber, how the box is watched, and what counts as a bite."
+title: "How Go Fish works"
+summary: "The addon marks your bobber, Go Fish watches that spot for the splash and clicks. It only looks at the game window and only acts while the game is in front."
 order: 1
 ---
 
-## Why the Bobber Comes from the Addon
+## Seeing the bobber
 
-Real footage showed the template failing: the bobber is larger than the template, it changes with the camera, and other players' bobbers look the same. The addon already knows which object is ours and marks it, so reading its brackets is simpler and more reliable than recognising the object. It also gives the area to watch, which keeps the bite detector off the rest of the water. The cost is a dependency on the addon being on, with its colour unchanged.
+Finding a small bobber in a busy picture of water is hard. So Go Fish doesn't try: the Bobber Marker addon draws pink brackets around your own bobber, a colour that almost never appears in the game world. Go Fish looks at the game window, finds the brackets and knows exactly where the bobber is.
 
-The first addon used, NaowhForever's Glimmer, draws soft brackets blended additively with the scene, so their colour shifts from day to night, and its box sits about 20 px below the bobber. The project's own Bobber Marker draws opaque magenta in exact screen pixels, centred on the bobber, and only while Fishing is channelled. The locator then sees one fixed colour, the click lands on the bobber, the splash falls in the centre of the watched box, and no marker lingers after a reel to be locked on by the next cast.
+## Waiting for the bite
 
-## Detection Mental Model
+Once the bobber is found, Go Fish only watches the small box inside the brackets, about thirty times a second. When a fish bites, the bobber dips and the water splashes, and the box suddenly changes. That is the signal to click.
 
-Imagine laying the template on every possible position on the frame (like a stencil) and asking “How similar is this patch?” Keep the highest score. Brute force plus shortcuts (stride, integral images, early stop, parallel scales) keeps it fast.
+## One cast at a time
 
-## Bite Detection Concept
+Each cast follows the same steps: cast, find the bobber, watch, click on a bite, pause, and cast again. If no fish bites in time, Go Fish casts again. If it can't find the bobber, it tries again on the next cast. See [What the Fishing tab shows](../reference/status.md).
 
-While monitoring, a grayscale ROI stream feeds statistical heuristics (EMA + window diffs). A spike or a jump from the baseline makes the Engine send `EventFishBite()`. If no bite comes, a deadline ends the cast after `max_cast_duration_seconds`.
+## You stay in control
 
-## NCC Overview
+- **Stop key.** F10 stops Go Fish instantly, from anywhere.
+- **Limits.** It stops by itself after the session length, or after a few casts in a row without a catch, so it never fishes on for hours after something went wrong.
+- **Only in the game.** It only presses keys and clicks while the game is the window in front. Switch to another window and it waits.
+- **Only what you see.** It looks at the game window and nothing else on your screen.
 
-Normalized cross‑correlation (NCC) outputs -1..+1. Near +1 = strong match, ~0 = unrelated. We normalize (subtract mean, divide by std) so lighting shifts don’t break matches.
+## Why administrator
 
-## Multi-Scale Matching
-
-Template is resized across a range (`MinScale..MaxScale` step `ScaleStep`) because apparent object size changes (UI scale, distance). Each scale matched; best overall retained. More scales = more work; refine pass tightens coordinates.
-
-## Summary Mental Model
-
-Two timer gates (search, cooldown) guarantee forward motion; detection / bite events adjust path opportunistically. Understand states + events + timers to trace any cycle.
+Windows doesn't let normal programs send key presses and clicks into a game that runs with more rights. Running Go Fish as administrator gives it the same rights as the game, nothing more.
