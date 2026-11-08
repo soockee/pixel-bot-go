@@ -61,6 +61,23 @@ func TestSettingsApply(t *testing.T) {
 	}
 }
 
+func TestInteractKeySettings(t *testing.T) {
+	base := config.DefaultConfig()
+	values := settingsOf(base)
+	values.ReelMethod = config.ReelInteractKey
+	for _, key := range []string{"", "Ctrl", "F3", "F10"} {
+		values.InteractKey = key
+		if _, err := values.apply(*base); err == nil {
+			t.Errorf("Interact key %q accepted", key)
+		}
+	}
+	values.InteractKey = "f"
+	got, err := values.apply(*base)
+	if err != nil || got.ReelMethod != config.ReelInteractKey || got.InteractKey != "f" {
+		t.Fatalf("Interact settings = %+v, %v", got, err)
+	}
+}
+
 func TestShareRecordingsShowsTheRecorder(t *testing.T) {
 	cfg := config.DefaultConfig()
 	view := NewView(NewFrames(), func(State) {})

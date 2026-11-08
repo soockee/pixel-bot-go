@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/wailsapp/wails/v3 v3.1.0
+	go.bug.st/serial v1.8.0
 	golang.org/x/oauth2 v0.35.0
 	golang.org/x/sys v0.49.0
 )

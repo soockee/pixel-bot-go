@@ -7,7 +7,7 @@ type Key = keyof Settings;
 type Value = Settings[Key];
 
 type Field = { key: Key; label: string; hint: string } & (
-  | { kind: "key" | "switch" | "text" | "locator" | "biteDetector" }
+  | { kind: "key" | "switch" | "text" | "locator" | "biteDetector" | "reelMethod" }
   | { kind: "slider"; min: number; max: number; step: number; unit?: string }
 );
 
@@ -18,6 +18,9 @@ const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] 
     title: "Keys",
     fields: [
       { key: "castKey", label: "Cast key", hint: "Click to set the key or mouse side button you use to cast Fishing in game.", kind: "key" },
+      { key: "reelMethod", label: "Reel method", hint: "Right-click the bobber, or use the game's Interact key without moving the cursor.", kind: "reelMethod" },
+      { key: "interactKey", label: "Interact key", hint: "Set the same binding as in the game before selecting Interact key as your reel method.", kind: "key" },
+      { key: "esp32Port", label: "ESP32 port", hint: "With Interact key selected, enter the paired board's COM port. Clear to use Windows input.", kind: "text" },
       { key: "stopKey", label: "Stop key", hint: "Stops fishing from anywhere, applies after a restart", kind: "key" },
     ],
   },
@@ -28,6 +31,19 @@ const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] 
       { key: "maxFailedCasts", label: "Casts without a bite", hint: "Stop after this many casts in a row without a catch", kind: "slider", min: 1, max: 20, step: 1 },
       { key: "cooldownSeconds", label: "Pause after a catch", hint: "Wait before the next cast", kind: "slider", min: 1, max: 60, step: 1, unit: "s" },
       { key: "maxCastDurationSeconds", label: "Cast length", hint: "Recast when no bite comes within this time", kind: "slider", min: 5, max: 180, step: 5, unit: "s" },
+    ],
+  },
+  {
+    title: "Scheduled breaks",
+    fields: [
+      { key: "schedule", label: "Schedule play and breaks", hint: "Alternate timed fishing sessions and logged-out breaks after Start.", kind: "switch" },
+      { key: "playMinMinutes", label: "Shortest session", hint: "Lower end of the random play duration", kind: "slider", min: 1, max: 240, step: 1, unit: "min" },
+      { key: "playMaxMinutes", label: "Longest session", hint: "Upper end of the random play duration", kind: "slider", min: 1, max: 240, step: 1, unit: "min" },
+      { key: "breakMinMinutes", label: "Shortest break", hint: "Lower end of the random logged-out break", kind: "slider", min: 1, max: 240, step: 1, unit: "min" },
+      { key: "breakMaxMinutes", label: "Longest break", hint: "Upper end of the random logged-out break", kind: "slider", min: 1, max: 240, step: 1, unit: "min" },
+      { key: "logoutKey", label: "Logout key", hint: "Binding for your /logout macro in game", kind: "key" },
+      { key: "characterPNG", label: "Character screen image", hint: "Path to a PNG crop of a static character-select control", kind: "text" },
+      { key: "inWorldPNG", label: "In-game image", hint: "Path to a PNG crop of a static in-game control", kind: "text" },
     ],
   },
   {
@@ -129,7 +145,7 @@ export function setupSettings(): (s: State) => void {
     let listening = false;
     const show = () => {
       button.classList.toggle("listening", listening);
-      button.replaceChildren(listening ? "Press a key or button" : h("kbd", keyLabel(value)));
+      button.replaceChildren(listening ? "Press a key or button" : value ? h("kbd", keyLabel(value)) : "Set key");
     };
     const stop = () => {
       listening = false;
@@ -172,7 +188,7 @@ export function setupSettings(): (s: State) => void {
     button.addEventListener("click", () => {
       if (listening) return stop();
       listening = true;
-      setMessage(`Press the new ${f.label.toLowerCase()} or mouse side button, or Esc to keep ${keyLabel(value)}`);
+      setMessage(`Press the new ${f.label.toLowerCase()} or mouse side button, or Esc to cancel`);
       addEventListener("keydown", onKey, true);
       addEventListener("mousedown", onButton, true);
       addEventListener("mouseup", swallow, true);
@@ -224,9 +240,9 @@ export function setupSettings(): (s: State) => void {
     };
   }
 
-  function selectControl(names: string[]): Control {
+  function selectControl(names: string[], labels: Record<string, string> = {}): Control {
     const select = document.createElement("select");
-    select.append(...names.map((n) => new Option(n, n)));
+    select.append(...names.map((n) => new Option(labels[n] ?? n, n)));
     select.addEventListener("change", save);
     return {
       el: select,
@@ -256,6 +272,7 @@ export function setupSettings(): (s: State) => void {
       case "slider": return sliderControl(f);
       case "switch": return switchControl();
       case "text": return textControl();
+      case "reelMethod": return selectControl(["right_click", "interact_key"], { right_click: "Right click", interact_key: "Interact key" });
       case "locator": return selectControl(data.locators ?? []);
       case "biteDetector": return selectControl(data.biteDetectors ?? []);
     }

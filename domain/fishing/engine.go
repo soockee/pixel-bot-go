@@ -2,6 +2,7 @@ package fishing
 
 import (
 	"context"
+	"errors"
 	"image"
 	"log/slog"
 	"sync"
@@ -19,8 +20,8 @@ const (
 )
 
 // FrameSource captures the game. Window is the game window's client area in
-// screen pixels. Window must be safe for concurrent calls to validate a target
-// before input. Grab captures any area of the screen.
+// screen pixels. Grab captures an area of the screen. Both methods must be safe
+// for concurrent calls to confirm the target before input.
 type FrameSource interface {
 	Window() (image.Rectangle, error)
 	Grab(area image.Rectangle) (capture.Frame, error)
@@ -75,15 +76,43 @@ func (e *Engine) Start() error {
 	if e.cancel != nil {
 		return nil
 	}
-	locator, bite, err := e.detectors(*e.cfg)
+	cfg := *e.cfg
+	switch cfg.ReelMethod {
+	case "", config.ReelRightClick:
+	case config.ReelInteractKey:
+		if cfg.Locator != "marker" {
+			return errors.New("Interact key requires the marker locator")
+		}
+		if _, ok := e.fsm.interactVK(cfg); !ok {
+			return errors.New("set an Interact key that differs from the Cast and Stop keys")
+		}
+	default:
+		return errors.New("unknown reel method")
+	}
+	locator, bite, err := e.detectors(cfg)
 	if err != nil {
 		return err
 	}
+	var closeKeyboard func()
+	if cfg.ESP32Port != "" {
+		if cfg.ReelMethod != config.ReelInteractKey {
+			return errors.New("ESP32 requires the Interact key reel method")
+		}
+		if !cfg.DryRun {
+			if e.fsm.actions.OpenKeyboard == nil || e.fsm.actions.TapKeyboard == nil {
+				return errors.New("ESP32 keyboard backend unavailable")
+			}
+			closeKeyboard, err = e.fsm.actions.OpenKeyboard(cfg)
+			if err != nil {
+				return err
+			}
+		}
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel, e.done = cancel, make(chan struct{})
-	r := &run{engine: e, locator: locator, bite: bite}
+	r := &run{engine: e, locator: locator, bite: bite, interact: cfg.ReelMethod == config.ReelInteractKey}
 	r.listener, _ = bite.(detect.SoundBiteDetector)
-	go r.loop(ctx, e.done)
+	go r.loop(ctx, e.done, closeKeyboard)
 	return nil
 }
 
@@ -113,11 +142,15 @@ type run struct {
 	lastSearch   time.Time
 	searches     int
 	monitoring   bool
+	interact     bool
 	lastErr      string
 }
 
-func (r *run) loop(ctx context.Context, done chan<- struct{}) {
+func (r *run) loop(ctx context.Context, done chan<- struct{}, closeKeyboard func()) {
 	defer close(done)
+	if closeKeyboard != nil {
+		defer closeKeyboard()
+	}
 	var listening sync.WaitGroup
 	defer listening.Wait()
 	sounds := r.listen(ctx, &listening)
@@ -226,13 +259,26 @@ func (r *run) search(frame capture.Frame, window image.Rectangle) {
 	if found {
 		r.target = match.Box.Add(frame.Origin)
 		r.targetWindow = window
-		e.fsm.send(evtTargetAcquiredAt{
+		target := evtTargetAcquiredAt{
 			x: frame.Origin.X + match.X, y: frame.Origin.Y + match.Y,
 			valid: func() bool {
 				current, err := e.frames.Window()
 				return err == nil && current == window
 			},
-		})
+		}
+		if r.interact {
+			area := r.target.Inset(-8).Intersect(window)
+			point := image.Pt(target.x, target.y)
+			target.confirm = func() bool {
+				fresh, err := e.frames.Grab(area)
+				if err != nil || fresh.Image == nil {
+					return false
+				}
+				marker, found := detect.NewMarkerLocator().Locate(fresh.Image)
+				return found && point.In(marker.Box.Add(fresh.Origin))
+			}
+		}
+		e.fsm.send(target)
 	}
 }
 

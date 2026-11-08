@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
@@ -16,6 +15,7 @@ import (
 	"github.com/soocke/pixel-bot-go/domain/detect"
 	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/internal/cursormotion"
+	"github.com/soocke/pixel-bot-go/internal/esp32"
 	"github.com/soocke/pixel-bot-go/internal/inputtiming"
 	"github.com/soocke/pixel-bot-go/internal/playtrace"
 	"github.com/soocke/pixel-bot-go/internal/recorder"
@@ -56,16 +56,20 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	c := &AppContainer{Config: cfg, Capture: &model.CaptureModel{}, Frames: desktop.NewFrames()}
 	c.View = desktop.NewView(c.Frames, emit)
 	c.Recordings = desktop.NewRecordings(func() string { return cfg.RecordDir })
-	inFront := func() bool {
-		title, err := action.ForegroundWindowTitle()
-		return err == nil && title != "" && strings.EqualFold(title, strings.TrimSpace(c.Capture.Window()))
-	}
+	inFront := c.gameFocused
 
 	callbacks := fishing.ActionCallbacks{ParseVK: action.ParseVK}
 	dryRun := cfg.DryRun
 	if dryRun {
 		logger.Warn("dry-run enabled: input actions are logged, not injected")
 		callbacks.PressKey, callbacks.MoveCursor, callbacks.ClickRight = action.DryRun(logger)
+		callbacks.HoldInteract = func(vk byte) func() {
+			if !inFront() {
+				return nil
+			}
+			callbacks.PressKey(vk)
+			return func() {}
+		}
 		if trace.Model != nil || trace.Output != nil {
 			c.trace = newLiveTrace(trace.Model, trace.Output, trace.Start)
 			callbacks.ObserveCast, callbacks.ObserveReel = c.trace.cast, c.trace.bite
@@ -80,14 +84,42 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			callbacks.Cursor = c.dryCursor(trace.Cursor, inFront, callbacks.MoveCursor)
 		}
 	} else {
+		var keyboard esp32.Keyboard
+		callbacks.OpenKeyboard = func(run config.Config) (func(), error) {
+			port, err := esp32.PortName(run.ESP32Port)
+			if err != nil {
+				return nil, err
+			}
+			for _, key := range []string{run.CastKey, run.InteractKey} {
+				vk, valid := action.ParseVK(key)
+				if !valid || !esp32.SupportsKey(vk) {
+					return nil, errors.New("ESP32 requires keyboard bindings for Cast and Interact")
+				}
+			}
+			if err := keyboard.Open(port); err != nil {
+				return nil, err
+			}
+			return keyboard.Close, nil
+		}
+		callbacks.TapKeyboard = func(vk byte) error {
+			usage, ok := esp32.ForegroundUsage(vk)
+			if !inFront() {
+				return errors.New("selected game window lost focus")
+			}
+			if !ok {
+				return errors.New("ESP32 could not map the key in the active keyboard layout")
+			}
+			return keyboard.Tap(usage)
+		}
 		guard := &action.Guard{
 			Logger: logger, InFront: inFront, Area: c.gameArea, CursorPos: action.CursorPos,
 			// The guard runs on the FSM goroutine, which must not wait on its own queue.
 			OnTakeover: func() { go c.FSM.EventHalt() },
 			Press:      action.PressKey, Move: action.MoveCursor, Click: action.ClickRight,
-			BeginHold: action.BeginRightHold,
+			BeginHold: action.BeginRightHold, BeginKeyHold: action.BeginKeyHold,
 		}
 		callbacks.PressKey, callbacks.MoveCursor, callbacks.ClickRight = guard.PressKey, guard.MoveCursor, guard.ClickRight
+		callbacks.HoldInteract = guard.HoldKey
 		if trace.Timing != nil {
 			callbacks.HoldRight = guard.HoldRight
 		}

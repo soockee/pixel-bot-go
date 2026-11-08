@@ -8,17 +8,18 @@ import (
 // Guard wraps real input and drops anything that could land in the wrong place.
 // Its methods run on the FSM goroutine, so its fields need no locking.
 type Guard struct {
-	Logger     *slog.Logger
-	InFront    func() bool                // the selected window has focus
-	Area       func() *image.Rectangle    // capture area in screen coordinates
-	CursorPos  func() (x, y int, ok bool) // where the pointer is now
-	OnTakeover func()                     // the user moved the pointer
-	Press      func(vk byte)              // input that is sent when allowed
-	Move       func(x, y int) bool        //
-	Click      func()                     //
-	BeginHold  func() func()              // starts a timed right-button hold
-	target     image.Point                // where the last Move left the pointer
-	hasTarget  bool
+	Logger       *slog.Logger
+	InFront      func() bool                // the selected window has focus
+	Area         func() *image.Rectangle    // capture area in screen coordinates
+	CursorPos    func() (x, y int, ok bool) // where the pointer is now
+	OnTakeover   func()                     // the user moved the pointer
+	Press        func(vk byte)              // input that is sent when allowed
+	Move         func(x, y int) bool        //
+	Click        func()                     //
+	BeginHold    func() func()              // starts a timed right-button hold
+	BeginKeyHold func(byte) func()          // starts a timed key or side-button hold
+	target       image.Point                // where the last Move left the pointer
+	hasTarget    bool
 }
 
 // PressKey sends the key if the selected window has focus.
@@ -28,6 +29,16 @@ func (g *Guard) PressKey(vk byte) {
 		return
 	}
 	g.Press(vk)
+}
+
+// HoldKey starts a timed press if the selected window has focus. The caller
+// must release it even after focus loss.
+func (g *Guard) HoldKey(vk byte) func() {
+	if !g.InFront() {
+		g.Logger.Warn("input dropped: selected window is not in front", "action", "hold_key")
+		return nil
+	}
+	return g.BeginKeyHold(vk)
 }
 
 // MoveCursor moves the pointer to a point inside the capture area.

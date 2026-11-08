@@ -5,6 +5,7 @@ import (
 	"image"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -42,6 +43,8 @@ type app struct {
 	updates      *update.Client
 	release      update.Release // the latest release found, zero before the first check; used on the loop
 	restart      string         // the executable to start once the app quit, after an update
+	schedule     *playSchedule
+	scheduleStop atomic.Bool // set by the global hotkey outside the UI loop
 }
 
 // NewApp builds the components and the window.
@@ -63,7 +66,7 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		SetWindow:     a.setWindow,
 		ToggleCapture: a.toggleCapture,
 		ToggleRecord:  c.RecordPresenter.Toggle,
-		Running:       c.Capture.Enabled,
+		Running:       func() bool { return c.Capture.Enabled() || a.schedule != nil },
 		Exit:          func() { go a.wails.Quit() }, // Quit waits for the loop, which runs this
 		SignIn:        a.signIn,
 		SignOut:       a.signOut,
@@ -165,6 +168,7 @@ func (a *app) autoStart(tries int) {
 func (a *app) tick() {
 	c := a.container
 	c.Loop.Tick()
+	a.tickSchedule(time.Now())
 	a.followGame()
 	run := c.FSM.Stats()
 	c.View.SetRun(run.Casts, run.Reels, run.FailedInRow, c.Config.MaxFailedCasts, c.Config.MaxSessionMinutes)
@@ -173,14 +177,19 @@ func (a *app) tick() {
 
 // shutdown stops recording and capture before the app exits.
 func (a *app) shutdown() {
+	a.scheduleStop.Store(true)
 	a.container.FSM.Close()
 	a.loop.Do(func() {
+		a.schedule = nil
 		a.container.RecordPresenter.Stop()
 		a.container.Engine.Stop()
 	})
 }
 
 func (a *app) setWindow(title string) {
+	if a.schedule != nil {
+		return
+	}
 	a.container.Capture.SetWindow(title)
 	a.container.View.SetWindow(title)
 }
@@ -188,6 +197,10 @@ func (a *app) setWindow(title string) {
 // toggleCapture delegates to the capture presenter after checking that a start is safe.
 func (a *app) toggleCapture() {
 	c := a.container
+	if a.schedule != nil {
+		a.stopSchedule("Schedule stopped")
+		return
+	}
 	if !c.Capture.Enabled() {
 		// A dry run sends no input, so tests and agents need no account; without
 		// a configured sign-in there are no roles to check.
@@ -199,6 +212,12 @@ func (a *app) toggleCapture() {
 		if problem := c.startProblem(); problem != "" {
 			a.logger.Error("start refused: " + problem)
 			c.View.SetStatus("Cannot start: " + problem)
+			return
+		}
+		if c.Config.Schedule {
+			if err := a.beginSchedule(); err != nil {
+				c.View.SetStatus("Cannot start schedule: " + err.Error())
+			}
 			return
 		}
 	}
@@ -219,6 +238,7 @@ func (a *app) watchStopKey() {
 		return
 	}
 	stop := func() {
+		a.scheduleStop.Store(true)
 		c.FSM.EventHalt()
 		c.RecordPresenter.RequestStop()
 	}

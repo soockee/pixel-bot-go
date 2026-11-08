@@ -130,12 +130,16 @@ func TestLoadKeepsOldReelKey(t *testing.T) {
 	if got.CastKey != "R" {
 		t.Errorf("CastKey = %q, want R", got.CastKey)
 	}
+	if got.ReelMethod != ReelRightClick || got.InteractKey != "" {
+		t.Errorf("old config reel settings = %q, %q", got.ReelMethod, got.InteractKey)
+	}
 }
 
 func TestSaveRoundTripSkipsRuntimeFields(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	want := DefaultConfig()
 	want.CastKey = "R"
+	want.ReelMethod, want.InteractKey = ReelInteractKey, "F"
 	saved := *want
 	saved.DryRun, saved.AutoStart, saved.AutoWindow = true, true, "Fake Game"
 	if err := saved.Save(path); err != nil {

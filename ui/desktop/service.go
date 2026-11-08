@@ -120,6 +120,14 @@ func (s *Service) SaveSettings(values Settings) (saved Settings, err error) {
 			err = errors.New("the Cast key matches the active Stop hotkey")
 			return
 		}
+		if next.ReelMethod == config.ReelInteractKey && sameKey(next.InteractKey, s.view.State().StopKey) {
+			err = errors.New("the Interact key matches the active Stop hotkey")
+			return
+		}
+		if next.Schedule && sameKey(next.LogoutKey, s.view.State().StopKey) {
+			err = errors.New("the Logout key matches the active Stop hotkey")
+			return
+		}
 		if err = next.Save(s.cfgPath); err != nil {
 			s.logger.Error("config save failed", "error", err)
 			return

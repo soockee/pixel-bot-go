@@ -105,6 +105,69 @@ func TestEngineReelsWhenTheSceneSplashes(t *testing.T) {
 	})
 }
 
+func TestInteractKeyReelRequiresAFreshMarkerAndReleasesOnFocusLoss(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		loseMarker bool
+		loseFocus  bool
+	}{
+		{name: "confirmed"},
+		{name: "marker lost", loseMarker: true},
+		{name: "focus lost during hold", loseFocus: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				log := &actionLog{}
+				actions := recordingActions(log)
+				actions.ParseVK = func(key string) (byte, bool) {
+					return 'F', key == "F"
+				}
+				actions.HoldInteract = func(vk byte) func() {
+					if vk != 'F' {
+						t.Errorf("Interact vk = %d, want F", vk)
+					}
+					log.add("interact down")
+					return func() { log.add("interact up") }
+				}
+				engine, fsm, frames, _ := newSceneEngine(t, actions)
+				engine.cfg.ReelMethod, engine.cfg.InteractKey = config.ReelInteractKey, "F"
+				defer fsm.Close()
+				startEngine(t, engine)
+				defer engine.Stop()
+				fsm.EventAwaitFocus()
+				fsm.EventFocusAcquired()
+				time.Sleep(500 * time.Millisecond)
+				wantState(t, fsm, StateMonitoring)
+				wantActions(t, log)
+
+				frames.set(fakegame.PhaseSplash)
+				time.Sleep(frameInterval)
+				wantState(t, fsm, StateReeling)
+				if test.loseMarker {
+					frames.set(fakegame.PhaseEmpty)
+				}
+				time.Sleep(reelClickDelay)
+				if test.loseMarker {
+					wantState(t, fsm, StateSearching)
+					wantActions(t, log)
+					return
+				}
+				wantActions(t, log, "interact down")
+				if test.loseFocus {
+					fsm.EventFocusLost()
+					wantState(t, fsm, StateWaitingFocus)
+					wantActions(t, log, "interact down", "interact up")
+					return
+				}
+				frames.set(fakegame.PhaseEmpty) // reeling can immediately remove the marker
+				time.Sleep(interactHold)
+				wantState(t, fsm, StateCooldown)
+				wantActions(t, log, "interact down", "interact up")
+			})
+		})
+	}
+}
+
 func TestEngineStaysQuietOnAStaticBobber(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}
@@ -120,6 +183,80 @@ func TestEngineStaysQuietOnAStaticBobber(t *testing.T) {
 		wantState(t, fsm, StateMonitoring)
 		wantActions(t, log, "move")
 	})
+}
+
+func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		failReel bool
+	}{
+		{name: "both acknowledged"},
+		{name: "reel failed", failReel: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				log := &actionLog{}
+				actions := recordingActions(log)
+				actions.ParseVK = func(key string) (byte, bool) {
+					switch key {
+					case "F3":
+						return 0x72, true
+					case "F":
+						return 'F', true
+					default:
+						return 0, false
+					}
+				}
+				actions.OpenKeyboard = func(run config.Config) (func(), error) {
+					if run.ESP32Port != "COM3" {
+						t.Errorf("opened port %q", run.ESP32Port)
+					}
+					log.add("open")
+					return func() { log.add("close") }, nil
+				}
+				actions.TapKeyboard = func(vk byte) error {
+					switch vk {
+					case 0x72:
+						log.add("cast")
+					case 'F':
+						log.add("reel")
+						if test.failReel {
+							return errors.New("lost acknowledgment")
+						}
+					default:
+						t.Errorf("unexpected hardware key %d", vk)
+					}
+					return nil
+				}
+				engine, fsm, frames, _ := newSceneEngine(t, actions)
+				engine.cfg.ReelMethod, engine.cfg.InteractKey, engine.cfg.ESP32Port = config.ReelInteractKey, "F", "COM3"
+				defer fsm.Close()
+				startEngine(t, engine)
+				defer engine.Stop()
+				fsm.EventAwaitFocus()
+				fsm.EventFocusAcquired()
+				wantState(t, fsm, StateSearching)
+				fsm.ForceCast()
+				time.Sleep(500 * time.Millisecond)
+				wantState(t, fsm, StateMonitoring)
+				frames.set(fakegame.PhaseSplash)
+				time.Sleep(frameInterval + reelClickDelay)
+				if test.failReel {
+					wantState(t, fsm, StateHalt)
+					if fsm.Stats().Reels != 0 {
+						t.Fatal("counted an unacknowledged reel")
+					}
+				} else {
+					wantState(t, fsm, StateCooldown)
+					if fsm.Stats().Reels != 1 {
+						t.Fatal("acknowledged reel was not counted")
+					}
+				}
+				engine.Stop()
+				wantActions(t, log, "open", "cast", "reel", "close")
+			})
+		})
+	}
 }
 
 func TestEnginePublishesPreviewUntilStopped(t *testing.T) {

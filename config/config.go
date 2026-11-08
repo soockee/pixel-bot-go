@@ -2,12 +2,34 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
+	"strings"
 )
+
+// CheckSchedule validates the settings needed to run a play and break cycle.
+func (c Config) CheckSchedule() error {
+	if !c.Schedule {
+		return nil
+	}
+	if c.PlayMinMinutes < 1 || c.PlayMaxMinutes < c.PlayMinMinutes || c.PlayMaxMinutes > 240 ||
+		c.BreakMinMinutes < 1 || c.BreakMaxMinutes < c.BreakMinMinutes || c.BreakMaxMinutes > 240 {
+		return errors.New("set ordered play and break ranges from 1 to 240 minutes")
+	}
+	if c.LogoutKey == "" || c.CharacterPNG == "" || c.InWorldPNG == "" {
+		return errors.New("set the Logout key and both screen images before enabling the schedule")
+	}
+	return nil
+}
 
 // FilePath is the config file, relative to the working directory. The
 // misspelling is kept so existing files keep loading.
 const FilePath = "pixle_bot_config.json"
+
+const (
+	ReelRightClick  = "right_click"  // Reel by clicking the bobber.
+	ReelInteractKey = "interact_key" // Reel with the game's native Interact binding.
+)
 
 // Config holds runtime configuration for detection and app behavior.
 // Fields may be loaded from a JSON file and overridden by command-line flags.
@@ -34,12 +56,27 @@ type Config struct {
 
 	// CastKey is the key that casts (e.g. "F3" or "R").
 	CastKey string `json:"cast_key"`
+	// ReelMethod selects how the app interacts with a marked bobber.
+	ReelMethod string `json:"reel_method"`
+	// InteractKey matches the game's native Interact binding when selected.
+	InteractKey string `json:"interact_key,omitempty"`
+	// ESP32Port enables the serial BLE keyboard backend when set.
+	ESP32Port string `json:"esp32_port,omitempty"`
 	// StopKey is the global hotkey that halts the bot. Read at startup.
 	StopKey string `json:"stop_key"`
 	// MaxFailedCasts halts the bot after this many casts in a row end without a reel.
 	MaxFailedCasts int `json:"max_failed_casts"`
 	// MaxSessionMinutes halts the bot at the first cast after this long.
 	MaxSessionMinutes int `json:"max_session_minutes"`
+	// Schedule enables alternating play and logged-out breaks after Start.
+	Schedule        bool   `json:"schedule,omitempty"`
+	PlayMinMinutes  int    `json:"play_min_minutes"`
+	PlayMaxMinutes  int    `json:"play_max_minutes"`
+	BreakMinMinutes int    `json:"break_min_minutes"`
+	BreakMaxMinutes int    `json:"break_max_minutes"`
+	LogoutKey       string `json:"logout_key,omitempty"`
+	CharacterPNG    string `json:"character_png,omitempty"`
+	InWorldPNG      string `json:"in_world_png,omitempty"`
 	// Locator and BiteDetector name the techniques to use. The registered names
 	// are in domain/detect/registry.go.
 	Locator      string `json:"locator"`
@@ -81,9 +118,14 @@ func DefaultConfig() *Config {
 		Stride:                 6,
 		Refine:                 true,
 		CastKey:                "F3",
+		ReelMethod:             ReelRightClick,
 		StopKey:                "F10",
 		MaxFailedCasts:         5,
 		MaxSessionMinutes:      60,
+		PlayMinMinutes:         20,
+		PlayMaxMinutes:         45,
+		BreakMinMinutes:        5,
+		BreakMaxMinutes:        15,
 		Locator:                "marker",
 		BiteDetector:           "motion",
 		RecordDir:              "datasets",
@@ -122,6 +164,11 @@ func (c *Config) Validate() error {
 	if c.CastKey == "" {
 		c.CastKey = d.CastKey
 	}
+	if c.ReelMethod == "" {
+		c.ReelMethod = d.ReelMethod
+	}
+	c.InteractKey = strings.TrimSpace(c.InteractKey)
+	c.ESP32Port = strings.ToUpper(strings.TrimSpace(c.ESP32Port))
 	if c.StopKey == "" {
 		c.StopKey = d.StopKey
 	}
@@ -131,6 +178,21 @@ func (c *Config) Validate() error {
 	if c.MaxSessionMinutes <= 0 {
 		c.MaxSessionMinutes = d.MaxSessionMinutes
 	}
+	if c.PlayMinMinutes == 0 {
+		c.PlayMinMinutes = d.PlayMinMinutes
+	}
+	if c.PlayMaxMinutes == 0 {
+		c.PlayMaxMinutes = d.PlayMaxMinutes
+	}
+	if c.BreakMinMinutes == 0 {
+		c.BreakMinMinutes = d.BreakMinMinutes
+	}
+	if c.BreakMaxMinutes == 0 {
+		c.BreakMaxMinutes = d.BreakMaxMinutes
+	}
+	c.LogoutKey = strings.TrimSpace(c.LogoutKey)
+	c.CharacterPNG = strings.TrimSpace(c.CharacterPNG)
+	c.InWorldPNG = strings.TrimSpace(c.InWorldPNG)
 	if c.Locator == "" {
 		c.Locator = d.Locator
 	}

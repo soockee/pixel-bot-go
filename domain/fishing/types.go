@@ -3,6 +3,8 @@ package fishing
 import (
 	"image"
 	"time"
+
+	"github.com/soocke/pixel-bot-go/config"
 )
 
 // FishingState enumerates fishing FSM states.
@@ -45,6 +47,9 @@ type ActionCallbacks struct {
 	MoveCursor func(x, y int)
 	ClickRight func()
 	ParseVK    func(key string) (byte, bool)
+	// OpenKeyboard validates and opens the external keyboard for one run.
+	OpenKeyboard func(config.Config) (closeKeyboard func(), err error)
+	TapKeyboard  func(vk byte) error
 
 	// ObserveCast and ObserveReel run when a cast or reel is scheduled.
 	// Each can return a callback to observe its eventual dispatch.
@@ -54,7 +59,8 @@ type ActionCallbacks struct {
 	// PlanReel schedules a timed hold and cooldown. A zero cooldown keeps the
 	// configured value. Without HoldRight, the button hold is simulated.
 	PlanReel          func(biteDetector string) ReelTiming
-	HoldRight         func() func() // returns a mandatory release, nil if press failed
+	HoldRight         func() func()        // returns a mandatory release, nil if press failed
+	HoldInteract      func(vk byte) func() // same contract for the game's Interact binding
 	ObserveReelTiming func(ReelTimingEvent)
 	CanSimulateReel   func() bool
 	Cursor            *CursorCallbacks

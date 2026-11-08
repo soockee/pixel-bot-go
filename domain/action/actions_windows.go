@@ -116,15 +116,38 @@ func CursorPos() (x, y int, ok bool) {
 // PressKey sends a key down followed by a key up for the virtual-key code, or
 // a click for a mouse side button.
 func PressKey(vk byte) {
-	if b := xButton(vk); b != 0 {
-		sendInput(mouseInput{kind: inputMouse, flags: mouseXDown, data: b})
-		time.Sleep(40 * time.Millisecond)
-		sendInput(mouseInput{kind: inputMouse, flags: mouseXUp, data: b})
-		return
-	}
-	sendInput(keyboardInput{kind: inputKeyboard, vk: uint16(vk)})
+	sendKey(vk, false)
 	time.Sleep(40 * time.Millisecond)
-	sendInput(keyboardInput{kind: inputKeyboard, vk: uint16(vk), flags: keyEventUp})
+	sendKey(vk, true)
+}
+
+// BeginKeyHold presses a key or side button and returns its mandatory release.
+// A nil result means the control was already down or Windows rejected the press.
+func BeginKeyHold(vk byte) func() {
+	state, _, _ := procGetAsyncKeyState.Call(uintptr(vk))
+	if state&0x8000 != 0 || !sendKey(vk, false) {
+		return nil
+	}
+	return func() {
+		if !sendKey(vk, true) {
+			sendKey(vk, true)
+		}
+	}
+}
+
+func sendKey(vk byte, up bool) bool {
+	if b := xButton(vk); b != 0 {
+		flags := uint32(mouseXDown)
+		if up {
+			flags = mouseXUp
+		}
+		return sendInput(mouseInput{kind: inputMouse, flags: flags, data: b})
+	}
+	in := keyboardInput{kind: inputKeyboard, vk: uint16(vk)}
+	if up {
+		in.flags = keyEventUp
+	}
+	return sendInput(in)
 }
 
 // ParseVK converts a key name (F1 to F12, a letter, a digit, Mouse4 or Mouse5)
