@@ -1,11 +1,11 @@
 ---
 name: run-app
-description: Build and launch Visual Response Lab with the local simulator, run a response cycle in dry-run mode, and inspect the logs and /debug/state. Use when asked to run the app, verify a change end to end, or inspect runtime behavior.
+description: Build and launch Go Fish with the local simulator, run a response cycle in dry-run mode, and inspect the logs and /debug/state. Use when asked to run the app, verify a change end to end, or inspect runtime behavior.
 ---
 
-# Run Visual Response Lab with the simulator
+# Run Go Fish with the simulator
 
-Visual Response Lab is a Windows Wails (WebView2) app. For these tests, use `cmd/fakegame` with the app in `-dry-run` mode to record intended actions without injecting input or requiring Administrator privileges.
+Go Fish is a Windows Wails (WebView2) app. For these tests, use `cmd/fakegame` with the app in `-dry-run` mode to record intended actions without injecting input or requiring Administrator privileges.
 
 ## 1. Cheap checks first
 

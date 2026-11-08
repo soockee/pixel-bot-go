@@ -96,7 +96,7 @@ func (c *Client) SignIn(ctx context.Context, open func(url string) error) (strin
 			}
 			return
 		}
-		fmt.Fprintln(w, "Signed in. You can close this tab and return to Visual Response Lab.")
+		fmt.Fprintln(w, "Signed in. You can close this tab and return to Go Fish.")
 		select {
 		case codes <- q.Get("code"):
 		default:

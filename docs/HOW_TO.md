@@ -107,7 +107,7 @@ Restart the game or type `/reload`. In NaowhForever's Glimmer settings, switch o
 
 ### Set the Fishing cast key
 
-Open **Settings → Keys** in Visual Response Lab. Click the current **Cast key**, then press the same key or mouse side button you use to cast Fishing in game. The app saves it automatically. Use an unmodified letter, top-row digit, F1–F12, Mouse 4, or Mouse 5.
+Open **Settings → Keys** in Go Fish. Click the current **Cast key**, then press the same key or mouse side button you use to cast Fishing in game. The app saves it automatically. Use an unmodified letter, top-row digit, F1–F12, Mouse 4, or Mouse 5.
 
 ## Sign In
 Fishing with real input and uploading recordings need a Google account with a role; a dry run needs none.

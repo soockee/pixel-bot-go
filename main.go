@@ -175,7 +175,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	runErr := app.NewApp("Visual Response Lab", 1180, 760, cfg, logger, trace).Run()
+	runErr := app.NewApp("Go Fish", 1180, 760, cfg, logger, trace).Run()
 	if trace.Output != nil {
 		status := "complete"
 		if runErr != nil {

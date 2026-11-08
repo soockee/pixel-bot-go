@@ -1,5 +1,5 @@
 -- Bobber Marker draws solid magenta corner brackets around the player's own
--- fishing bobber while the player channels Fishing, for Visual Response Lab to
+-- fishing bobber while the player channels Fishing, for Go Fish to
 -- find on screen. The bot clicks the centre of the box and watches the box for
 -- the splash, so the box is centred on the bobber and drawn in exact pixels.
 --
@@ -13,7 +13,7 @@ local SOFT = "softinteract";
 local BOBBER = 35591; -- game object ID of the fishing bobber, the same in every language
 local GUID_OBJECT = "^GameObject%-%d+%-%d+%-%d+%-%d+%-(%d+)%-";
 
--- In screen pixels. Visual Response Lab's locator expects arms of at least 10
+-- In screen pixels. Go Fish's locator expects arms of at least 10
 -- pixels and a box side between 30 and 400 pixels.
 local BOX = 96;
 local ARM = 20;

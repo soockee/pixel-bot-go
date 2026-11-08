@@ -121,7 +121,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.next_tag.outputs.next_tag }}
-          name: Visual Response Lab ${{ steps.next_tag.outputs.next_tag }}
+          name: Go Fish ${{ steps.next_tag.outputs.next_tag }}
           generate_release_notes: true
           files: |
             dist/pixel-bot-go-windows-amd64.exe

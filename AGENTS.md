@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Visual Response Lab is a Windows Go application for visual event and response experiments. It captures a screen region, locates the target from the corner brackets an addon draws around it, and uses region-of-interest brightness statistics to trigger action callbacks. The local simulator supplies a scripted fishing scene for reproducible tests. See [README.md](README.md) and `docs/` (Diataxis: TUTORIALS, HOW_TO, REFERENCE, EXPLANATION).
+Go Fish is a Windows Go application for visual event and response experiments. It captures a screen region, locates the target from the corner brackets an addon draws around it, and uses region-of-interest brightness statistics to trigger action callbacks. The local simulator supplies a scripted fishing scene for reproducible tests. See [README.md](README.md) and `docs/` (Diataxis: TUTORIALS, HOW_TO, REFERENCE, EXPLANATION).
 
 ## Stack
 

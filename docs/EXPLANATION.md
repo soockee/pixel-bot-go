@@ -1,6 +1,6 @@
 # Explanation
 
-Conceptual background for Visual Response Lab: detection theory, state machine design, profiling interpretation. This file consolidates earlier separate detection, state machine, and debug documents.
+Conceptual background for Go Fish: detection theory, state machine design, profiling interpretation. This file consolidates earlier separate detection, state machine, and debug documents.
 
 ---
 ## Concurrency Snapshot

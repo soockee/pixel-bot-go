@@ -1,8 +1,8 @@
 <a name="top"></a>
 
-# Visual Response Lab
+# Go Fish
 
-Visual Response Lab is a Windows application for studying visual event detection and response timing. The local simulator renders a scripted fishing scene with a visual target and timed splash events. The application captures a selected region, locates the target, and reacts to those events. Dry-run mode records intended actions in the log.
+Go Fish is a Windows application for studying visual event detection and response timing. The local simulator renders a scripted fishing scene with a visual target and timed splash events. The application captures a selected region, locates the target, and reacts to those events. Dry-run mode records intended actions in the log.
 
 ---
 
