@@ -20,7 +20,30 @@ type scriptedPort struct {
 	closed bool
 }
 
-func (p *scriptedPort) Read(b []byte) (int, error)         { return p.reply.Read(b) }
+func init() {
+	// A real board needs seconds to boot and reconnect; scripted ones do not.
+	bootWait, pairWait, retryEvery = 40*time.Millisecond, 120*time.Millisecond, 5*time.Millisecond
+}
+
+// Read returns one scripted line per call, as a board sends one answer per HELLO.
+func (p *scriptedPort) Read(b []byte) (int, error) {
+	n := 0
+	for n < len(b) {
+		c, err := p.reply.ReadByte()
+		if err != nil {
+			if n > 0 {
+				return n, nil
+			}
+			return 0, err
+		}
+		b[n] = c
+		n++
+		if c == '\n' {
+			break
+		}
+	}
+	return n, nil
+}
 func (p *scriptedPort) Write(b []byte) (int, error)        { return p.writes.Write(b) }
 func (p *scriptedPort) Close() error                       { p.closed = true; return nil }
 func (p *scriptedPort) SetReadTimeout(time.Duration) error { return nil }
@@ -144,6 +167,31 @@ func TestTapRejectsNonKeyboardUsage(t *testing.T) {
 	}
 	if port.writes.Len() != 0 {
 		t.Fatalf("invalid usages reached the firmware: %q", port.writes.String())
+	}
+}
+
+// A board opened by a program that toggles DTR/RTS resets: it prints boot noise,
+// then answers WAITING while Bluetooth reconnects, then READY.
+func TestOpenWaitsForABoardThatIsBooting(t *testing.T) {
+	port := &scriptedPort{reply: strings.NewReader(
+		"ets Jul 29 2019 12:21:46\n" + "GOFISH 1 WAITING\n" + "GOFISH 1 WAITING\n" + "GOFISH 1 READY\n")}
+	k := openWith(port, nil)
+	if err := k.Open("COM3"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(port.writes.String(), "HELLO\n"); got != 4 {
+		t.Fatalf("sent HELLO %d times, want 4", got)
+	}
+}
+
+func TestOpenReportsBootNoiseThatNeverEnds(t *testing.T) {
+	port := &scriptedPort{reply: strings.NewReader(strings.Repeat("ets Jul 29 2019 12:21:46\n", 100))}
+	err := openWith(port, nil).Open("COM3")
+	if err == nil || !strings.Contains(err.Error(), `unexpected firmware response "ets Jul 29 2019 12:21:46"`) {
+		t.Fatalf("Open returned %v, want the noise reported", err)
+	}
+	if strings.Count(port.writes.String(), "HELLO\n") < 2 {
+		t.Fatal("gave up after one try, before the board could have finished booting")
 	}
 }
 

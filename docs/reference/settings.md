@@ -9,7 +9,7 @@ order: 1
 | Cast key | F3 | The key or mouse side button Go Fish presses to cast Fishing. Must match the game. |
 | Reel method | Right click | Right-click the marked bobber, or use the game's native Interact binding without moving the cursor. |
 | Interact key | Unset | The binding used when the reel method is Interact key. It must differ from the Cast and Stop keys. |
-| ESP32 port | Unset | COM port for the paired BLE keyboard. Requires the Interact key reel method and keyboard bindings for Cast and Interact. |
+| ESP32 port | Unset | `auto` to find the paired BLE keyboard on its USB cable, or its COM port such as `COM3`. Requires the Interact key reel method and keyboard bindings for Cast and Interact. |
 | Stop key | F10 | Stops Go Fish from anywhere. Takes effect after a restart. |
 | Session length | 60 min | Go Fish stops at the first cast after this time. 5 to 240 minutes. |
 | Schedule play and breaks | Off | Alternates random fishing sessions and logged-out breaks after Start. |

@@ -13,7 +13,7 @@ order: 2
 | CastKey (`cast_key`)        | Unmodified key that casts: F1 to F12, a letter, a top-row digit, `Mouse4` or `Mouse5` | An unknown key halts the run           |
 | ReelMethod (`reel_method`)  | How to interact with the bobber             | `right_click` by default, or `interact_key` with the marker locator |
 | InteractKey (`interact_key`) | Native Interact binding for key-based reeling, using the same supported keys as CastKey | Empty by default. Key-based reeling requires a binding distinct from Cast and Stop. |
-| ESP32Port (`esp32_port`) | Serial port for the ESP32 BLE keyboard, such as `COM3` | Empty uses Windows input. Requires `interact_key` mode and keyboard bindings for both actions. |
+| ESP32Port (`esp32_port`) | Serial port for the ESP32 BLE keyboard, such as `COM3`, or `auto` | Empty uses Windows input. `auto` tries each USB serial port with the firmware handshake and uses the first that answers. Requires `interact_key` mode and keyboard bindings for both actions. |
 | StopKey (`stop_key`)        | Global hotkey that halts the run; accepts the same unmodified keys as CastKey | Hidden from other apps; read at start  |
 | MaxFailedCasts              | Casts in a row without a reel before halting | Default 5                             |
 | MaxSessionMinutes           | Run length; halts at the next cast after it | Default 60                             |

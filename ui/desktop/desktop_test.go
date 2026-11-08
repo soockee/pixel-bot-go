@@ -78,6 +78,27 @@ func TestInteractKeySettings(t *testing.T) {
 	}
 }
 
+func TestESP32PortSettings(t *testing.T) {
+	base := config.DefaultConfig()
+	values := settingsOf(base)
+	values.ReelMethod, values.InteractKey = config.ReelInteractKey, "f"
+	for in, want := range map[string]string{"auto": "AUTO", " Auto ": "AUTO", "com3": "COM3", "": ""} {
+		values.ESP32Port = in
+		got, err := values.apply(*base)
+		if err != nil || got.ESP32Port != want {
+			t.Errorf("ESP32 port %q = %q, %v; want %q", in, got.ESP32Port, err, want)
+		}
+	}
+	values.ESP32Port = "ttyUSB0"
+	if _, err := values.apply(*base); err == nil || !strings.Contains(err.Error(), "auto") {
+		t.Errorf("a name that is not a COM port or auto was accepted: %v", err)
+	}
+	values.ESP32Port, values.ReelMethod = "auto", config.ReelRightClick
+	if _, err := values.apply(*base); err == nil {
+		t.Error("auto port accepted without the Interact key reel method")
+	}
+}
+
 func TestShareRecordingsShowsTheRecorder(t *testing.T) {
 	cfg := config.DefaultConfig()
 	view := NewView(NewFrames(), func(State) {})

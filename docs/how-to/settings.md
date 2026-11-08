@@ -13,7 +13,7 @@ Open the **Settings** tab. Every change saves at once. Settings are locked while
 
 To reel with the game's native Interact binding, enable **Interact Key** in the game and try reeling manually at your fishing spot. In Go Fish, set **Interact key** to the same binding, then choose **Interact key** under **Reel method**. Go Fish still uses Bobber Marker to identify the bobber and checks for the marker again before pressing the key. If your cast is beyond the game's interaction range, choose **Right click**.
 
-To use an ESP32 for both Cast and Interact, flash the [ESP32 firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe), pair **Go Fish ESP32 Probe** in Windows Bluetooth settings, and keep its USB cable connected. Choose keyboard bindings for Cast and Interact, select the **Interact key** reel method, then enter the board's COM port under **ESP32 port**. A failed tap stops the run. Clear the port to use Windows input again.
+To use an ESP32 for both Cast and Interact, flash the [ESP32 firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe), pair **Go Fish ESP32 Probe** in Windows Bluetooth settings, and keep its USB cable connected. Choose keyboard bindings for Cast and Interact, select the **Interact key** reel method, then enter `auto` under **ESP32 port**. Go Fish asks each USB serial port for the Go Fish firmware and uses the one that answers; if you have several boards, or it finds none, enter the board's COM port such as `COM3` instead. A board that was just plugged in or reset can take a few seconds to find your PC over Bluetooth, and Go Fish waits for it. A failed tap stops the run. Clear the port to use Windows input again.
 
 ## Scheduled breaks
 

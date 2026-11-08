@@ -99,6 +99,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			if err := keyboard.Open(port); err != nil {
 				return nil, err
 			}
+			logger.Info("ESP32 keyboard ready", "port", keyboard.Name())
 			return keyboard.Close, nil
 		}
 		callbacks.TapKeyboard = func(vk byte) error {
