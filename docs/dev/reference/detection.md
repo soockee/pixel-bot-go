@@ -25,7 +25,7 @@ For WoW: Forever (Interface 16001). It shows the brackets only while you channel
 | Set once, the first time you fish | `SoftTargetInteract` 3, `SoftTargetIconGameObject` 1, `SoftTargetInteractOnlyInRange` 0, `SoftTargetInteractRange` 60 |
 | Set while you fish | `SoftTargetNameplateInteract` 1, then back to your value |
 | Keys | `Keys.lua` is written by `addon.Install` from the config, not carried: `BobberMarkerKeys = { cast, interact }` in the game's binding names (`addon.BindingKey`). The Interact key is set only for the `interact_key` reel method. `addon.State` compares it, so a changed key makes the addon outdated |
-| Set at login, and when combat ends | An account macro `GoFish Cast` (`#showtooltip` and `/cast` with the name of spell 7620, so it follows the game's language) bound with `SetBindingMacro` to the cast key, and `INTERACTTARGET` bound with `SetBinding` to the interact key. Only what differs is changed, never in combat |
+| Set at login, and when combat ends | An account macro `Fishing` (`#showtooltip` and `/cast` with the name of spell 7620, so it follows the game's language; an existing macro of that name is rewritten) bound with `SetBindingMacro` to the cast key, and `INTERACTTARGET` bound with `SetBinding` to the interact key. Only what differs is changed, never in combat, and nothing is written to the chat; problems are kept and `/bobbermarker` prints them |
 
 Console variables persist in `WTF/Config.wtf`, so disabling the addon does not undo the set-once values. Glimmer turns the same nameplate on and off for its own highlights, so switch off its Fishing Bobber highlight while you use Bobber Marker.
 

@@ -33,12 +33,12 @@ To put a marker on the bobber, the addon uses the game's soft targeting. The fir
 
 When Go Fish installs the addon it also tells it your **Cast key** and, if you reel with the Interact key, your **Interact key** from Settings. Each time you log in, and when a fight ends, the addon sets them up in the game, so you don't have to:
 
-- It creates an account-wide macro called **GoFish Cast** that casts Fishing, and binds your Cast key to it.
+- It creates an account-wide macro called **Fishing** that casts Fishing, and binds your Cast key to it. If you already have a macro with that name, the addon changes it to cast Fishing.
 - It binds your Interact key to the game's **Interact With Target** action.
 
-It says in the chat what it changed. It never changes keys in combat, and it replaces whatever your Cast or Interact key was bound to before. If you change either key in Settings, **Addon** says **Outdated**: click **Update** and `/reload`.
+It writes nothing to the chat. It never changes keys in combat, and it replaces whatever your Cast or Interact key was bound to before. If you change either key in Settings, **Addon** says **Outdated**: click **Update** and `/reload`.
 
-**Chat says it could not bind a key?** Open the game's **Key Bindings** and bind the key yourself: to the **GoFish Cast** macro, or to **Interact With Target**.
+**A key does nothing?** Type `/bobbermarker` in the game. If the addon could not set a key up, it says why. Then open the game's **Key Bindings** and bind the key yourself: to the **Fishing** macro, or to **Interact With Target**.
 
 ## Install it by hand
 
