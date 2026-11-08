@@ -18,7 +18,7 @@ local GUID_OBJECT = "^GameObject%-%d+%-%d+%-%d+%-%d+%-(%d+)%-";
 local BOX = 96;
 local ARM = 20;
 local THICKNESS = 3;
-local DEFAULT_Y = -20; -- the bobber sits this far below its nameplate's centre
+local DEFAULT_Y = -40; -- the bobber sits this far below its nameplate's centre
 local COLOR = { 1, 0, 1 }; -- opaque magenta: exact over any background, and rare in the world
 
 local POLL = 0.1; -- seconds between checks while fishing
