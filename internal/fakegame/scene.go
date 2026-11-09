@@ -178,9 +178,10 @@ func (r *Renderer) Render(p Phase) *image.RGBA {
 		}
 	}
 	if p == PhaseSplash {
-		// Bright patch over and around the bobber, large enough to cover a typical ROI.
+		// Bright patch over and around the bobber, inside the marker box as a
+		// real splash is, so the water around the bobber stays calm.
 		c := image.Pt((br.Min.X+br.Max.X)/2, (br.Min.Y+br.Max.Y)/2)
-		patch := image.Rect(c.X-30, c.Y-30, c.X+30, c.Y+30).Intersect(out.Bounds())
+		patch := image.Rect(c.X-16, c.Y-16, c.X+16, c.Y+16).Intersect(out.Bounds())
 		for y := patch.Min.Y; y < patch.Max.Y; y++ {
 			for x := patch.Min.X; x < patch.Max.X; x++ {
 				i := out.PixOffset(x, y)

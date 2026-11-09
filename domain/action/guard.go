@@ -144,11 +144,19 @@ func (g *Guard) userMoved() bool {
 	return g.cursorTaken(image.Pt(x, y), ok)
 }
 
+// takeoverSlack is how far, in pixels along either axis, the pointer may drift
+// from where the guard left it before that counts as the user taking over. A
+// sensitive mouse or the game can nudge it by a pixel or two between moves; a
+// hand on the mouse moves it much further. A bobber's box is several times
+// wider, so a click after such a drift still lands on it.
+const takeoverSlack = 6
+
 func (g *Guard) cursorTaken(p image.Point, ok bool) bool {
-	if !g.hasTarget || ok && p == g.target {
+	d := p.Sub(g.target)
+	if !g.hasTarget || ok && max(d.X, -d.X) <= takeoverSlack && max(d.Y, -d.Y) <= takeoverSlack {
 		return false
 	}
-	g.Logger.Warn("input dropped: the user moved the cursor")
+	g.Logger.Warn("input dropped: the user moved the cursor", "want_x", g.target.X, "want_y", g.target.Y, "x", p.X, "y", p.Y, "known", ok)
 	g.hasTarget = false
 	g.OnTakeover()
 	return true

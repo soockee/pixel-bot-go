@@ -33,7 +33,7 @@ func TestValidateClamps(t *testing.T) {
 		{"empty cast key", func(c *Config) { c.CastKey = "" }, func(c *Config) any { return c.CastKey }, "F3"},
 		{"failed casts unset", func(c *Config) { c.MaxFailedCasts = 0 }, func(c *Config) any { return c.MaxFailedCasts }, 5},
 		{"empty locator", func(c *Config) { c.Locator = "" }, func(c *Config) any { return c.Locator }, "marker"},
-		{"empty bite detector", func(c *Config) { c.BiteDetector = "" }, func(c *Config) any { return c.BiteDetector }, "motion"},
+		{"empty bite detector", func(c *Config) { c.BiteDetector = "" }, func(c *Config) any { return c.BiteDetector }, "splash_sound"},
 		{"empty record folder", func(c *Config) { c.RecordDir = "" }, func(c *Config) any { return c.RecordDir }, "datasets"},
 		{"session limit unset", func(c *Config) { c.MaxSessionMinutes = 0 }, func(c *Config) any { return c.MaxSessionMinutes }, 60},
 	}

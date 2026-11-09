@@ -20,7 +20,8 @@ import (
 )
 
 // writeFakeDataset records two casts of the fake game, 100 ms per frame: one
-// with a bite at 1000 ms and one without, then a span with no bobber.
+// with a bite at 2000 ms, after the bobber has landed, and one without, then a
+// span with no bobber.
 func writeFakeDataset(t *testing.T) string {
 	t.Helper()
 	tmpl, err := assets.FishingTargetImage()
@@ -42,27 +43,27 @@ func writeFakeDataset(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
-	for ms := 0; ms <= 1200; ms += 100 {
+	for ms := 0; ms <= 2400; ms += 100 {
 		phase := fakegame.PhaseBobber
-		if ms >= 1000 {
+		if ms >= 2000 {
 			phase = fakegame.PhaseSplash
 		}
 		write(ms, phase)
 	}
-	for ms := 2000; ms <= 2500; ms += 100 {
+	for ms := 3000; ms <= 3500; ms += 100 {
 		write(ms, fakegame.PhaseBobber)
 	}
-	for ms := 3000; ms <= 3300; ms += 100 {
+	for ms := 4000; ms <= 4300; ms += 100 {
 		write(ms, fakegame.PhaseEmpty)
 	}
 	b := r.BobberRect()
-	biteMS := int64(1000)
+	biteMS := int64(2000)
 	labels, err := json.Marshal(dataset.Labels{
 		Casts: []dataset.Cast{
-			{Span: dataset.Span{StartMS: 0, EndMS: 1200}, Bobber: dataset.Rect{X: b.Min.X, Y: b.Min.Y, W: b.Dx(), H: b.Dy()}, BiteMS: &biteMS},
-			{Span: dataset.Span{StartMS: 2000, EndMS: 2500}, Bobber: dataset.Rect{X: b.Min.X, Y: b.Min.Y, W: b.Dx(), H: b.Dy()}},
+			{Span: dataset.Span{StartMS: 0, EndMS: 2400}, Bobber: dataset.Rect{X: b.Min.X, Y: b.Min.Y, W: b.Dx(), H: b.Dy()}, BiteMS: &biteMS},
+			{Span: dataset.Span{StartMS: 3000, EndMS: 3500}, Bobber: dataset.Rect{X: b.Min.X, Y: b.Min.Y, W: b.Dx(), H: b.Dy()}},
 		},
-		Empty: []dataset.Span{{StartMS: 3000, EndMS: 3300}},
+		Empty: []dataset.Span{{StartMS: 4000, EndMS: 4300}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -275,14 +276,14 @@ func TestExportWritesCropsAndAnIndex(t *testing.T) {
 		if cfg.Width != row.Box.W || cfg.Height != row.Box.H {
 			t.Errorf("%s is %dx%d, box is %+v", row.File, cfg.Width, cfg.Height, row.Box)
 		}
-		if row.Cast == 0 && (row.BiteMS == nil || *row.BiteMS != 1000 || row.ReelMS != 1200) {
+		if row.Cast == 0 && (row.BiteMS == nil || *row.BiteMS != 2000 || row.ReelMS != 2400) {
 			t.Errorf("row = %+v", row)
 		}
 	}
-	if rows != 32 { // the second cast's landing window reaches back over the first
-		t.Errorf("rows = %d, want 32", rows)
+	if rows != 46 { // the second cast's landing window reaches back over the first
+		t.Errorf("rows = %d, want 46", rows)
 	}
-	if !strings.Contains(status.String(), "Exported 32 crops") {
+	if !strings.Contains(status.String(), "Exported 46 crops") {
 		t.Errorf("status = %q", status.String())
 	}
 }

@@ -136,7 +136,7 @@ func DefaultConfig() *Config {
 		BreakMinMinutes:        5,
 		BreakMaxMinutes:        15,
 		Locator:                "marker",
-		BiteDetector:           "motion",
+		BiteDetector:           "splash_sound",
 		RecordDir:              "datasets",
 		RecordKeys:             false,
 		ROISizePx:              80,
