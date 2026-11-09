@@ -141,7 +141,11 @@ export interface State {
     "roiBox": Rect;
     "dryRun": boolean;
     "stopKey": string;
-    "dark": boolean;
+
+    /**
+     * one of config.Themes
+     */
+    "theme": string;
 
     /**
      * show the developer views

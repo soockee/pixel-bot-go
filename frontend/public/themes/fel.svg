@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="iron" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a514a"/><stop offset="1" stop-color="#0b0d0b"/></linearGradient>
+    <radialGradient id="pit" cx=".5" cy=".62" r=".6"><stop offset="0" stop-color="#2f7a12"/><stop offset=".6" stop-color="#0d2a06"/><stop offset="1" stop-color="#050805"/></radialGradient>
+    <linearGradient id="flame" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#f2ffc4"/><stop offset=".35" stop-color="#8dff3c"/><stop offset="1" stop-color="#1e8f0f"/></linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="8"/></filter>
+  </defs>
+  <path d="M128 4 162 46 213 43 210 94 252 128 210 162 213 213 162 210 128 252 94 210 43 213 46 162 4 128 46 94 43 43 94 46z" fill="#1a2416"/>
+  <path d="M128 16 158 54 203 53 202 98 238 128 202 158 203 203 158 202 128 240 98 202 53 203 54 158 18 128 54 98 53 53 98 54z" fill="url(#iron)"/>
+  <circle cx="128" cy="128" r="74" fill="url(#pit)" stroke="#7dff3a" stroke-opacity=".6" stroke-width="3"/>
+  <path d="M128 198c-36 0-50-32-36-60 6 14 16 18 20 14-10-22 0-52 24-74-2 24 12 36 22 50 6-8 6-18 4-26 20 24 22 72-2 88-8 6-20 8-32 8z" fill="#6dff2a" opacity=".8" filter="url(#glow)"/>
+  <path d="M128 198c-36 0-50-32-36-60 6 14 16 18 20 14-10-22 0-52 24-74-2 24 12 36 22 50 6-8 6-18 4-26 20 24 22 72-2 88-8 6-20 8-32 8z" fill="url(#flame)"/>
+  <path d="M128 196c-16 0-24-14-18-28 6 6 12 6 14 2-4-12 2-24 12-32 0 12 8 18 12 26 2-4 4-8 2-12 10 14 8 44-22 44z" fill="#f5ffd8"/>
+</svg>

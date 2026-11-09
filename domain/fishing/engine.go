@@ -95,9 +95,6 @@ func (e *Engine) Start() error {
 	}
 	var closeKeyboard func()
 	if cfg.ESP32Port != "" {
-		if cfg.ReelMethod != config.ReelInteractKey {
-			return errors.New("ESP32 requires the Interact key reel method")
-		}
 		if !cfg.DryRun {
 			if e.fsm.actions.OpenKeyboard == nil || e.fsm.actions.TapKeyboard == nil {
 				return errors.New("ESP32 keyboard backend unavailable")

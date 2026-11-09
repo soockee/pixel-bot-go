@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -99,6 +100,45 @@ func TestShareRecordingsShowsTheRecorder(t *testing.T) {
 	values.ShareRecordings = false
 	if _, err := s.SaveSettings(values); err != nil || s.State().Recorder {
 		t.Fatalf("switched off: err %v, recorder shown %v", err, s.State().Recorder)
+	}
+}
+
+func TestSetThemeSavesKnownThemesOnly(t *testing.T) {
+	cfg := config.DefaultConfig()
+	view := NewView(NewFrames(), func(State) {})
+	loop := NewLoop(func() {})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go loop.Run(ctx, time.Hour)
+	var icons []string
+	path := filepath.Join(t.TempDir(), "config.json")
+	s := NewService(loop, view, Commands{SetTheme: func(theme string) { icons = append(icons, theme) }}, nil, cfg,
+		path, slog.New(slog.DiscardHandler))
+
+	s.SetTheme("fel")
+	s.SetTheme("no-such-theme")
+	saved, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Theme != "fel" || s.State().Theme != "fel" || saved.Theme != "fel" || len(icons) != 1 {
+		t.Fatalf("theme %q, shown %q, saved %q, icons %v; want fel everywhere and one icon change",
+			cfg.Theme, s.State().Theme, saved.Theme, icons)
+	}
+}
+
+func TestESP32PortsKeepTheSavedPort(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.ESP32Port = "COM7"
+	loop := NewLoop(func() {})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go loop.Run(ctx, time.Hour)
+	s := NewService(loop, NewView(NewFrames(), func(State) {}), Commands{ListPorts: func() []string { return []string{"COM3"} }},
+		nil, cfg, filepath.Join(t.TempDir(), "config.json"), slog.New(slog.DiscardHandler))
+
+	if got := s.ESP32Ports(); !slices.Equal(got, []string{"COM3", "COM7"}) {
+		t.Fatalf("ports = %v, want COM3 and the saved COM7", got)
 	}
 }
 

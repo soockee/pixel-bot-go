@@ -135,7 +135,10 @@ func (v *View) SetAddonVersion(version string) { v.state.AddonVersion = version 
 // SetVersion shows the running build's version.
 func (v *View) SetVersion(version string) { v.state.Version = version }
 
-// SetInfo shows fixed run facts and the theme.
-func (v *View) SetInfo(dryRun, debug bool, stopKey string, dark bool) {
-	v.state.DryRun, v.state.Debug, v.state.StopKey, v.state.Dark = dryRun, debug, stopKey, dark
+// SetInfo shows fixed run facts.
+func (v *View) SetInfo(dryRun, debug bool, stopKey string) {
+	v.state.DryRun, v.state.Debug, v.state.StopKey = dryRun, debug, stopKey
 }
+
+// SetTheme shows the window's look.
+func (v *View) SetTheme(theme string) { v.state.Theme = theme }

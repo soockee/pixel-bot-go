@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <radialGradient id="void" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#43207a"/><stop offset="1" stop-color="#0d051d"/></radialGradient>
+    <radialGradient id="orb" cx=".38" cy=".32" r=".75"><stop offset="0" stop-color="#fff"/><stop offset=".22" stop-color="#ead0ff"/><stop offset=".65" stop-color="#a45bff"/><stop offset="1" stop-color="#4a17a6"/></radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="9"/></filter>
+  </defs>
+  <circle cx="128" cy="128" r="122" fill="url(#void)"/>
+  <circle cx="128" cy="128" r="118" fill="none" stroke="#d7a8ff" stroke-width="4"/>
+  <circle cx="128" cy="128" r="104" fill="none" stroke="#d7a8ff" stroke-width="5" stroke-dasharray="3 11" stroke-linecap="round"/>
+  <path d="M128 36 208 174H48zM128 220 48 82h160z" fill="none" stroke="#c38bff" stroke-opacity=".55" stroke-width="3"/>
+  <circle cx="128" cy="128" r="56" fill="#b46bff" opacity=".85" filter="url(#glow)"/>
+  <circle cx="128" cy="128" r="46" fill="url(#orb)"/>
+  <path d="M100 130c12-16 38-20 54-6l12-10-3 16 3 16-12-10c-16 14-42 10-54-6z" fill="#2a0b5c" opacity=".75"/>
+  <g fill="#fff"><path d="M206 44l4 12 12 4-12 4-4 12-4-12-12-4 12-4z"/><path d="M50 196l3 9 9 3-9 3-3 9-3-9-9-3 9-3z"/><path d="M58 52l2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/></g>
+</svg>

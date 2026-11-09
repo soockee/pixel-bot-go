@@ -1,5 +1,6 @@
-/* Graphite instrument panel: neutral surfaces, one amber signal accent, and
-   the addon's magenta brackets as the signature around live imagery. */
+/* Graphite instrument panel, the default theme: neutral surfaces, one amber
+   signal accent, and the addon's magenta brackets as the signature around
+   live imagery. The other themes are in themes.css. */
 :root {
   --bg: #121314;
   --surface: #18191b;
@@ -29,29 +30,6 @@
   --r-panel: 12px;
 
   color-scheme: dark;
-}
-
-:root[data-theme="light"] {
-  --bg: #f3f3f4;
-  --surface: #ffffff;
-  --raised: #f7f7f8;
-  --sunken: #e9e9eb;
-  --line: rgba(22, 24, 28, 0.09);
-  --line-strong: rgba(22, 24, 28, 0.16);
-  --text: #17181a;
-  --text-2: #53575d;
-  --text-3: #868a90;
-  --accent: #e8972a;
-  --accent-ink: #1c1306;
-  --accent-text: #9a5b00;
-  --accent-soft: rgba(232, 151, 42, 0.16);
-  --marker: #c41fc4;
-  --good: #2f8a57;
-  --bad: #c2462f;
-  --heat-lo: 140, 168, 196;
-  --heat-hi: 22, 72, 122;
-  --shadow: 0 1px 2px rgba(22, 24, 28, 0.06);
-  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -102,6 +80,8 @@ button, select, input { font: inherit; color: inherit; }
   font-weight: 500;
   white-space: nowrap;
 }
+
+.brand-icon { width: 22px; height: 22px; flex: none; }
 
 /* The mark is the addon's bracket: two corners of a box. */
 .brand-mark {
@@ -668,6 +648,39 @@ input.switch::after {
 input.switch:checked { background: var(--accent); }
 input.switch:checked::after { transform: translateX(16px); background: var(--accent-ink); }
 input.switch:disabled { opacity: 0.5; cursor: default; }
+
+/* Theme picker: each card previews its theme's colours and type. */
+.theme-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.theme-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--p-bg);
+  color: var(--p-fg);
+  cursor: pointer;
+  transition: transform var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+.theme-card:hover { transform: translateY(-1px); }
+.theme-card:has(input:checked) { box-shadow: 0 0 0 2px var(--p-ac); }
+.theme-card:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
+.theme-card input { position: absolute; opacity: 0; pointer-events: none; }
+.theme-card img { width: 48px; height: 48px; flex: none; }
+.theme-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.theme-text strong { font-weight: 600; }
+.theme-text .hint { color: inherit; opacity: 0.72; font-size: 12px; line-height: 1.35; }
+
+/* Catch burst pieces; themes.css shapes and moves them per theme. */
+.particle { position: absolute; left: var(--x); top: var(--y); z-index: 5; pointer-events: none; animation: particle-fade 1s forwards; }
+@keyframes particle-fade { to { opacity: 0; } }
 
 /* Status bar */
 

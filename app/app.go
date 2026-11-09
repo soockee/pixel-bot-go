@@ -17,6 +17,7 @@ import (
 	"github.com/soocke/pixel-bot-go/domain/action"
 	"github.com/soocke/pixel-bot-go/frontend"
 	"github.com/soocke/pixel-bot-go/internal/cloud"
+	"github.com/soocke/pixel-bot-go/internal/esp32"
 	"github.com/soocke/pixel-bot-go/internal/update"
 	"github.com/soocke/pixel-bot-go/ui/desktop"
 )
@@ -63,6 +64,13 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 			}
 			return titles
 		},
+		ListPorts: func() []string {
+			ports, err := esp32.Ports()
+			if err != nil {
+				logger.Error("list COM ports failed", "error", err)
+			}
+			return ports
+		},
 		SetWindow:     a.setWindow,
 		ToggleCapture: a.toggleCapture,
 		ToggleRecord:  c.RecordPresenter.Toggle,
@@ -76,6 +84,7 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		ReleaseNotes:  a.releaseNotes,
 		CheckAddon:    a.checkAddon,
 		InstallAddon:  a.installAddon,
+		SetTheme:      a.setTheme,
 	}, c.Recordings, cfg, config.FilePath, logger)
 
 	assets := http.NewServeMux()
@@ -107,6 +116,7 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		} else if cfg.Screen > 0 {
 			logger.Warn("configured screen not found; using default placement", "screen", cfg.Screen)
 		}
+		a.setTheme(cfg.Theme)
 		a.main.Show()
 	})
 	return a
@@ -119,7 +129,8 @@ func (a *app) Run() error {
 	if cfg.AutoWindow != "" {
 		a.setWindow(cfg.AutoWindow)
 	}
-	c.View.SetInfo(cfg.DryRun, cfg.Debug, cfg.StopKey, cfg.DarkMode)
+	c.View.SetInfo(cfg.DryRun, cfg.Debug, cfg.StopKey)
+	c.View.SetTheme(cfg.Theme)
 	c.View.SetRecorder(cfg.RecorderShown())
 	c.View.SetAddonVersion(addon.Version())
 	a.checkAddon()

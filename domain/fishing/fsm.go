@@ -394,11 +394,11 @@ func (f *FishingFSM) startReel() {
 	}
 	if f.cfg.ReelMethod == config.ReelInteractKey {
 		f.reelTiming.Hold = interactHold
-		if f.hardwareKeyboard() {
-			f.reelTiming.Hold = 0 // the ESP32 owns the press and release
-		}
 	} else if !f.beginCursor(false) {
 		return
+	}
+	if f.hardwareKeyboard() {
+		f.reelTiming.Hold = 0 // the ESP32 owns the press and release
 	}
 	if f.reelTiming.Hold > 0 {
 		if elapsed := f.reelTiming.AfterDetection; elapsed > 0 {

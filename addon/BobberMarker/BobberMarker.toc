@@ -1,8 +1,9 @@
 ## Interface: 16001
 ## Title: Bobber Marker
-## Notes: Draws solid magenta brackets around your own fishing bobber while you fish, for Go Fish to find on screen. /bobbermarker y <pixels> moves the box up or down.
+## Notes: Draws solid magenta brackets around your own fishing bobber while you fish, for Go Fish to find on screen. It also sets up the Cast macro and the Interact key that Go Fish presses. /bobbermarker y <pixels> moves the box up or down.
 ## Author: soockee
-## Version: 1.0.0
+## Version: 1.2.1
 ## SavedVariables: BobberMarkerDB
 
+Keys.lua
 BobberMarker.lua

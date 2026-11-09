@@ -13,7 +13,7 @@ Open the **Settings** tab. Every change saves at once. Settings are locked while
 
 To reel with the game's native Interact binding, enable **Interact Key** in the game and try reeling manually at your fishing spot. In Go Fish, set **Interact key** to the same binding, then choose **Interact key** under **Reel method**. Go Fish still uses Bobber Marker to identify the bobber and checks for the marker again before pressing the key. If your cast is beyond the game's interaction range, choose **Right click**.
 
-To use an ESP32 for both Cast and Interact, flash the [ESP32 firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe), pair **Go Fish ESP32 Probe** in Windows Bluetooth settings, and keep its USB cable connected. Choose keyboard bindings for Cast and Interact, select the **Interact key** reel method, then enter the board's COM port under **ESP32 port**. A failed tap stops the run. Clear the port to use Windows input again.
+To use an ESP32 for both Cast and Interact, flash the [ESP32 firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe), pair **Go Fish ESP32 Probe** in Windows Bluetooth settings, and keep its USB cable connected. Choose a keyboard binding for Cast, and for Interact if you use the **Interact key** reel method. The **Right click** reel method also works: the board moves the cursor and clicks. Then pick the board's COM port from the **ESP32 port** list. A failed tap stops the run. Pick **Off** to use Windows input again.
 
 ## Scheduled breaks
 
@@ -30,8 +30,15 @@ Go Fish samples a new play duration and a new break duration for each cycle. The
 - **Pause after a catch**: how long it waits before casting again.
 - **Cast length**: if nothing bites within this time, it casts again.
 
-## Appearance
+## Theme
 
-- **Dark theme**: switch between dark and light.
+- **Theme**: pick one of six looks. Each changes more than colours: the words on the buttons and tabs, the layout, the window and taskbar icon, and what happens when you land a fish.
+  - **Graphite**: the plain dark panel. Quiet.
+  - **Tavern Ledger**: parchment and brass like a quest log. Catches rain gold coins.
+  - **Arcane Grimoire**: violet runes turn around the picture and speed up while it watches for a bite.
+  - **Frostwater**: light and calm with falling snow. While it watches, everything but the water fades back.
+  - **Felfire Forge**: black and green, loud and sharp, with the controls on the left.
+  - **Tidecaller**: bright beach colours, waves and bubbles, with the tabs at the bottom.
+- **Theme sounds**: turn the catch sound off or on.
 
 All settings with their defaults are listed under [Settings](../reference/settings.md).

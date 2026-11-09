@@ -2,16 +2,10 @@
 // the run is going against the limits that stop it.
 import { framesUrl, Service, type State } from "./api";
 import { $, clock, h } from "./dom";
+import { themeById } from "./themes";
 
-/** The fishing cycle in order, keyed by fishing.FishingState names. */
-export const cycle: [state: string, step: string, caption: string][] = [
-  ["focus", "Focus", "Waiting for the game window to have focus"],
-  ["searching", "Search", "Looking for the bobber"],
-  ["monitoring", "Watch", "Watching for a bite"],
-  ["reeling", "Reel", "Reeling in"],
-  ["cooldown", "Cool down", "Cooling down"],
-  ["casting", "Cast", "Casting"],
-];
+/** The fishing cycle in order, as fishing.FishingState names; the theme names each step. */
+const cycle = ["focus", "searching", "monitoring", "reeling", "cooldown", "casting"];
 
 export function setupLive(): (state: State) => void {
   const img = $<HTMLImageElement>("capture-img");
@@ -29,8 +23,8 @@ export function setupLive(): (state: State) => void {
   const windowSelect = $<HTMLSelectElement>("window");
   const start = $<HTMLButtonElement>("start");
 
-  const steps = cycle.map(([key, step]) => {
-    const li = h("li", step);
+  const steps = cycle.map((key) => {
+    const li = h("li");
     li.dataset.state = key;
     return li;
   });
@@ -99,12 +93,14 @@ export function setupLive(): (state: State) => void {
 
   return (s) => {
     state = s;
+    const words = themeById(s.theme).words;
+    steps.forEach((li, i) => (li.textContent = words.cycle[cycle[i]][0]));
     const showFrame = s.running && s.frame > 0;
 
     if (showFrame && s.frame !== shownFrame) img.src = framesUrl("capture", (shownFrame = s.frame));
     frame.hidden = !showFrame;
     empty.hidden = showFrame;
-    emptyText.textContent = s.running ? "Waiting for the game window" : "Start to watch the game window here";
+    emptyText.textContent = s.running ? "Waiting for the game window" : words.empty;
     if (s.roi && s.roi !== shownRoi) {
       shownRoi = s.roi;
       lockImg.src = roi.src = framesUrl("roi", s.roi);
@@ -116,9 +112,9 @@ export function setupLive(): (state: State) => void {
       lastFsm = fsm;
       stepSince = performance.now();
     }
-    const step = cycle.find(([key]) => key === fsm);
+    const step = words.cycle[fsm];
     caption.hidden = !step;
-    if (step) captionText.textContent = step[2];
+    if (step) captionText.textContent = step[1];
     for (const li of steps) li.classList.toggle("current", li.dataset.state === fsm);
 
     $("watch-panel").hidden = !s.debug;
@@ -134,7 +130,7 @@ export function setupLive(): (state: State) => void {
       windowSelect.value = s.window;
     }
     windowSelect.disabled = s.running;
-    start.textContent = s.running ? "Stop" : "Start fishing";
+    start.textContent = s.running ? words.stop : words.start;
     start.classList.toggle("primary", !s.running);
     start.classList.toggle("stop", s.running);
     // Fishing needs a role that may fish; a dry run sends no input and needs none.
@@ -146,7 +142,7 @@ export function setupLive(): (state: State) => void {
       : "Sign in with Google to fish";
 
     $("reels").textContent = String(s.reels);
-    $("reels-label").textContent = s.reels === 1 ? "catch this run" : "catches this run";
+    $("reels-label").textContent = words.catches[s.reels === 1 ? 0 : 1];
     $("casts").textContent = s.casts ? `${s.reels} of ${s.casts} casts got a bite` : "No casts yet";
     meter("session", s.sessionSeconds, s.sessionLimit * 60, `${clock(s.sessionSeconds)} of ${s.sessionLimit} min`);
     meter("failed", s.failedInRow, s.maxFailed, `${s.failedInRow} of ${s.maxFailed}`);

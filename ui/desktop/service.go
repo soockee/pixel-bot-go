@@ -13,6 +13,7 @@ import (
 // Commands are the app actions the window can start. They run on the UI loop.
 type Commands struct {
 	ListWindows   func() []string
+	ListPorts     func() []string // COM ports for the ESP32 keyboard
 	SetWindow     func(title string)
 	ToggleCapture func()
 	ToggleRecord  func()
@@ -29,6 +30,8 @@ type Commands struct {
 	ReleaseNotes func()
 	CheckAddon   func()
 	InstallAddon func() error
+	// SetTheme shows the theme's icon on the window and the taskbar.
+	SetTheme func(theme string)
 }
 
 // Service is what the frontend calls. Every method runs on the UI loop, so
@@ -82,6 +85,18 @@ func (s *Service) Windows() []string {
 		s.cmds.SetWindow(current)
 	})
 	return titles
+}
+
+// ESP32Ports lists the COM ports to offer for the ESP32 keyboard. The saved
+// port stays in the list while its board is unplugged.
+func (s *Service) ESP32Ports() []string {
+	ports := s.cmds.ListPorts()
+	_ = s.do(func() {
+		if s.cfg.ESP32Port != "" && !slices.Contains(ports, s.cfg.ESP32Port) {
+			ports = append(ports, s.cfg.ESP32Port)
+		}
+	})
+	return ports
 }
 
 // SetWindow makes title the target window.
@@ -143,12 +158,15 @@ func (s *Service) SaveSettings(values Settings) (saved Settings, err error) {
 	return saved, err
 }
 
-// SetDark saves the theme choice.
-func (s *Service) SetDark(dark bool) {
+// SetTheme saves the window's look, one of config.Themes.
+func (s *Service) SetTheme(theme string) {
+	if !slices.Contains(config.Themes, theme) {
+		return
+	}
 	_ = s.do(func() {
-		s.cfg.DarkMode = dark
-		st := s.view.State()
-		s.view.SetInfo(st.DryRun, st.Debug, st.StopKey, dark)
+		s.cfg.Theme = theme
+		s.view.SetTheme(theme)
+		s.cmds.SetTheme(theme)
 		if err := s.cfg.Save(s.cfgPath); err != nil {
 			s.logger.Error("persist theme failed", "error", err)
 		}

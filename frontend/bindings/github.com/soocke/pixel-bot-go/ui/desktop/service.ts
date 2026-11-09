@@ -34,6 +34,14 @@ export function CheckUpdate(): $CancellablePromise<void> {
 }
 
 /**
+ * ESP32Ports lists the COM ports to offer for the ESP32 keyboard. The saved
+ * port stays in the list while its board is unplugged.
+ */
+export function ESP32Ports(): $CancellablePromise<string[] | null> {
+    return $Call.ByID(4255832944);
+}
+
+/**
  * Exit closes the app.
  */
 export function Exit(): $CancellablePromise<void> {
@@ -77,10 +85,10 @@ export function SaveSettings(values: $models.Settings): $CancellablePromise<$mod
 }
 
 /**
- * SetDark saves the theme choice.
+ * SetTheme saves the window's look, one of config.Themes.
  */
-export function SetDark(dark: boolean): $CancellablePromise<void> {
-    return $Call.ByID(1556605581, dark);
+export function SetTheme(theme: string): $CancellablePromise<void> {
+    return $Call.ByID(798552314, theme);
 }
 
 /**
