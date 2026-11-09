@@ -46,13 +46,6 @@ type State struct {
 	DryRun         bool                  `json:"dryRun"`
 	Theme          string                `json:"theme"`          // one of config.Themes
 	Debug          bool                  `json:"debug"`          // show the developer views
-	Recorder       bool                  `json:"recorder"`       // show the Recorder: debug mode or Share recordings
-	SignIn         bool                  `json:"signIn"`         // sign-in is configured; without it fishing needs no role
-	Account        string                `json:"account"`        // signed-in Google email, or ""
-	Role           string                `json:"role"`           // the account's role, "" when nobody gave it one
-	CanFish        bool                  `json:"canFish"`        // reported role permission; fishing does not depend on it
-	CanUpload      bool                  `json:"canUpload"`      // the role may upload recordings
-	Uploading      string                `json:"uploading"`      // recording being uploaded, or ""
 	Update         string                `json:"update"`         // newer release tag on offer, or ""
 	Updating       bool                  `json:"updating"`       // the update downloads or installs
 	Latest         string                `json:"latest"`         // latest release tag found, "" before the first check

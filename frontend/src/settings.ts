@@ -14,11 +14,11 @@ type Field = { key: Key; label: string; hint: string; when?: (v: Settings) => bo
 );
 
 /** User groups come first; dev groups (detection tuning) show only in debug
- * mode, recorder groups while the Recorder is shown. */
+ * mode. */
 const breaks = (v: Settings) => v.schedule;
 const logout = (v: Settings) => v.schedule || v.reposition;
 
-const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] = [
+const groups: { title: string; show?: "debug"; fields: Field[] }[] = [
   {
     title: "Fishing keys",
     fields: [
@@ -67,14 +67,8 @@ const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] 
     ],
   },
   {
-    title: "Data sharing",
-    fields: [
-      { key: "shareRecordings", label: "Share recordings", hint: "Shows the Recorder, to record yourself fishing and send it in to improve detection. Nothing is sent until you click Upload.", kind: "switch" },
-    ],
-  },
-  {
     title: "Recording",
-    show: "recorder",
+    show: "debug",
     fields: [
       { key: "recordDir", label: "Recording folder", hint: "Each recording gets a new folder in here", kind: "text" },
       { key: "recordKeys", label: "Record keys", hint: "Record keys as well as the mouse, including what you type in chat", kind: "switch" },
@@ -136,10 +130,10 @@ export function setupSettings() {
     const option = reel?.querySelector<HTMLOptionElement>('option[value="interact_key"]');
     if (option) option.disabled = !v.interactKey && v.reelMethod !== "interact_key";
   };
-  const gated: { fs: HTMLElement; show: "debug" | "recorder" }[] = [];
+  const gated: HTMLElement[] = [];
   const message = h("p", "Changes save as you make them", "settings-status");
   let running = false;
-  let shown = { debug: false, recorder: false };
+  let shown = false;
   let saving = Promise.resolve();
   let saveFailed = false;
   let savedValues: Settings | undefined;
@@ -424,8 +418,8 @@ export function setupSettings() {
     const sections = groups.map((g) => {
       const fs = h("fieldset");
       fs.append(h("legend", g.title));
-      if (g.show) gated.push({ fs, show: g.show });
-      fs.hidden = Boolean(g.show) && !shown[g.show!];
+      if (g.show) gated.push(fs);
+      fs.hidden = Boolean(g.show) && !shown;
       for (const f of g.fields) {
         const c = control(f, data);
         c.set(data.values[f.key]);
@@ -443,7 +437,7 @@ export function setupSettings() {
     refresh(data.values);
     const look = h("fieldset");
     look.append(h("legend", "Theme"), picker, row("setting-sounds", "Theme sounds", "Each theme greets a catch with its own sound", sound, sound));
-    const user = groups.findIndex((g) => g.title === "Data sharing");
+    const user = groups.findIndex((g) => g.show); // the theme ends the user groups
     form.replaceChildren(message, ...sections.slice(0, user), look, ...sections.slice(user));
     placeCastKey();
     lock();
@@ -454,9 +448,9 @@ export function setupSettings() {
 
   function render(s: State) {
     for (const c of choices) c.checked = c.value === s.theme;
-    if (s.debug !== shown.debug || s.recorder !== shown.recorder) {
-      shown = { debug: s.debug, recorder: s.recorder };
-      for (const g of gated) g.fs.hidden = !shown[g.show];
+    if (s.debug !== shown) {
+      shown = s.debug;
+      for (const fs of gated) fs.hidden = !shown;
     }
     if (s.running === running) return;
     running = s.running;

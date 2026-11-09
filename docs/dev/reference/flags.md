@@ -16,4 +16,4 @@ order: 3
 | `-auto-window "<title>"`        | Preselect the target window title (must match the window title exactly, case-insensitive)   |
 | `-auto-start`                   | Start capture 0.5 s after launch; refused unless the `-auto-window` window is open |
 
-With `"debug": true` in the config, `http://localhost:6060/debug/state` returns the live FSM state as JSON, the window's WebView2 DevTools listen on `localhost:9222`, and `detection.search` entries (found, score, scale, position; misses sampled 1 in 10) are written to the log. `go run ./cmd/fakegame` opens a scripted simulator scene for local testing (`-scenario file.json`, `-pos x,y`, `-title`).
+With `"debug": true` in the config, `http://localhost:6060/debug/state` returns the live FSM state as JSON, the window's WebView2 DevTools listen on `localhost:9222`, and `detection.search` entries (found, score, scale, position; misses sampled 1 in 10) are written to the log. `go run ./cmd/fakegame` opens a scripted simulator scene with the recorded bite sound for local testing (`-scenario file.json`, its `sound` field `bite`, `no_bite` or `off`; `-pos x,y`, `-title`).

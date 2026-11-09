@@ -60,7 +60,6 @@ export interface Settings {
     "biteDetector": string;
     "recordDir": string;
     "recordKeys": boolean;
-    "shareRecordings": boolean;
     "roiSizePx": number;
     "cooldownSeconds": number;
     "maxCastDurationSeconds": number;
@@ -184,41 +183,6 @@ export interface State {
      * show the developer views
      */
     "debug": boolean;
-
-    /**
-     * show the Recorder: debug mode or Share recordings
-     */
-    "recorder": boolean;
-
-    /**
-     * sign-in is configured; without it fishing needs no role
-     */
-    "signIn": boolean;
-
-    /**
-     * signed-in Google email, or ""
-     */
-    "account": string;
-
-    /**
-     * the account's role, "" when nobody gave it one
-     */
-    "role": string;
-
-    /**
-     * reported role permission; fishing does not depend on it
-     */
-    "canFish": boolean;
-
-    /**
-     * the role may upload recordings
-     */
-    "canUpload": boolean;
-
-    /**
-     * recording being uploaded, or ""
-     */
-    "uploading": string;
 
     /**
      * newer release tag on offer, or ""

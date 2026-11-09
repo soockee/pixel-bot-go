@@ -39,78 +39,6 @@ export function setupRecorder(isVisible: () => boolean): { onState: (s: State) =
   let loading = 0; // generation, so a stale load stops
   let error = "";
   let queued = false;
-  let state: State | undefined;
-  const upload = $<HTMLButtonElement>("upload");
-  const reviewDialog = $<HTMLDialogElement>("upload-review");
-  const reviewSend = $<HTMLButtonElement>("upload-review-send");
-  const reviewFrames = $<HTMLInputElement>("upload-review-frames");
-  const reviewAudio = $<HTMLInputElement>("upload-review-audio");
-  const reviewError = $("upload-review-error");
-  const reviewImage = $<HTMLImageElement>("upload-review-image");
-  const reviewSlider = $<HTMLInputElement>("upload-review-slider");
-  const reviewPlayer = $<HTMLAudioElement>("upload-review-player");
-  let reviewFrameNames: string[] = [];
-
-  function previewReviewFrame() {
-    if (!reviewed) return;
-    const frame = reviewFrameNames[Number(reviewSlider.value)];
-    if (!frame) return;
-    reviewImage.src = `/recordings/${encodeURIComponent(reviewed.name)}?frame=${encodeURIComponent(frame)}`;
-    $("upload-review-frame-time").textContent = `${(Number.parseInt(frame, 10) / 1000).toFixed(1)} s`;
-  }
-  let reviewed: { name: string; fingerprint: string; hasInput: boolean } | undefined;
-
-  function renderReviewSend() {
-    reviewSend.disabled = !reviewed || !(reviewed.hasInput || reviewFrames.checked || reviewAudio.checked);
-  }
-
-  async function reviewUpload() {
-    const name = open;
-    reviewed = undefined;
-    reviewError.textContent = "";
-    $("upload-review-preview").hidden = true;
-    reviewPlayer.hidden = true;
-    $("upload-review-summary").textContent = "Checking the local recording…";
-    $("upload-review-warning").textContent = "";
-    $("upload-review-sensitive").replaceChildren();
-    reviewFrames.disabled = reviewAudio.disabled = true;
-    reviewFrames.checked = reviewAudio.checked = false;
-    renderReviewSend();
-    reviewDialog.showModal();
-    try {
-      const review = await Service.ReviewUpload(name);
-      if (!reviewDialog.open || name !== open) return;
-      reviewed = { name, fingerprint: review.fingerprint, hasInput: review.hasInput };
-      $("upload-review-summary").textContent = `${review.frames} screen frames available. ${review.hasInput ? "Pointer activity will be included." : "No input trace is available."} ${review.keyEvents} key events will be excluded.`;
-      $("upload-review-warning").textContent = review.sensitiveCount
-        ? `${review.sensitiveCount} typing bursts may contain passwords or chat. Their contents are hidden. All recorded keys will be discarded from the upload copy.`
-        : "All recorded keys are discarded from the upload copy. Check frames and audio for personal information before including them.";
-      $("upload-review-sensitive").replaceChildren(...(review.sensitive ?? []).map(span =>
-        h("li", `${(span.startUs / 1e6).toFixed(1)}–${(span.endUs / 1e6).toFixed(1)} s · ${span.presses} presses · excluded`, "sensitive-span")
-      ));
-      reviewFrameNames = review.frameNames ?? [];
-      reviewFrames.disabled = reviewFrameNames.length === 0;
-      $("upload-review-preview").hidden = reviewFrames.disabled;
-      reviewSlider.max = String(Math.max(0, reviewFrameNames.length - 1));
-      reviewSlider.value = "0";
-      previewReviewFrame();
-      reviewAudio.disabled = !review.hasAudio;
-      reviewPlayer.hidden = !review.hasAudio;
-      if (review.hasAudio) reviewPlayer.src = `/recordings/${encodeURIComponent(name)}?audio=1`;
-      renderReviewSend();
-    } catch (e) {
-      if (reviewDialog.open) reviewError.textContent = String(e);
-    }
-  }
-
-  // Keep upload out of the way unless this account may upload recordings.
-  function renderUpload() {
-    upload.hidden = !open || open === live || !state || !state.canUpload;
-    if (!state) return;
-    upload.disabled = !state.canUpload || state.uploading !== "";
-    upload.textContent = state.uploading === open ? "Uploading…" : "Review upload";
-    upload.title = "Review this recording before uploading";
-  }
 
   async function refreshList() {
     try {
@@ -137,7 +65,6 @@ export function setupRecorder(isVisible: () => boolean): { onState: (s: State) =
 
   async function select(name: string) {
     open = name;
-    renderUpload();
     trace = new Trace();
     offset = 0;
     error = "";
@@ -235,28 +162,6 @@ export function setupRecorder(isVisible: () => boolean): { onState: (s: State) =
   }
 
   record.addEventListener("click", () => void Service.ToggleRecord());
-  upload.addEventListener("click", () => void reviewUpload());
-  reviewSlider.addEventListener("input", previewReviewFrame);
-  reviewDialog.addEventListener("close", () => {
-    reviewPlayer.pause();
-    reviewPlayer.removeAttribute("src");
-    reviewPlayer.load();
-    reviewImage.removeAttribute("src");
-  });
-  reviewFrames.addEventListener("change", renderReviewSend);
-  reviewAudio.addEventListener("change", renderReviewSend);
-  reviewSend.addEventListener("click", () => {
-    const approved = reviewed;
-    if (!approved) return;
-    const frames = reviewFrames.checked;
-    const audio = reviewAudio.checked;
-    reviewed = undefined;
-    reviewDialog.close();
-    void Service.Upload(approved.name, approved.fingerprint, frames, audio).catch(e => {
-      error = String(e);
-      request();
-    });
-  });
   $("refresh-recordings").addEventListener("click", () => void refreshList());
   for (const input of Object.values(layers)) input.addEventListener("change", request);
   const resize = new ResizeObserver(request);
@@ -269,7 +174,6 @@ export function setupRecorder(isVisible: () => boolean): { onState: (s: State) =
 
   return {
     onState(s) {
-      state = s;
       record.textContent = s.recording ? "Stop recording" : "Record";
       record.classList.toggle("primary", !s.recording);
       record.classList.toggle("stop", s.recording);
@@ -285,7 +189,6 @@ export function setupRecorder(isVisible: () => boolean): { onState: (s: State) =
           else if (open) void select(open); // reload the finished one with its footer
         });
       }
-      renderUpload();
     },
     shown: request,
   };

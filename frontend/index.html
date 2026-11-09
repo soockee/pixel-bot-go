@@ -18,8 +18,6 @@
     </nav>
     <div class="topbar-end">
       <button class="button" id="update" type="button" hidden></button>
-      <span class="muted small" id="account" hidden></span>
-      <button class="button" id="sign-in" type="button">Sign in with Google</button>
     </div>
   </header>
 
@@ -110,7 +108,6 @@
             <h1 id="trace-title">No recording open</h1>
             <p class="muted" id="trace-status">Record a session or pick one from the list</p>
           </div>
-          <button class="button" id="upload" type="button" hidden>Review upload</button>
         </div>
         <dl class="stats" id="stats"></dl>
         <div class="trace-body" id="trace-body">
@@ -214,28 +211,5 @@
       <span id="dry-run" hidden>Dry run, input is logged only</span>
     </span>
   </footer>
-  <dialog id="upload-review" aria-labelledby="upload-review-title">
-    <form method="dialog">
-      <h2 id="upload-review-title">Review recording upload</h2>
-      <p>Nothing has been sent from this review yet. Earlier uploads are separate.</p>
-      <p id="upload-review-summary"></p>
-      <div id="upload-review-preview" hidden>
-        <img id="upload-review-image" alt="Frame from the recording">
-        <label>Review frame <input type="range" id="upload-review-slider" min="0" value="0">
-          <span id="upload-review-frame-time"></span>
-        </label>
-      </div>
-      <audio id="upload-review-player" controls preload="none" hidden></audio>
-      <p id="upload-review-warning"></p>
-      <ul id="upload-review-sensitive"></ul>
-      <label><input type="checkbox" id="upload-review-frames"> Include screen frames</label>
-      <label><input type="checkbox" id="upload-review-audio"> Include game audio</label>
-      <p id="upload-review-error" role="alert"></p>
-      <div class="upload-review-actions">
-        <button class="button" value="cancel">Cancel</button>
-        <button class="button primary" id="upload-review-send" type="button">Upload reviewed copy</button>
-      </div>
-    </form>
-  </dialog>
 </body>
 </html>

@@ -2,44 +2,9 @@ package detect
 
 import (
 	"image"
-	"log/slog"
 	"slices"
 	"time"
 )
-
-// MotionBiteDetector fires on the first bite centreMotion sees.
-// Not safe for concurrent use; call Feed from a single goroutine.
-type MotionBiteDetector struct {
-	logger *slog.Logger
-	motion centreMotion
-	fired  bool
-}
-
-// NewMotionBiteDetector returns a detector. A nil logger discards logs.
-func NewMotionBiteDetector(logger *slog.Logger) *MotionBiteDetector {
-	if logger == nil {
-		logger = slog.New(slog.DiscardHandler)
-	}
-	return &MotionBiteDetector{logger: logger}
-}
-
-// Reset clears the state for a new cast.
-func (b *MotionBiteDetector) Reset() { b.motion, b.fired = centreMotion{}, false }
-
-// Feed processes one frame of the watched box sampled at time t and returns
-// true once, when a bite is detected.
-func (b *MotionBiteDetector) Feed(frame *image.RGBA, t time.Time) bool {
-	if b.fired {
-		return false
-	}
-	m, hit := b.motion.observe(frame, t)
-	if hit {
-		b.fired = true
-		b.logger.Info("bite detected", "detector", "motion", "change", m.change, "around", m.around,
-			"threshold", m.threshold, "box_w", b.motion.size.X, "box_h", b.motion.size.Y)
-	}
-	return hit
-}
 
 // centreMotion watches the centre of the watched box, where the addon's
 // brackets put the bobber. It counts the centre's pixels that changed strongly

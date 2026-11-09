@@ -13,9 +13,6 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
-import * as cloud$0 from "../../internal/cloud/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
 import * as recorder$0 from "../../internal/recorder/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -104,13 +101,6 @@ export function ReleaseNotes(): $CancellablePromise<void> {
 }
 
 /**
- * ReviewUpload inspects the local recording before any upload request.
- */
-export function ReviewUpload(name: string): $CancellablePromise<cloud$0.RecordingReview> {
-    return $Call.ByID(1323622466, name);
-}
-
-/**
  * SaveSettings validates and saves settings, and returns the values as saved,
  * clamped to safe ranges. Settings cannot change during a run.
  */
@@ -140,20 +130,6 @@ export function Settings(): $CancellablePromise<$models.SettingsForm> {
 }
 
 /**
- * SignIn signs in with Google in the browser. It returns once signed in.
- */
-export function SignIn(): $CancellablePromise<void> {
-    return $Call.ByID(2511847789);
-}
-
-/**
- * SignOut forgets the signed-in account.
- */
-export function SignOut(): $CancellablePromise<void> {
-    return $Call.ByID(2484931158);
-}
-
-/**
  * State returns the current state; later changes arrive as StateEvent.
  */
 export function State(): $CancellablePromise<$models.State> {
@@ -179,13 +155,6 @@ export function ToggleRecord(): $CancellablePromise<void> {
  */
 export function Update(): $CancellablePromise<void> {
     return $Call.ByID(1125825238);
-}
-
-/**
- * Upload sends a key-free reviewed copy with the approved media.
- */
-export function Upload(name: string, fingerprint: string, frames: boolean, audio: boolean): $CancellablePromise<void> {
-    return $Call.ByID(1993239178, name, fingerprint, frames, audio);
 }
 
 /**

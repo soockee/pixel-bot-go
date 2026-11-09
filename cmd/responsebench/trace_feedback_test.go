@@ -161,7 +161,7 @@ func TestFakeGameReplayFeedsDryRunAttemptsToScorer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const casts, quietFrames, splashFrames = 24, 40, 3 // 2 s of quiet frames: the detector ignores the landing
+	const casts, quietFrames, splashFrames = 24, 70, 3 // 3.5 s of quiet frames: a silent game's splash counts after 3 s
 	const frameInterval, settle = 50 * time.Millisecond, 350 * time.Millisecond
 	duration := casts * ((quietFrames+splashFrames)*frameInterval + settle)
 	observer := traceobserver.New(model, duration.Milliseconds())
@@ -203,7 +203,7 @@ func TestFakeGameReplayFeedsDryRunAttemptsToScorer(t *testing.T) {
 			},
 		})
 		defer fsm.Close()
-		bite := detect.NewMotionBiteDetector(nil)
+		bite := detect.NewSplashSoundDetector(nil)
 		feed := func(frame *image.RGBA) {
 			if bite.Feed(frame, time.Now()) {
 				fsm.EventFishBite()

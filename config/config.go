@@ -84,16 +84,6 @@ type Config struct {
 	RecordDir string `json:"record_dir"`
 	// RecordKeys records keys in the selected window as well as the mouse.
 	RecordKeys bool `json:"record_keys"`
-	// ShareRecordings shows the Recorder, so a person can record sessions and
-	// upload them. Off by default; debug mode shows the Recorder too.
-	ShareRecordings bool `json:"share_recordings"`
-	// CloudURL is the vrl-recordings upload service, and OAuthClientID and
-	// OAuthClientSecret its Desktop OAuth client (not confidential for
-	// installed apps). Empty values fall back to the ones release builds carry
-	// (internal/cloud); without either, sign-in is off.
-	CloudURL          string `json:"cloud_url"`
-	OAuthClientID     string `json:"oauth_client_id"`
-	OAuthClientSecret string `json:"oauth_client_secret"`
 
 	// Bite detection configuration (only actively used fields retained).
 	ROISizePx int `json:"roi_size_px"` // square ROI side length in pixels
@@ -147,9 +137,6 @@ func DefaultConfig() *Config {
 		OverlayY:               0.01,
 	}
 }
-
-// RecorderShown reports whether the window offers the Recorder.
-func (c *Config) RecorderShown() bool { return c.Debug || c.ShareRecordings }
 
 // Validate clamps/normalizes values to safe ranges.
 func (c *Config) Validate() error {
@@ -209,7 +196,7 @@ func (c *Config) Validate() error {
 	if c.Locator == "" {
 		c.Locator = d.Locator
 	}
-	if c.BiteDetector == "" {
+	if c.BiteDetector == "" || slices.Contains([]string{"motion", "splash", "histogram"}, c.BiteDetector) { // removed detectors
 		c.BiteDetector = d.BiteDetector
 	}
 	if c.RecordDir == "" {

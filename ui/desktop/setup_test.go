@@ -31,8 +31,6 @@ func TestSetupSteps(t *testing.T) {
 		{"addon outdated", State{GameFound: true, Addon: "outdated"}, false, 2, "Update addon", "apply your keys"},
 		{"a current addon needs no key choice", ready, true, 1, "", "puts Fishing on this key"},
 		{"everything in place", ready, true, 2, "", "up to date"},
-		{"sign-in not required", withSignIn(ready, "", false), true, 0, "", ""},
-		{"account role not required", withSignIn(ready, "a@b.c", false), true, 0, "", ""},
 		{"a dry run needs none of it", State{DryRun: true}, true, 0, "", ""},
 	}
 	for _, tc := range cases {
@@ -46,18 +44,6 @@ func TestSetupSteps(t *testing.T) {
 				t.Errorf("step %d = %+v, want action %q and detail containing %q", tc.step, got, tc.wantAction, tc.wantDetail)
 			}
 		})
-	}
-}
-
-func withSignIn(s State, account string, canFish bool) State {
-	s.SignIn, s.Account, s.CanFish = true, account, canFish
-	return s
-}
-
-func TestSetupDoesNotRequireAnAccount(t *testing.T) {
-	steps, done := setupSteps(State{GameFound: true, Addon: "current"})
-	if !done || len(steps) != setupSlots {
-		t.Fatalf("setup must be complete without sign-in: %+v, done %v", steps, done)
 	}
 }
 

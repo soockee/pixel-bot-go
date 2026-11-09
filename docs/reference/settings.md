@@ -29,7 +29,6 @@ order: 1
 | Move overlay | Top centre | A button, not a setting you type: drag the pill that shows a run over the game, then click **Done** to keep its place. See [Change keys and limits](../how-to/settings.md#move-the-overlay). |
 | Theme | Graphite | The window's look, words, icon and catch sound: Graphite, Tavern Ledger, Arcane Grimoire, Frostwater, Felfire Forge or Tidecaller. |
 | Theme sounds | on | Plays the theme's sound on each catch. Kept on this computer only. |
-| Share recordings | off | Shows the Recorder tab, to record yourself fishing and send it in. See [Record and share a session](../how-to/share-recordings.md). |
 
 With **Change spot** on, Go Fish moves after 45 to 55 catches. When Go Fish
 owns the cursor (the Right click reel method, or any method with an ESP32), it
@@ -41,12 +40,5 @@ To use **Target passing player**, click it and press a spare key, update
 Bobber Marker, and type `/reload` in the game. The addon turns on friendly soft
 targeting and watches for a friendly player in range while you fish. Click
 **Clear**, update Bobber Marker and reload to turn it off again.
-
-With **Share recordings** on, Settings also shows:
-
-| Setting | Default | What it does |
-| --- | --- | --- |
-| Recording folder | datasets | Where new recordings are saved, next to Go Fish. |
-| Record keys | off | Keep a local key trace alongside mouse activity. Reviewed uploads exclude key events. |
 
 To go back to all the defaults, close Go Fish and delete `pixle_bot_config.json` next to it.

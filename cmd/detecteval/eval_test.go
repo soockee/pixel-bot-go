@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -12,15 +13,17 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/soocke/pixel-bot-go/assets"
+	"github.com/soocke/pixel-bot-go/domain/capture"
 	"github.com/soocke/pixel-bot-go/domain/detect"
 	"github.com/soocke/pixel-bot-go/internal/dataset"
 	"github.com/soocke/pixel-bot-go/internal/fakegame"
 )
 
 // writeFakeDataset records two casts of the fake game, 100 ms per frame: one
-// with a bite at 2000 ms, after the bobber has landed, and one without, then a
+// with a bite at 3500 ms and its sound 300 ms later, and one without, then a
 // span with no bobber.
 func writeFakeDataset(t *testing.T) string {
 	t.Helper()
@@ -43,27 +46,48 @@ func writeFakeDataset(t *testing.T) string {
 			t.Fatal(err)
 		}
 	}
-	for ms := 0; ms <= 2400; ms += 100 {
+	for ms := 0; ms <= 4000; ms += 100 {
 		phase := fakegame.PhaseBobber
-		if ms >= 2000 {
+		if ms >= 3500 {
 			phase = fakegame.PhaseSplash
 		}
 		write(ms, phase)
 	}
-	for ms := 3000; ms <= 3500; ms += 100 {
+	for ms := 4500; ms <= 5000; ms += 100 {
 		write(ms, fakegame.PhaseBobber)
 	}
-	for ms := 4000; ms <= 4300; ms += 100 {
+	for ms := 5500; ms <= 5800; ms += 100 {
 		write(ms, fakegame.PhaseEmpty)
 	}
+	// Quiet game sound with the bite sound 300 ms after the splash.
+	audio, err := dataset.CreateAudio(dir, time.Unix(0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for ms := 0; ms < 5800; ms += 10 {
+		amplitude := int16(5)
+		if ms >= 3800 && ms < 4100 {
+			amplitude = 200
+		}
+		pcm := make([]byte, capture.AudioRate/100*capture.AudioFrameBytes)
+		for i := 0; i < len(pcm); i += 2 {
+			binary.LittleEndian.PutUint16(pcm[i:], uint16(amplitude))
+		}
+		if err := audio.Write(pcm, time.UnixMilli(int64(ms))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := audio.Close(); err != nil {
+		t.Fatal(err)
+	}
 	b := r.BobberRect()
-	biteMS := int64(2000)
+	biteMS := int64(3500)
 	labels, err := json.Marshal(dataset.Labels{
 		Casts: []dataset.Cast{
-			{Span: dataset.Span{StartMS: 0, EndMS: 2400}, Bobber: dataset.Rect{X: b.Min.X, Y: b.Min.Y, W: b.Dx(), H: b.Dy()}, BiteMS: &biteMS},
-			{Span: dataset.Span{StartMS: 3000, EndMS: 3500}, Bobber: dataset.Rect{X: b.Min.X, Y: b.Min.Y, W: b.Dx(), H: b.Dy()}},
+			{Span: dataset.Span{StartMS: 0, EndMS: 4000}, Bobber: dataset.Rect{X: b.Min.X, Y: b.Min.Y, W: b.Dx(), H: b.Dy()}, BiteMS: &biteMS},
+			{Span: dataset.Span{StartMS: 4500, EndMS: 5000}, Bobber: dataset.Rect{X: b.Min.X, Y: b.Min.Y, W: b.Dx(), H: b.Dy()}},
 		},
-		Empty: []dataset.Span{{StartMS: 4000, EndMS: 4300}},
+		Empty: []dataset.Span{{StartMS: 5500, EndMS: 5800}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -98,9 +122,9 @@ func TestCompareRunsEveryTechniqueAndRepeats(t *testing.T) {
 			t.Errorf("locator %s: got %+v, want %+v", name, got, want)
 		}
 	}
-	want := BiteCounts{Casts: 2, BiteCasts: 1, BitesCaught: 1, BiteLatenciesMS: []int64{0}}
-	if got := first.Bites["motion"]; !reflect.DeepEqual(got, want) {
-		t.Errorf("motion: got %+v, want %+v", got, want)
+	want := BiteCounts{Casts: 2, BiteCasts: 1, BitesCaught: 1, BiteLatenciesMS: []int64{320}}
+	if got := first.Bites["splash_sound"]; !reflect.DeepEqual(got, want) {
+		t.Errorf("splash_sound: got %+v, want %+v", got, want)
 	}
 	if second := evaluate(t, "all", "all", dir); !reflect.DeepEqual(first, second) {
 		t.Errorf("runs differ:\n%+v\n%+v", first, second)
@@ -109,11 +133,11 @@ func TestCompareRunsEveryTechniqueAndRepeats(t *testing.T) {
 
 func TestDatasetsAddUp(t *testing.T) {
 	dir := writeFakeDataset(t)
-	got := evaluate(t, "marker", "motion", dir, dir)
+	got := evaluate(t, "marker", "splash_sound", dir, dir)
 	if c := got.Locators["marker"]; c.Casts != 4 || c.EmptyFrames != 8 {
 		t.Errorf("locator counts = %+v", c)
 	}
-	if c := got.Bites["motion"]; c.BiteCasts != 2 || c.BitesCaught != 2 {
+	if c := got.Bites["splash_sound"]; c.BiteCasts != 2 || c.BitesCaught != 2 {
 		t.Errorf("bite counts = %+v", c)
 	}
 }
@@ -123,7 +147,7 @@ func TestPrintedReportHasOneColumnPerTechnique(t *testing.T) {
 	if err := run("", "all", "all", false, []string{writeFakeDataset(t)}, &out); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"marker", "ncc", "motion", "Bobber found per cast", ">= 98%", "100.0%", "Search time p95"} {
+	for _, want := range []string{"marker", "ncc", "splash_sound", "Bobber found per cast", ">= 98%", "100.0%", "Search time p95"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output lacks %q:\n%s", want, out.String())
 		}
@@ -276,14 +300,14 @@ func TestExportWritesCropsAndAnIndex(t *testing.T) {
 		if cfg.Width != row.Box.W || cfg.Height != row.Box.H {
 			t.Errorf("%s is %dx%d, box is %+v", row.File, cfg.Width, cfg.Height, row.Box)
 		}
-		if row.Cast == 0 && (row.BiteMS == nil || *row.BiteMS != 2000 || row.ReelMS != 2400) {
+		if row.Cast == 0 && (row.BiteMS == nil || *row.BiteMS != 3500 || row.ReelMS != 4000) {
 			t.Errorf("row = %+v", row)
 		}
 	}
-	if rows != 46 { // the second cast's landing window reaches back over the first
-		t.Errorf("rows = %d, want 46", rows)
+	if rows != 63 { // the second cast's landing window reaches back over the first
+		t.Errorf("rows = %d, want 63", rows)
 	}
-	if !strings.Contains(status.String(), "Exported 46 crops") {
+	if !strings.Contains(status.String(), "Exported 63 crops") {
 		t.Errorf("status = %q", status.String())
 	}
 }

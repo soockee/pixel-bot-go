@@ -18,7 +18,6 @@ import (
 	"github.com/soocke/pixel-bot-go/domain/action"
 	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/frontend"
-	"github.com/soocke/pixel-bot-go/internal/cloud"
 	"github.com/soocke/pixel-bot-go/internal/esp32"
 	"github.com/soocke/pixel-bot-go/internal/update"
 	"github.com/soocke/pixel-bot-go/ui/desktop"
@@ -44,8 +43,6 @@ type app struct {
 	overlayReady    bool             // passThrough set the overlay's styles; used on the main thread
 	pillMu          sync.Mutex       // guards pill, which the main thread writes and the loop reads
 	pill            image.Rectangle  // the overlay window while it is moved, wherever the person left it
-	cloud           *cloud.Client    // nil while sign-in is not configured
-	session         *cloud.Session   // the signed-in account, nil when signed out; used on the loop
 	updates         *update.Client
 	release         update.Release // the latest release found, zero before the first check; used on the loop
 	restart         string         // the executable to start once the app quit, after an update
@@ -59,7 +56,6 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 	a := &app{logger: logger}
 	a.container = BuildContainer(cfg, logger, trace, func(s desktop.State) { a.wails.Event.Emit(desktop.StateEvent, s) })
 	c := a.container
-	a.cloud = a.newCloud()
 	a.updates = update.New()
 	a.loop = desktop.NewLoop(a.tick)
 	service := desktop.NewService(a.loop, c.View, desktop.Commands{
@@ -86,9 +82,6 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		},
 		Running:      func() bool { return c.Capture.Enabled() || a.schedule != nil },
 		Exit:         func() { go a.wails.Quit() }, // Quit waits for the loop, which runs this
-		SignIn:       a.signIn,
-		SignOut:      a.signOut,
-		Upload:       a.upload,
 		Update:       a.installUpdate,
 		CheckUpdate:  a.findUpdate,
 		ReleaseNotes: a.releaseNotes,
@@ -143,12 +136,10 @@ func (a *app) Run() error {
 	c.View.SetInfo(cfg.DryRun, cfg.Debug)
 	c.View.SetTheme(cfg.Theme)
 	c.View.SetOverlay(cfg.OverlayX, cfg.OverlayY, false)
-	c.View.SetRecorder(cfg.RecorderShown())
 	c.View.SetAddonVersion(addon.Version())
 	a.checkAddon()
 	c.View.SetStatus("Ready")
 	c.View.SetVersion(update.Version)
-	a.restoreAccount()
 	a.checkUpdate()
 
 	ctx, cancel := context.WithCancel(context.Background())
