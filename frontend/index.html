@@ -78,6 +78,13 @@
             <div class="meter-head"><span>Casts without a bite</span><span class="mono" id="failed-text"></span></div>
             <div class="bar"><i id="failed-bar"></i></div>
           </div>
+          <div class="thanks" id="support-card" hidden>
+            <p id="support-text"></p>
+            <div class="thanks-actions">
+              <button class="button primary" id="support-open" type="button">Buy me a coffee</button>
+              <button class="button quiet" id="support-dismiss" type="button">Not now</button>
+            </div>
+          </div>
         </div>
 
         <div class="panel watch" id="watch-panel" hidden>
@@ -208,6 +215,7 @@
   <footer class="statusbar">
     <span id="status" role="status"></span>
     <span class="statusbar-end">
+      <button class="link" id="support-link" type="button" title="Opens buymeacoffee.com/socke in your browser">Buy me a coffee</button>
       <span class="muted" id="version"></span>
       <span id="dry-run" hidden>Dry run, input is logged only</span>
     </span>

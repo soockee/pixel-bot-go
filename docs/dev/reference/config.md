@@ -28,6 +28,8 @@ order: 2
 | RecordDir (`record_dir`)    | Folder for new recordings                   | Default `datasets`                     |
 | RecordKeys (`record_keys`)  | Record keys as well as the mouse            | Default true                           |
 | OverlayX / OverlayY (`overlay_x`, `overlay_y`) | Where the overlay pill sits on the game window, each a share of the free space: 0 is the left or top edge, 1 the right or bottom edge | Default 0.5 and 0.01, the top centre; outside 0 to 1 resets to the default. Written by Settings → Overlay → Move overlay (`app/overlay.go`); not a settings form field. The pill is 380 by 44 px in both overlay modes (`app/overlay_place.go`, `frontend/src/overlay.css`) |
+| CatchesTotal (`catches_total`) | Catches on this computer, dry runs excluded | Counted each tick, saved when a run ends (`app/support.go`); shown on the thank-you card. Not a settings form field |
+| SupportAskedAt / SupportOpenedAt (`support_asked_at`, `support_opened_at`) | When the thank-you card last showed and when the coffee page was last opened, Unix seconds, 0 for never | The card shows after a run of 10 or more catches once 20 are counted, at most every 14 days, and not for 90 days after the page was opened (`ui/desktop/support.go`). Not settings form fields |
 | Theme (`theme`)             | Window look, one of `config.Themes`: `graphite`, `tavern`, `arcane`, `frost`, `fel`, `tide` | Default `graphite`; unknown values fall back to it. Replaces `dark_mode`. Settings → Theme |
 
 Set the Cast key in the setup wizard or under **Settings → Fishing keys**.

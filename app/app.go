@@ -49,6 +49,8 @@ type app struct {
 	schedule        *playSchedule
 	recoveryAllowed bool
 	scheduleStop    atomic.Bool
+	reelsSeen       int  // catches of the current run already counted; used on the loop
+	wasRunning      bool // a run went on at the last tick; used on the loop
 }
 
 // NewApp builds the components and the window.
@@ -86,6 +88,7 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		CheckUpdate:   a.findUpdate,
 		ReleaseNotes:  a.releaseNotes,
 		ReportProblem: a.reportProblem,
+		OpenURL:       func(url string) { a.wails.Browser.OpenURL(url) },
 		CheckAddon:    a.checkAddon,
 		InstallAddon:  a.installAddon,
 		MoveOverlay:   a.setOverlayMove,
@@ -191,6 +194,7 @@ func (a *app) tick() {
 	}
 	a.followGame()
 	run := c.FSM.Stats()
+	a.countCatches(run.Reels, c.View.State().Running)
 	c.View.SetRun(run.Casts, run.Reels, run.ReelAttempts, run.ReelInputs, run.FailedInRow, c.Config.MaxFailedCasts, c.Config.MaxSessionMinutes)
 	c.View.Flush()
 }

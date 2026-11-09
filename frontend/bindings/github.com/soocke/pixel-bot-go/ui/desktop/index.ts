@@ -13,5 +13,6 @@ export type {
     Settings,
     SettingsForm,
     SetupStep,
-    State
+    State,
+    Support
 } from "./models.js";

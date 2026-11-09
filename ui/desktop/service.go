@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
+	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/detect"
@@ -26,8 +27,10 @@ type Commands struct {
 	ReleaseNotes func()
 	// ReportProblem opens a new GitHub issue, filled in, in the browser.
 	ReportProblem func()
-	CheckAddon    func()
-	InstallAddon  func() error
+	// OpenURL opens a page in the browser.
+	OpenURL      func(url string)
+	CheckAddon   func()
+	InstallAddon func() error
 	// SetTheme shows the theme's icon on the window and the taskbar.
 	SetTheme func(theme string)
 	// MoveOverlay starts or ends placing the overlay; ending saves its place.
@@ -247,3 +250,19 @@ func pickWindow(current string, picked bool) string {
 	}
 	return defaultWindow
 }
+
+// OpenSupport opens the coffee page in the browser, hides the thank-you card
+// and remembers when, so the card waits a long while before it asks again.
+func (s *Service) OpenSupport() {
+	_ = s.do(func() {
+		s.cmds.OpenURL(SupportURL)
+		s.view.SetSupport(Support{})
+		s.cfg.SupportOpenedAt = time.Now().Unix()
+		if err := s.cfg.Save(s.cfgPath); err != nil {
+			s.logger.Error("persist support click failed", "error", err)
+		}
+	})
+}
+
+// DismissSupport hides the thank-you card ("Not now").
+func (s *Service) DismissSupport() { _ = s.do(func() { s.view.SetSupport(Support{}) }) }

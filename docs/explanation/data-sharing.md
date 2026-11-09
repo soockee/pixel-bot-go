@@ -13,6 +13,7 @@ Everything about your fishing. The pictures Go Fish looks at, the sound it liste
 | To | When | What |
 | --- | --- | --- |
 | GitHub | At start and every hour | A request for the newest version number. Nothing about you. |
+| Buy Me a Coffee, in your browser | Only when you click **Buy me a coffee** | Nothing: Go Fish just opens buymeacoffee.com/socke. What you do there is between you and Buy Me a Coffee. |
 | GitHub, in your browser | Only when you click **Report a problem** and then submit the issue | What you write, plus what Go Fish filled in: its version, your Windows version, the game window's title, your settings and its recent warnings. You see all of it before you submit, and the issue is public. |
 
 When you click **Update**, Go Fish downloads the new version from GitHub. See [Update Go Fish](../how-to/update.md).

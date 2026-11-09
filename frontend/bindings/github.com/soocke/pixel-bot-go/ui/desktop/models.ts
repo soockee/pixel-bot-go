@@ -273,4 +273,29 @@ export interface State {
      * the running build's release tag, "dev" for local builds
      */
     "version": string;
+
+    /**
+     * the thank-you card after a run that saved time
+     */
+    "support": Support;
+}
+
+/**
+ * Support is the thank-you card in the Fishing view.
+ */
+export interface Support {
+    /**
+     * show the card
+     */
+    "ask": boolean;
+
+    /**
+     * catches in the run that just ended
+     */
+    "runCatches": number;
+
+    /**
+     * catches on this computer so far
+     */
+    "catches": number;
 }

@@ -42,6 +42,10 @@ The player guide follows [Diataxis](https://diataxis.fr/):
 * [Reference](https://soockee.github.io/pixel-bot-go/#reference): settings, the Fishing tab, addon commands, files.
 * [Understand](https://soockee.github.io/pixel-bot-go/#explanation): how Go Fish works, and [what Go Fish sends](https://soockee.github.io/pixel-bot-go/explanation/data-sharing/).
 
+## Support
+
+Go Fish is free and made in spare time. If it saves you time, you can [buy me a coffee](https://buymeacoffee.com/socke).
+
 ## License
 
 MIT, see [LICENSE](LICENSE).

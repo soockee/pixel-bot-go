@@ -107,6 +107,13 @@ type Config struct {
 	// the window changes size, and no place leaves the pill outside the window.
 	OverlayX float64 `json:"overlay_x"`
 	OverlayY float64 `json:"overlay_y"`
+	// CatchesTotal counts every catch on this computer, for the thank-you card.
+	// SupportAskedAt and SupportOpenedAt (Unix seconds, 0 for never) are when
+	// the card last showed and when the person last opened the coffee page;
+	// they space out the card (ui/desktop/support.go). Not on the Settings tab.
+	CatchesTotal    int   `json:"catches_total"`
+	SupportAskedAt  int64 `json:"support_asked_at"`
+	SupportOpenedAt int64 `json:"support_opened_at"`
 }
 
 // Themes are the window's looks; the first is the default.
