@@ -8,12 +8,9 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-)
 
-// BotLogFile holds what the bot did while a recording ran: one JSON object
-// per log record, with "ms" since the recording started, the clock of its
-// frame names and input trace.
-const BotLogFile = "bot.jsonl"
+	"github.com/soocke/pixel-bot-go/internal/dataset"
+)
 
 // BotLog is a slog.Handler that passes every record on and, while a recording
 // runs, also writes it to the recording's bot.jsonl, so a recording of a bot
@@ -93,7 +90,7 @@ func (s *botSink) write(r slog.Record) {
 		if _, err := os.Stat(s.dir); err != nil {
 			return // the recording has not created its folder yet
 		}
-		f, err := os.OpenFile(filepath.Join(s.dir, BotLogFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		f, err := os.OpenFile(filepath.Join(s.dir, dataset.BotLogFile), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {
 			s.dir = "" // give up for this recording rather than retry on every record
 			return

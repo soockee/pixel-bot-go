@@ -35,6 +35,7 @@ func main() {
 	biteNames := flag.String("bite", "all", "bite detectors to compare: all, or some of "+strings.Join(detect.BiteDetectorNames(), ","))
 	asJSON := flag.Bool("json", false, "print the counts as JSON, without timings")
 	label := flag.String("label", "", "write labels.json for this recorded session and exit")
+	labelBot := flag.String("label-bot", "", "write labels.json for this recording of a bot run, from the outcomes in its bot.jsonl, and exit")
 	cast := flag.String("cast", "mouse:x1", "with -label: input that casts, for example mouse:x1 or key:F3")
 	reel := flag.String("reel", "mouse:right", "with -label: input that reels")
 	reaction := flag.Int64("reaction", 1200, "with -label: assumed ms from the bite to the reel click")
@@ -45,6 +46,8 @@ func main() {
 	switch {
 	case *label != "":
 		err = writeLabels(*label, dataset.AutoLabelOptions{Cast: *cast, Reel: *reel, ReactionMS: *reaction, BoxPx: *box}, os.Stdout)
+	case *labelBot != "":
+		err = writeBotLabels(*labelBot, *box, os.Stdout)
 	case *exportDir != "":
 		var cfg *config.Config
 		if cfg, err = loadConfig(*configPath); err == nil {
@@ -223,4 +226,26 @@ func latency(c BiteCounts) string {
 		return "n/a"
 	}
 	return fmt.Sprintf("%d ms", percentile95(c.BiteLatenciesMS))
+}
+
+// writeBotLabels labels a recording of a bot run from the outcomes in its bot.jsonl.
+func writeBotLabels(dir string, box int, out io.Writer) error {
+	labels, skipped, err := dataset.BotLabel(dir, box)
+	if err != nil {
+		return err
+	}
+	if err := dataset.WriteLabels(dir, labels); err != nil {
+		return err
+	}
+	bites := 0
+	for _, c := range labels.Casts {
+		if c.BiteMS != nil {
+			bites++
+		}
+	}
+	fmt.Fprintf(out, "Labelled %d casts from the bot's outcomes: %d with a bite, %d with none.\n", len(labels.Casts), bites, len(labels.Casts)-bites)
+	for _, reason := range skipped {
+		fmt.Fprintln(out, "Skipped:", reason)
+	}
+	return nil
 }

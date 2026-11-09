@@ -309,3 +309,101 @@ func TestSplashSoundHearsASoundThatStartsDuringTheSplash(t *testing.T) {
 		})
 	}
 }
+
+// pond is a w by h box of water with a little noise on every frame, the way
+// the game's water shimmers. splash brightens a size by size patch at the
+// centre, as a far bobber's splash does; shift adds to every pixel, as a camera
+// turn or a change of light does.
+func pond(rng *rand.Rand, w, h, splash int, shift byte) *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		for x := range w {
+			v := 60 + byte(rng.IntN(4)) + shift
+			if splash > 0 && abs(x-w/2) < splash/2 && abs(y-h/2) < splash/2 {
+				v = 200
+			}
+			i := img.PixOffset(x, y)
+			img.Pix[i], img.Pix[i+1], img.Pix[i+2], img.Pix[i+3] = v, v+10, v+20, 255
+		}
+	}
+	return img
+}
+
+// watch feeds one frame every 33 ms for the given time, the app's frame rate,
+// and returns when the detector fired.
+func watch(d BiteDetector, length time.Duration, frame func(at time.Duration) *image.RGBA) (time.Duration, bool) {
+	start := time.Unix(0, 0)
+	for at := time.Duration(0); at < length; at += 33 * time.Millisecond {
+		if d.Feed(frame(at), start.Add(at)) {
+			return at, true
+		}
+	}
+	return 0, false
+}
+
+// With the game's sound off, a splash at the centre is enough.
+func TestSplashSoundWithoutGameSound(t *testing.T) {
+	rng := rand.New(rand.NewPCG(1, 2))
+	at, fired := watch(NewSplashSoundDetector(nil), 7*time.Second, func(at time.Duration) *image.RGBA {
+		if at >= 4*time.Second {
+			return pond(rng, 100, 90, 30, 0)
+		}
+		return pond(rng, 100, 90, 0, 0)
+	})
+	if !fired || at < 4*time.Second || at > 4200*time.Millisecond {
+		t.Fatalf("fired = %v at %v, want the splash at 4s", fired, at)
+	}
+}
+
+// disc returns calm water with a disc of colour c at the centre of the box.
+func disc(c color.RGBA) *image.RGBA {
+	img := water(0, 0, 0)
+	for py := range 90 {
+		for px := range 100 {
+			if (px-50)*(px-50)+(py-45)*(py-45) <= 12*12 {
+				img.SetRGBA(px, py, c)
+			}
+		}
+	}
+	return img
+}
+
+// Only white spray at the bobber is a splash. A pet or a player passing
+// through the box is dark, a spell effect coloured: neither counts, even with
+// a bite sound at the right time.
+func TestSplashSoundNeedsWhiteSprayAtTheBobber(t *testing.T) {
+	tests := []struct {
+		name  string
+		frame *image.RGBA
+		want  bool
+	}{
+		{"white spray", disc(color.RGBA{190, 200, 205, 255}), true},
+		{"a dark pet swimming past", disc(color.RGBA{20, 25, 20, 255}), false},
+		{"a red spell effect", disc(color.RGBA{230, 60, 50, 255}), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := NewSplashSoundDetector(nil)
+			start := time.Unix(0, 0)
+			quiet, loud := tone(5), tone(200)
+			fired := false
+			for at := time.Duration(0); at < 6*time.Second && !fired; at += 10 * time.Millisecond {
+				if at%(100*time.Millisecond) == 0 {
+					frame := water(0, 0, 0)
+					if at >= 4*time.Second && at < 4500*time.Millisecond {
+						frame = tt.frame
+					}
+					fired = d.Feed(frame, start.Add(at))
+				}
+				packet := quiet
+				if at >= 4300*time.Millisecond && at < 4600*time.Millisecond {
+					packet = loud
+				}
+				fired = fired || d.Hear(packet, start.Add(at))
+			}
+			if fired != tt.want {
+				t.Errorf("fired = %v, want %v", fired, tt.want)
+			}
+		})
+	}
+}

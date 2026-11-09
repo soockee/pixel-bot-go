@@ -547,6 +547,10 @@ func (f *FishingFSM) startMonitoring() {
 	f.arm(time.Duration(f.cfg.MaxCastDurationSeconds) * time.Second)
 }
 
+// reelMissOdds is the n of the reel roll: outcomes 0 and 1 of [0, n) miss on
+// purpose, so 2/n of bites, 5%.
+const reelMissOdds = 40
+
 func (f *FishingFSM) startReel() {
 	f.reelDone = nil
 	if !f.coordSet {
@@ -561,7 +565,9 @@ func (f *FishingFSM) startReel() {
 	f.offTargetReel = false
 	aim := image.Pt(f.coordX, f.coordY)
 	if f.actions.ReelRoll != nil {
-		switch f.actions.ReelRoll(60) {
+		// One bite in reelMissOdds is not reeled, one is clicked beside the
+		// bobber: 5% deliberate misses, as a person makes.
+		switch f.actions.ReelRoll(reelMissOdds) {
 		case 0:
 			f.finishMiss("forgot to reel")
 			return

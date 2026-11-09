@@ -17,13 +17,17 @@ import (
 // effects splash without the sound, so neither alone triggers it.
 // Not safe for concurrent use; call Feed and Hear from a single goroutine.
 //
-// A splash is a bright splash at the centre, or a clear change there for the
-// water's own level (centreMotion), which also catches the small splash of a
-// far bobber.
+// A splash is white spray at the centre of the box, where the bobber sits:
+// pixels that turn lighter than a lagging baseline and nearly colourless.
+// Pets, players and the fishing line passing through the box are dark, and
+// spell effects are coloured, so neither counts; a change in brightness or
+// motion alone does not either. On labelled bot and hand-play recordings a
+// bite's spray covers 10 to 40 % of the centre disc, everything else at most
+// about 6 %.
 //
 // Two fallbacks cover games that never play the bite sound. A game that has
 // made no sound at all since the run started, for example with its sound
-// switched off, takes the change at the centre alone as the bite. A game that
+// switched off, takes the splash alone as the bite. A game that
 // makes sound but no bite sound, for example with sound effects off and music
 // on, is recognised after unansweredCasts casts in a row whose splash brought
 // no bite; from then on the splash alone reports the bite. Neither applies
@@ -34,7 +38,6 @@ import (
 type SplashSoundDetector struct {
 	logger     *slog.Logger
 	scene      brightening
-	motion     centreMotion
 	start      time.Time // the first frame since Reset
 	splashFrom time.Time // first frame of the latest splash at the bobber
 	splash     time.Time // its last frame
@@ -50,9 +53,10 @@ type SplashSoundDetector struct {
 
 const (
 	splashSettle    = 3 * time.Second        // landing ripples fade within this time after the lock
-	splashRise      = 35                     // luminance above the baseline that counts as brightened
+	splashRise      = 12                     // luminance above the baseline that counts as spray
 	splashLag       = 500 * time.Millisecond // the baseline takes on lasting changes, such as the landed bobber or a parked cursor
-	splashMinCentre = 0.04                   // share of the centre disc that must brighten
+	splashSpread    = 25                     // at most this spread between colour channels: spray is nearly colourless
+	splashMinCentre = 0.09                   // share of the centre disc that must turn to spray
 )
 
 const (
@@ -101,7 +105,7 @@ func (s *SplashSoundDetector) Reset() {
 }
 
 // Feed takes one frame of the watched box and remembers splashes. Only Hear
-// reports bites.
+// reports bites, unless the game makes no bite sound.
 func (s *SplashSoundDetector) Feed(roi *image.RGBA, t time.Time) bool {
 	if roi == nil || s.fired {
 		return false
@@ -110,30 +114,29 @@ func (s *SplashSoundDetector) Feed(roi *image.RGBA, t time.Time) bool {
 		s.start = t
 	}
 	b, settled := s.scene.measure(roi, t)
-	m, moved := s.motion.observe(roi, t)
-	moved = moved && t.Sub(s.start) >= splashSettle // the same settle as the bright splash
-	bright := settled && b.centreSplash()
-	if !bright && !moved {
+	if !settled || !b.centreSplash() {
 		return false
 	}
 	if s.splash.IsZero() || t.Sub(s.splash) > soundAfterSplash {
 		s.splashFrom = t // a new splash
 	}
 	s.splash = t
-	// Spell effects of other players brighten the whole box, so a bright splash
-	// alone needs at least half of the brightened pixels in the centre.
-	if s.noBiteSound && (moved || 2*b.centre >= b.all) {
+	// Spray of a splash elsewhere in the box, such as another player's bobber,
+	// is no bite of this one: alone, a splash needs half its spray at the centre.
+	if 2*b.centre < b.all {
+		return false
+	}
+	if s.noBiteSound {
 		s.fired = true
-		s.logger.Info("bite detected", "detector", "splash_sound", "without_bite_sound", true,
-			"change", m.change, "centre", b.centre, "brightened", b.all)
+		s.logger.Info("bite detected", "detector", "splash_sound", "without_bite_sound", true, "spray", b.centre, "disc", b.disc)
 		return true
 	}
 	// A silent game: nothing heard this run, and at least SilentFor listened.
-	if !moved || t.Sub(s.start) < SilentFor || s.heardGame || !s.sound.audible.IsZero() {
+	if t.Sub(s.start) < SilentFor || s.heardGame || !s.sound.audible.IsZero() {
 		return false
 	}
 	s.fired = true
-	s.logger.Info("bite detected", "detector", "splash_sound", "without_sound", true, "change", m.change, "threshold", m.threshold)
+	s.logger.Info("bite detected", "detector", "splash_sound", "without_sound", true, "spray", b.centre, "disc", b.disc)
 	return true
 }
 
@@ -259,7 +262,8 @@ type brightening struct {
 	start, last time.Time
 }
 
-// brightened counts pixels that rose by splashRise, in the whole box and in the
+// brightened counts spray: pixels that rose by splashRise and are nearly
+// colourless (channel spread at most splashSpread), in the whole box and in the
 // centre disc where the bobber sits.
 type brightened struct{ all, centre, disc int }
 
@@ -294,7 +298,7 @@ func (s *brightening) measure(roi *image.RGBA, t time.Time) (brightened, bool) {
 			if inDisc {
 				b.disc++
 			}
-			if l-s.base[i] > splashRise {
+			if l-s.base[i] > splashRise && max(p[0], p[1], p[2])-min(p[0], p[1], p[2]) <= splashSpread {
 				b.all++
 				if inDisc {
 					b.centre++

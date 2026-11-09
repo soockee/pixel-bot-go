@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/soocke/pixel-bot-go/internal/dataset"
 )
 
 func TestBotLogWritesWhileARecordingRuns(t *testing.T) {
@@ -27,7 +29,7 @@ func TestBotLogWritesWhileARecordingRuns(t *testing.T) {
 	bot.Stop()
 	logger.Info("after the recording")
 
-	f, err := os.Open(filepath.Join(dir, BotLogFile))
+	f, err := os.Open(filepath.Join(dir, dataset.BotLogFile))
 	if err != nil {
 		t.Fatal(err)
 	}
