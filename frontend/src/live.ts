@@ -33,6 +33,7 @@ export function setupLive(): (state: State) => void {
   let state: State | undefined;
   let shownFrame = 0;
   let shownRoi = 0;
+  let shownScene = 0;
   let stepSince = performance.now();
   let lastFsm = "";
 
@@ -55,19 +56,30 @@ export function setupLive(): (state: State) => void {
     placeLock();
   }
 
-  // While a bobber is watched only its box is captured, so the lock shows that
-  // box live over the last view of the whole window.
+  // While a bobber is watched only the area around it is captured, so the lock
+  // shows that area live over the last view of the whole window, and the frame
+  // zooms in on it. Leaving the watch zooms back out.
   function placeLock() {
-    const box = state?.roiBox;
-    if (!state?.frame || !state.roi || !box?.w) {
+    const box = state?.sceneBox;
+    if (!state?.frame || !state.scene || !box?.w) {
       lock.hidden = true;
+      frame.classList.remove("zoomed");
+      frame.style.transform = "";
       return;
     }
     const scale = frame.clientWidth / state.frameSize.x;
-    lock.style.width = `${box.w * scale}px`;
-    lock.style.height = `${box.h * scale}px`;
-    lock.style.transform = `translate(${box.x * scale}px, ${box.y * scale}px)`;
+    const [x, y, w, hgt] = [box.x * scale, box.y * scale, box.w * scale, box.h * scale];
+    lock.style.width = `${w}px`;
+    lock.style.height = `${hgt}px`;
+    lock.style.transform = `translate(${x}px, ${y}px)`;
     lock.hidden = false;
+    // Scale about the frame's corner, then move the area's centre to the
+    // frame's centre, which the stage centres.
+    const zoom = Math.min((stage.clientWidth * 0.9) / w, (stage.clientHeight * 0.9) / hgt, 8);
+    const tx = frame.clientWidth / 2 - zoom * (x + w / 2);
+    const ty = frame.clientHeight / 2 - zoom * (y + hgt / 2);
+    frame.classList.add("zoomed");
+    frame.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
   }
 
   function meter(id: string, value: number, limit: number, text: string) {
@@ -101,10 +113,8 @@ export function setupLive(): (state: State) => void {
     frame.hidden = !showFrame;
     empty.hidden = showFrame;
     emptyText.textContent = s.running ? "Waiting for the game window" : words.empty;
-    if (s.roi && s.roi !== shownRoi) {
-      shownRoi = s.roi;
-      lockImg.src = roi.src = framesUrl("roi", s.roi);
-    }
+    if (s.roi && s.roi !== shownRoi) roi.src = framesUrl("roi", (shownRoi = s.roi));
+    if (s.scene && s.scene !== shownScene) lockImg.src = framesUrl("scene", (shownScene = s.scene));
     fit();
 
     const fsm = s.running ? s.fsm : "";

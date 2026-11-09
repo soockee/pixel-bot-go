@@ -15,7 +15,7 @@ order: 1
 | **Run** | | |
 | Session length | 60 min | Go Fish stops at the first cast after this time. 5 to 240 minutes. |
 | Casts without a bite | 5 | Go Fish stops after this many casts in a row without a catch. 1 to 20. |
-| Pause after a catch | 8 s | Wait before the next cast. 1 to 60 seconds. |
+| Pause after a catch | Quick | Wait before the next cast. **Quick** casts again after a random 0.4 to 1.2 seconds, like a player; or pick 1 to 60 seconds. The next search ignores the old bobber. |
 | Cast length | 30 s | Cast again when nothing bites within this time. 5 to 180 seconds. |
 | **Between catches** | | |
 | Move the mouse | Off | Now and then after a catch, the cursor drifts a little along a curved path, or the camera turns slightly. |

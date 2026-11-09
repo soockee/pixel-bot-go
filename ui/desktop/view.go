@@ -74,22 +74,28 @@ func (v *View) UpdateCapture(img *image.RGBA) {
 	v.state.Frame, v.state.FrameSize = v.seq, Point{X: size.X, Y: size.Y}
 }
 
-// UpdateDetection shows the live box watched for a bite, at box on the
-// capture, or none when img is nil.
-func (v *View) UpdateDetection(img *image.RGBA, box image.Rectangle) {
+// UpdateDetection shows the live box watched for a bite and the live area
+// around it, each at its box on the capture, or none when its image is nil.
+func (v *View) UpdateDetection(roi *image.RGBA, roiBox image.Rectangle, scene *image.RGBA, sceneBox image.Rectangle) {
+	v.state.ROI, v.state.ROIBox = v.put("roi", roi, roiBox)
+	v.state.Scene, v.state.SceneBox = v.put("scene", scene, sceneBox)
+}
+
+// put stores img as the newest image of name and returns its version and box,
+// or zeros when img is nil.
+func (v *View) put(name string, img *image.RGBA, box image.Rectangle) (int, Rect) {
 	if img == nil {
-		v.state.ROI, v.state.ROIBox = 0, Rect{}
-		return
+		return 0, Rect{}
 	}
-	v.frames.Put("roi", img)
+	v.frames.Put(name, img)
 	v.seq++
-	v.state.ROI, v.state.ROIBox = v.seq, Rect{X: box.Min.X, Y: box.Min.Y, W: box.Dx(), H: box.Dy()}
+	return v.seq, Rect{X: box.Min.X, Y: box.Min.Y, W: box.Dx(), H: box.Dy()}
 }
 
 // PreviewReset clears the previews.
 func (v *View) PreviewReset() {
 	v.frames.Clear()
-	v.state.Frame, v.state.ROI, v.state.ROIBox = 0, 0, Rect{}
+	v.state.Frame, v.state.ROI, v.state.ROIBox, v.state.Scene, v.state.SceneBox = 0, 0, Rect{}, 0, Rect{}
 }
 
 // SetWindow shows the target window title.

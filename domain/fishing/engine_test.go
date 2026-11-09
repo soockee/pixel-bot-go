@@ -87,15 +87,19 @@ func TestEngineReelsWhenTheSceneSplashes(t *testing.T) {
 		if !ok || !image.Pt(x, y).In(bobber) {
 			t.Fatalf("target = (%d,%d) ok=%v, want it inside %v", x, y, ok, bobber)
 		}
-		// Watching captures only the box around the bobber; the preview keeps
-		// the whole window and places the live box on it.
+		// Watching captures only the area around the bobber; the preview keeps
+		// the whole window and places the live area and box on it.
 		time.Sleep(frameInterval)
 		window, _ := frames.Window()
-		if got := *frames.grabbed.Load(); !image.Pt(x, y).In(got) || got.Dx()*got.Dy() > window.Dx()*window.Dy()/20 {
-			t.Fatalf("watching grabbed %v of window %v, want a small box around (%d,%d)", got, window, x, y)
+		if got := *frames.grabbed.Load(); !image.Pt(x, y).In(got) || got.Dx()*got.Dy() > window.Dx()*window.Dy()/2 {
+			t.Fatalf("watching grabbed %v of window %v, want a small area around (%d,%d)", got, window, x, y)
 		}
-		if p := engine.Preview(); p.ROI == nil || p.Frame.Bounds().Size() != window.Size() || !image.Pt(x, y).Sub(window.Min).In(p.ROIBox) {
+		p := engine.Preview()
+		if p.ROI == nil || p.Frame.Bounds().Size() != window.Size() || !image.Pt(x, y).Sub(window.Min).In(p.ROIBox) {
 			t.Fatalf("preview frame %v, ROI box %v; want the window and the box at the bobber", p.Frame.Bounds(), p.ROIBox)
+		}
+		if p.Scene == nil || !p.ROIBox.In(p.SceneBox) || p.Scene.Bounds().Size() != p.SceneBox.Size() {
+			t.Fatalf("scene %v at %v, want a live area around the box %v", p.Scene.Bounds(), p.SceneBox, p.ROIBox)
 		}
 
 		frames.set(fakegame.PhaseSplash)

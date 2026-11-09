@@ -16,7 +16,7 @@ export function onState(fn: (state: State) => void): void {
 }
 
 /** framesUrl is the newest preview image of one stream. */
-export const framesUrl = (name: "capture" | "roi", version: number) => `/frames/${name}?v=${version}`;
+export const framesUrl = (name: "capture" | "roi" | "scene", version: number) => `/frames/${name}?v=${version}`;
 
 /** recordingFrameUrl is the newest frame of a recording. */
 export const recordingFrameUrl = (name: string) => `/recordings/${encodeURIComponent(name)}?t=${Date.now()}`;

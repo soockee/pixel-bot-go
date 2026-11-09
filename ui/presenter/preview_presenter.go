@@ -18,7 +18,9 @@ type PreviewSource interface {
 // PreviewView shows the capture and the region around the bobber.
 type PreviewView interface {
 	UpdateCapture(img *image.RGBA)
-	UpdateDetection(img *image.RGBA, box image.Rectangle) // nil img: no box
+	// UpdateDetection shows the box watched for a bite and the live area around
+	// it, each at its place on the capture; nil images: none.
+	UpdateDetection(roi *image.RGBA, roiBox image.Rectangle, scene *image.RGBA, sceneBox image.Rectangle)
 }
 
 // PreviewPresenter copies pipeline images to the view at a low rate.
@@ -49,5 +51,5 @@ func (p *PreviewPresenter) Tick(now time.Time) {
 		p.frame = preview.Frame
 		p.view.UpdateCapture(preview.Frame)
 	}
-	p.view.UpdateDetection(preview.ROI, preview.ROIBox)
+	p.view.UpdateDetection(preview.ROI, preview.ROIBox, preview.Scene, preview.SceneBox)
 }

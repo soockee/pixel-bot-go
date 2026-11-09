@@ -53,13 +53,25 @@ type soundPacket struct {
 	at  time.Time
 }
 
-// Preview is the latest image for display. While a bobber is watched only its
-// box is captured, so Frame is the last view of the whole window and ROI, at
-// ROIBox in Frame's pixels, is live. ROI is nil outside monitoring.
+// Preview is the latest image for display. While a bobber is watched only the
+// area around it is captured, so Frame is the last view of the whole window,
+// Scene, at SceneBox in Frame's pixels, is that area live, and ROI, at ROIBox,
+// is the part the bite detector watches. Scene and ROI are nil outside
+// monitoring.
 type Preview struct {
-	Frame  *image.RGBA
-	ROI    *image.RGBA
-	ROIBox image.Rectangle
+	Frame    *image.RGBA
+	ROI      *image.RGBA
+	ROIBox   image.Rectangle
+	Scene    *image.RGBA
+	SceneBox image.Rectangle
+}
+
+// sceneArea is the area captured while the bobber in box is watched: the box
+// with water around it, wider than tall like the preview, inside window. A
+// capture costs about the same whatever its size.
+func sceneArea(box, window image.Rectangle) image.Rectangle {
+	m := max(box.Dx(), box.Dy())
+	return image.Rect(box.Min.X-2*m, box.Min.Y-m, box.Max.X+2*m, box.Max.Y+m).Intersect(window)
 }
 
 // Engine runs the pipeline on one goroutine: it grabs a frame, runs the
@@ -223,8 +235,9 @@ func (r *run) hear(p soundPacket) {
 }
 
 // step captures and runs the detection the FSM state calls for. A search
-// needs the whole game window; watching a bobber needs only its box, which
-// captures as fast as any small area, so a bite is seen as soon as before.
+// needs the whole game window; watching a bobber needs only the area around
+// its box, which captures as fast as any small area, so a bite is seen as soon
+// as before.
 func (r *run) step() {
 	e := r.engine
 	state := e.fsm.Current()
@@ -243,7 +256,7 @@ func (r *run) step() {
 	}
 	area := window
 	if watching {
-		area = r.target
+		area = sceneArea(r.target, window)
 	}
 	var frame capture.Frame
 	if err == nil {
@@ -270,7 +283,10 @@ func (r *run) step() {
 	if r.watchPlayer && e.fsm.Current() == StateMonitoring {
 		r.pollPlayer(window)
 	}
-	e.preview.Store(&Preview{Frame: r.window.Image, ROI: roi, ROIBox: r.target.Sub(r.window.Origin)})
+	e.preview.Store(&Preview{
+		Frame: r.window.Image, ROI: roi, ROIBox: r.target.Sub(r.window.Origin),
+		Scene: frame.Image, SceneBox: area.Sub(r.window.Origin),
+	})
 }
 
 func (r *run) search(frame capture.Frame, window image.Rectangle) {
