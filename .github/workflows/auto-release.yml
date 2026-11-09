@@ -19,6 +19,8 @@ concurrency:
 
 jobs:
   test:
+    # Forks never run this repository's workflows.
+    if: github.repository == 'soockee/pixel-bot-go'
     uses: ./.github/workflows/ci.yml
 
   release:
