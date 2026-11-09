@@ -51,7 +51,7 @@ type app struct {
 	restart         string         // the executable to start once the app quit, after an update
 	schedule        *playSchedule
 	recoveryAllowed bool
-	scheduleStop    atomic.Bool // set by the global hotkey outside the UI loop
+	scheduleStop    atomic.Bool
 }
 
 // NewApp builds the components and the window.
@@ -140,7 +140,7 @@ func (a *app) Run() error {
 	if cfg.AutoWindow != "" {
 		a.setWindow(cfg.AutoWindow)
 	}
-	c.View.SetInfo(cfg.DryRun, cfg.Debug, cfg.StopKey)
+	c.View.SetInfo(cfg.DryRun, cfg.Debug)
 	c.View.SetTheme(cfg.Theme)
 	c.View.SetOverlay(cfg.OverlayX, cfg.OverlayY, false)
 	c.View.SetRecorder(cfg.RecorderShown())
@@ -148,7 +148,6 @@ func (a *app) Run() error {
 	a.checkAddon()
 	c.View.SetStatus("Ready")
 	c.View.SetVersion(update.Version)
-	a.watchStopKey()
 	a.restoreAccount()
 	a.checkUpdate()
 
@@ -247,9 +246,7 @@ func (a *app) toggleCapture() {
 			c.View.SetStatus("Cannot start: " + problem)
 			return
 		}
-		keys := *c.Config
-		keys.StopKey = c.View.State().StopKey
-		if err := fishing.CheckActivityKeys(keys, action.ParseVK); err != nil {
+		if err := fishing.CheckActivityKeys(*c.Config, action.ParseVK); err != nil {
 			c.View.SetStatus("Cannot start: " + err.Error())
 			return
 		}
@@ -272,29 +269,6 @@ func (a *app) toggleCapture() {
 	}
 	c.View.SetStatus("Ready")
 	c.CapturePresenter.Toggle()
-}
-
-// watchStopKey registers the global stop hotkey, which also ends a recording.
-// It goes straight to the FSM so it still works if the window stalls; the
-// capture presenter then stops capture.
-func (a *app) watchStopKey() {
-	c := a.container
-	key := c.Config.StopKey
-	vk, ok := action.ParseVK(key)
-	if !ok {
-		a.logger.Error("unknown stop key", "key", key)
-		c.View.SetStatus("Stop hotkey unavailable: unknown key " + key)
-		return
-	}
-	stop := func() {
-		a.scheduleStop.Store(true)
-		c.FSM.EventHalt()
-		c.RecordPresenter.RequestStop()
-	}
-	if err := action.WatchHotkey(vk, stop); err != nil {
-		a.logger.Error("stop hotkey unavailable", "key", key, "error", err)
-		c.View.SetStatus("Stop hotkey unavailable: " + key + " is in use")
-	}
 }
 
 func (a *app) hasTraceObserver() bool {

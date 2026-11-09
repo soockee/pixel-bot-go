@@ -9,7 +9,7 @@ order: 11
 | Question                               | Answer                                                                    |
 | -------------------------------------- | ------------------------------------------------------------------------- |
 | Do I need to tweak settings first run? | No, defaults usually work.                                                |
-| Why run as Administrator?              | Required for reliable mouse movement and key injection on Windows.        |
+| Why run as Administrator?              | Only when the game runs elevated: UIPI blocks input into a higher-integrity process. |
 | It misses bites or reels late          | Lower `Threshold` slightly or reduce `Stride`; ensure refine enabled.     |
 | False positives on water ripples       | Raise `Threshold`.                                                        |
 | Slow over time                         | Reapply settings or reduce scale range; profile for hotspots.             |

@@ -24,4 +24,14 @@ func TestAddonKeysFollowTheReelMethod(t *testing.T) {
 	if got := a.addonKeys().Interact; got != "" {
 		t.Errorf("unbindable Interact key = %q, want none", got)
 	}
+
+	// The Logout macro is bound only while something may log out.
+	cfg.LogoutKey = "l"
+	if got := a.addonKeys().Logout; got != "" {
+		t.Errorf("breaks off: Logout key = %q, want none", got)
+	}
+	cfg.Schedule = true
+	if got := a.addonKeys().Logout; got != "L" {
+		t.Errorf("breaks on: Logout key = %q, want L", got)
+	}
 }

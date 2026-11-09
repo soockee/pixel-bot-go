@@ -70,28 +70,6 @@ func TestRecordPresenterReportsAFailedRecording(t *testing.T) {
 	})
 }
 
-func TestRecordPresenterStopsFromTheHotkey(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		p, view := newRecordPresenter(blockingJob)
-		p.RequestStop() // nothing is recording, so this must not stop the next one
-		p.Tick()
-		p.Toggle()
-
-		p.Tick()
-		if !view.recording {
-			t.Fatal("an old stop request ended the recording")
-		}
-
-		p.RequestStop()
-		p.Tick()
-		synctest.Wait()
-		p.Tick()
-		if view.recording {
-			t.Error("still recording")
-		}
-	})
-}
-
 func TestRecordPresenterStopWaitsForTheRecording(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		p, view := newRecordPresenter(blockingJob)

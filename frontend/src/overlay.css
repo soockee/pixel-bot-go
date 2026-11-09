@@ -75,4 +75,4 @@ body.moving .hud {
   cursor: move;
   --wails-draggable: drag;
 }
-body.moving .sep, body.moving #hud-catches, body.moving #hud-stop { display: none; }
+body.moving .sep, body.moving #hud-catches { display: none; }

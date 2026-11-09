@@ -2,7 +2,7 @@
 // is shown when the person shares recordings or in debug mode; the detection
 // settings are developer tools, shown only in debug mode.
 import { onState, Service, type State } from "./api";
-import { $, keyLabel, storage } from "./dom";
+import { $ } from "./dom";
 import { setupLive } from "./live";
 import { setupMoveOverlay } from "./move-overlay";
 import { setupRecorder } from "./recorder";
@@ -13,7 +13,7 @@ import { setupUpdates } from "./updates";
 
 type Tab = "live" | "recorder" | "settings";
 const tabs: Tab[] = ["live", "recorder", "settings"];
-let wanted: Tab = tabs.includes(storage.get("tab") as Tab) ? (storage.get("tab") as Tab) : "live";
+let wanted: Tab = "live";
 let current: Tab = "live";
 let recorderShown = false;
 
@@ -23,7 +23,6 @@ const visible = () => tabs.filter((t) => t !== "recorder" || recorderShown);
 // show shows tab, or Fishing while tab is hidden; the choice is kept for later.
 function show(tab: Tab) {
   wanted = tab;
-  storage.set("tab", tab);
   if (!visible().includes(tab)) tab = "live";
   current = tab;
   for (const t of tabs) {
@@ -34,6 +33,7 @@ function show(tab: Tab) {
   }
   if (tab === "recorder") recorder.shown();
   if (tab === "settings") void Service.CheckAddon(); // the game may have started since
+  settings.mountCastKey(tab === "live" ? wizard.keysSlot() : undefined);
 }
 
 for (const t of tabs) $(`tab-${t}`).addEventListener("click", () => show(t));
@@ -45,8 +45,6 @@ document.querySelector(".tabs")!.addEventListener("keydown", (e) => {
   show(next);
   $(`tab-${next}`).focus();
 });
-
-show(wanted);
 
 let signedIn = false;
 const signIn = $<HTMLButtonElement>("sign-in");
@@ -65,14 +63,15 @@ signIn.addEventListener("click", () => {
 $("update").addEventListener("click", () => void Service.Update().catch(() => undefined));
 
 const live = setupLive();
-const wizard = setupWizard();
 const moveOverlay = setupMoveOverlay();
 const settings = setupSettings();
+const wizard = setupWizard(settings.finishSaving);
 const updates = setupUpdates();
+show(wanted);
 let theme = "";
 let reels = -1; // -1 until the first state, so opening the window celebrates nothing
 
-onState((s: State) => {
+function render(s: State) {
   if (s.theme !== theme) {
     theme = s.theme;
     document.documentElement.dataset.theme = theme;
@@ -93,10 +92,11 @@ onState((s: State) => {
     show(wanted);
   }
   live(s);
-  wizard(s);
+  wizard.render(s);
+  settings.mountCastKey(current === "live" ? wizard.keysSlot() : undefined);
   moveOverlay(s);
   if (recorderShown) recorder.onState(s);
-  settings(s);
+  settings.render(s);
   updates(s);
 
   signedIn = s.account !== "";
@@ -113,6 +113,7 @@ onState((s: State) => {
   $("status").textContent = s.status;
   $("version").textContent = s.version;
   $("dry-run").hidden = !s.dryRun;
-  $("stop-key").textContent = keyLabel(s.stopKey);
-  $("stop-hint").hidden = !s.stopKey;
-});
+}
+
+// Resolve the game and addon before drawing the first checklist.
+void Service.CheckGame().catch(() => undefined).then(() => onState(render));

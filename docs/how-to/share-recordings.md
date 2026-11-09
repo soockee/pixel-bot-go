@@ -15,22 +15,18 @@ Open **Settings** and switch on **Share recordings** under **Data sharing**. A *
 1. On the **Fishing** tab, check that the game window is selected.
 2. Open the **Recorder** tab and click **Record**.
 3. Switch to the game and fish by hand as usual: cast, wait, click the bobber when it splashes. A few minutes in one spot is plenty; different places and times of day help most.
-4. Press **F10**, or click **Stop recording**.
+4. Click **Stop recording**.
 
-While it records, Go Fish saves a picture of the whole game window every ten seconds and, while your bobber is out, the area around the bobber about ten times a second. It also records mouse activity and game audio. Keys include what you type in chat. Key recording is off by default. Enable **Record keys** under **Settings → Recording** only if you need a local key trace. That group appears once sharing is on.
+While it records, Go Fish saves pictures of the game window, your mouse and the game's sound. It doesn't record your keys unless you switch on **Record keys** under **Settings → Recording**, and keys are never uploaded.
 
 Recordings stay on your PC, in the `datasets` folder next to Go Fish, until you share them.
 
 ## Share
 
-Sharing needs a role that may upload; ask the owner.
+Sharing needs you to [sign in](sign-in.md) as an uploader; ask the owner.
 
 1. On the **Recorder** tab, pick the recording.
-2. Click **Review upload**. Go Fish checks the local recording and tells you
-   that the review has sent nothing. It highlights typing bursts that could
-   include passwords or chat without showing the typed content.
-3. Choose whether to include frames or audio, then click **Upload reviewed
-   copy**. All recorded key events are excluded. The status bar counts the
-   files sent.
+2. Click **Review upload**. Nothing is sent yet. Go Fish shows you what the recording holds.
+3. Choose whether to include pictures and sound, then click **Upload reviewed copy**. The status bar counts the files sent.
 
-If the upload stops halfway, click **Upload** again; files already sent are skipped. The reviewed upload is a separate copy. Earlier uploads and your local recording keep their original contents. To have an earlier upload removed, ask the owner.
+If the upload stops halfway, click **Upload** again; files already sent are skipped. Your recording stays on your PC. To have an upload removed, ask the owner.

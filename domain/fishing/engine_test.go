@@ -409,8 +409,6 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 						switch key {
 						case "F3":
 							return 0x72, true
-						case "F10":
-							return 0x79, true
 						}
 						if len(key) == 1 {
 							return key[0], true

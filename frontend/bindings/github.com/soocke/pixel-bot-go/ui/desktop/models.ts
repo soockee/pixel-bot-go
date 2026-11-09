@@ -45,7 +45,6 @@ export interface Settings {
     "reelMethod": string;
     "interactKey": string;
     "esp32Port": string;
-    "stopKey": string;
     "idleMoves": boolean;
     "reposition": boolean;
     "targetPlayerKey": string;
@@ -82,7 +81,7 @@ export interface SettingsForm {
  */
 export interface SetupStep {
     /**
-     * "game", "addon" or "account"; "" for an unused slot
+     * "game", "cast" or "addon"; "" for an unused slot
      */
     "id": string;
     "title": string;
@@ -165,7 +164,6 @@ export interface State {
      */
     "roiBox": Rect;
     "dryRun": boolean;
-    "stopKey": string;
 
     /**
      * one of config.Themes
@@ -198,7 +196,7 @@ export interface State {
     "role": string;
 
     /**
-     * the role may start a run (dry runs need no role)
+     * reported role permission; fishing does not depend on it
      */
     "canFish": boolean;
 
@@ -251,6 +249,11 @@ export interface State {
      * the selected window is open
      */
     "gameFound": boolean;
+
+    /**
+     * the person confirmed the Cast key in setup this session
+     */
+    "castKeyChosen": boolean;
 
     /**
      * what the bot still needs, see setupSteps

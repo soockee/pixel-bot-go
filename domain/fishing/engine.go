@@ -103,7 +103,7 @@ func (e *Engine) Start() error {
 			return errors.New("Interact key requires the marker locator")
 		}
 		if _, ok := e.fsm.interactVK(cfg); !ok {
-			return errors.New("set an Interact key that differs from the Cast and Stop keys")
+			return errors.New("set an Interact key that differs from the Cast key")
 		}
 	default:
 		return errors.New("unknown reel method")

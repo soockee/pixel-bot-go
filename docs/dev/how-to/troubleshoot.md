@@ -26,7 +26,7 @@ Investige profile `.pb.gz` files; Compare both baseline and later snapshots plus
 
 ## Operating Tips
 
-* Always run as Administrator for input injection reliability.
+* Run as Administrator only when the game runs elevated; UIPI drops input into a higher-integrity process without an error.
 * Keep game window focused; alt-tab can delay key events.
 * Play in a smaller window for faster searches; watching for a bite captures only the bobber's box either way.
 * Pause before changing settings; apply then resume.
@@ -36,7 +36,7 @@ Investige profile `.pb.gz` files; Compare both baseline and later snapshots plus
 
 | Question                 | Answer                                               |
 | ------------------------ | ---------------------------------------------------- |
-| Cursor doesn't move      | Run as Administrator; confirm cast key binding.      |
+| Cursor doesn't move      | Game elevated? Match it; confirm cast key binding.   |
 | Never finds bobber       | Lower `Threshold`; ensure scale range brackets size. |
 | Triggers on wrong pixels | Raise `Threshold`; refine ON. |
 | Wants to fish forever    | Check `max_cast_duration_seconds` isn't too large.   |

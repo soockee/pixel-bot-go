@@ -3,15 +3,18 @@ layout: default
 ---
 <section class="hero">
   <div class="hero-inner">
-    <p class="eyebrow">Docs</p>
-    <h1>Cast, watch, reel in.</h1>
-    <p class="lead">Go Fish finds your bobber in World of Warcraft: Forever, watches it for the bite and reels in. Here is how to set it up, use it, and what it does with your data.</p>
+    <h1>Go Fish fishes for you in World of Warcraft: Forever</h1>
+    <p class="lead">Three steps, about five minutes.</p>
+    <ol class="steps">
+      <li><span class="num">1</span><p><a href="https://github.com/{{ site.repository }}/releases/latest">Download Go Fish</a> and start it while the game is open.</p></li>
+      <li><span class="num">2</span><p>Confirm your cast key, click <strong>Install addon</strong>, then type <code>/reload</code> in the game.</p></li>
+      <li><span class="num">3</span><p>Stand at the water, click <strong>Start fishing</strong> and switch to the game.</p></li>
+    </ol>
+    <p class="note">Click <strong>Stop</strong> in Go Fish to end the run.</p>
     <div class="actions">
-      <a class="button primary" href="{{ '/tutorials/first-catch/' | relative_url }}">Start with your first catch</a>
-      <a class="button" href="{{ '/explanation/data-sharing/' | relative_url }}">Data sharing</a>
+      <a class="button primary" href="https://github.com/{{ site.repository }}/releases/latest">Download</a>
+      <a class="button" href="{{ '/tutorials/first-catch/' | relative_url }}">Step-by-step guide</a>
     </div>
-    <label class="search"><span class="sr-only">Search the docs</span><input type="search" id="search" placeholder="Search {{ site.pages | where_exp: 'p', 'p.summary' | size }} pages" autocomplete="off"></label>
-    <ol class="results" id="results" hidden></ol>
   </div>
 </section>
 <main class="cards">
@@ -20,9 +23,8 @@ layout: default
   {% assign list = site.pages | where_exp: "p", "p.path contains dir" | sort: "order" %}
   <section class="card" id="{{ s.id }}">
     <h2>{{ s.title }}</h2>
-    <p>{{ s.blurb }}</p>
     <ul>
-      {% for p in list %}<li><a href="{{ p.url | relative_url }}" data-text="{{ p.title | downcase }} {{ p.summary | downcase }}" data-summary="{{ p.summary }}" data-section="{{ s.title }}">{{ p.title }}</a></li>{% endfor %}
+      {% for p in list %}<li><a href="{{ p.url | relative_url }}">{{ p.title }}</a></li>{% endfor %}
     </ul>
   </section>
   {% endfor %}

@@ -8,8 +8,7 @@ The status bar at the bottom of Go Fish usually says what is wrong. These are th
 
 ## Start fishing is greyed out
 
-- **Not signed in, or no role.** Sign in, and ask the owner for a role. See [Sign in](sign-in.md).
-- **No game window.** Start the game, then pick **World of Warcraft** on the Fishing tab.
+Something in **Set up fishing** is still missing. Usually the game isn't open, or the addon needs an install or update. Follow the list; see [Install the addon](install-addon.md).
 
 ## It stopped by itself
 
@@ -23,7 +22,7 @@ When Go Fish stops without you pressing Stop, the status bar says **Stopped:** a
 
 ## It casts, but never finds the bobber
 
-- Check that the pink brackets appear around your bobber in the game. If not, open **Settings → Addon** in Go Fish: it should say **Up to date**. See [Install the Bobber Marker addon](install-addon.md).
+- Check that the pink brackets appear around your bobber in the game. If not, open **Settings → Addon** in Go Fish: it should say **Up to date**. See [Install the addon](install-addon.md).
 - Keep the bobber visible: no windows, bags or chat over it, and don't turn the camera while fishing.
 - After five casts without finding anything it stops; that's the **Casts without a bite** limit.
 
@@ -33,18 +32,15 @@ Go Fish only fishes while the game is the window in front. Click into the game.
 
 ## Nothing happens in the game
 
-- Start Go Fish with **Run as administrator**. Without it Windows blocks its key presses and clicks.
-- Check the **Cast key** under Settings matches your Fishing key in the game.
+- If you start the game or Battle.net as administrator, Windows blocks Go Fish's key presses and clicks. Start the game normally, or close Go Fish and start it with **Run as administrator** too.
+- If you changed the **Cast key**, click **Update addon** in **Set up fishing** and type `/reload` in the game.
 
 ## It reels too early, or misses bites
 
 - Move the brackets so the bobber sits in the middle; see [Addon commands](../reference/addon-commands.md).
 - Fish where the water is calm and the bobber is easy to see, away from other players' bobbers.
 
-## The stop key doesn't work
-
-Another program already uses that key. Pick a different **Stop key** under Settings and restart Go Fish.
 
 ## Still stuck
 
-Open an issue on [GitHub](https://github.com/soockee/pixel-bot-go/issues) and attach `pixel_bot_logs.json` from the Go Fish folder; it holds what Go Fish did and your email if you are signed in, but no passwords or sign-in tokens.
+Open an issue on [GitHub](https://github.com/soockee/pixel-bot-go/issues) and attach the file `pixel_bot_logs.json` from the Go Fish folder. It holds what Go Fish did, and your email if you are signed in, but no passwords.

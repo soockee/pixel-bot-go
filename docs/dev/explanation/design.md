@@ -28,7 +28,7 @@ Separate searching vs monitoring → lower cost post‑lock. Timers decouple cad
 
 ## Input Safety
 
-Input only goes out while it can land where it should. Every state has at most one deadline, and leaving the state cancels it, so nothing pending can act after Stop or a focus change. All input runs on the FSM goroutine. Outside dry-run, `action.Guard` checks each action: the selected window must be in front, moves must stay inside the game window, and the pointer must still be where the app left it. If it has moved, the user has taken over and the run halts. A run also halts on the stop hotkey, after too many failed casts in a row, and at the session limit.
+Input only goes out while it can land where it should. Every state has at most one deadline, and leaving the state cancels it, so nothing pending can act after Stop or a focus change. All input runs on the FSM goroutine. Outside dry-run, `action.Guard` checks each action: the selected window must be in front, moves must stay inside the game window, and the pointer must still be where the app left it. If it has moved, the user has taken over and the run halts. A run also halts when the user clicks Stop, after too many failed casts in a row, and at the session limit.
 
 ## Extensibility Ideas
 

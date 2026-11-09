@@ -1,6 +1,6 @@
 ---
 title: "Change keys and limits"
-summary: "Set the key you cast with, the stop key, and how long and how stubbornly Go Fish fishes."
+summary: "Set the key you cast with and how long Go Fish fishes."
 order: 3
 ---
 
@@ -8,20 +8,21 @@ Open the **Settings** tab. Every change saves at once. Settings are locked while
 
 ## Keys
 
-- **Cast key**: click it, then press the key or mouse side button you cast Fishing with in the game. Use a letter, a number on the top row, F1 to F12, Mouse 4 or Mouse 5, without Shift, Ctrl or Alt.
-- **Stop key**: the key that stops Go Fish from anywhere, even while the game is in front. Pick one you don't use in the game. It takes effect after you restart Go Fish.
+- **Cast key**: click it, then press a spare key: a letter, a number on the top row, F1 to F12, or a mouse side button, without Shift, Ctrl or Alt. The addon puts Fishing on that key for you. After a change, click **Update addon** on the Fishing tab and type `/reload` in the game.
 
-To reel with the game's native Interact binding, enable **Interact Key** in the game and try reeling manually at your fishing spot. In Go Fish, set **Interact key** to the same binding, then choose **Interact key** under **Reel method**. Go Fish still uses Bobber Marker to identify the bobber and checks for the marker again before pressing the key. If your cast is beyond the game's interaction range, choose **Right click**.
+- **Reel method**: Go Fish right-clicks the bobber by default. To reel with a key instead, choose **Interact key** and pick a spare key next to it; the addon sets it up after an **Update** and `/reload`. If your bobber lands too far away for the key to reach, go back to **Right click**.
 
-To use an ESP32, flash the [ESP32 firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe), pair **Go Fish ESP32 Probe** in Windows Bluetooth settings, and keep its USB cable connected. Cast, Interact and the other keys can be letters, digits, F1–F12, or the mouse side buttons Mouse 4 and Mouse 5. The **Right click** reel method also works: the board moves the cursor and clicks. Then pick **Auto** under **ESP32 board**. Go Fish asks each USB serial port for the Go Fish firmware and uses the one that answers; if you have several boards, or it finds none, pick the board's COM port such as `COM3` instead. A board that was just plugged in or reset can take a few seconds to find your PC over Bluetooth, and Go Fish waits for it. A failed tap or click stops the run. Pick **Off** to use Windows input again.
+## ESP32 board
+
+If you have an ESP32 board with the [Go Fish firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe), Go Fish can press keys and click through it instead of through Windows. Pair **Go Fish ESP32 Probe** in the Windows Bluetooth settings, keep its USB cable plugged in, and pick **Auto** under **ESP32 board**. If it isn't found, pick its COM port instead, for example `COM3`. Pick **Off** to go back.
 
 ## Scheduled breaks
 
-1. Bind a WoW macro containing `/logout` to a spare key, and check that Enter enters the world from character selection.
-2. Keep Bobber Marker up to date (Settings → Addon). Its small coloured blocks in the top-left corner tell Go Fish you are in the world; on the character screen there are none.
-3. Under **Scheduled breaks**, switch on **Take breaks**, set the session and break ranges and the **Logout key**. Click **Start fishing** while logged in to your character, with the game in front.
+1. Under **Scheduled breaks**, switch on **Take breaks**. Set the session and break ranges, and pick a spare key as the **Logout key**.
+2. Click **Update addon** on the Fishing tab and type `/reload` in the game. The addon makes a **Logout** macro and puts it on that key.
+3. Click **Start fishing** while logged in to your character, with the game in front.
 
-Go Fish picks a new session length and a new break length for each cycle. The break starts once it sees the character screen. At the end it presses Enter and waits until the addon shows up again before it fishes. Keep the game in front for the switch. If it can't confirm a screen within 90 seconds, it cancels the schedule. **Stop** and the Stop key cancel the whole schedule, including a pending login.
+Each session and each break gets a new random length. At the end of a break Go Fish presses Enter to log back in and fishes on. Keep the game in front while it switches. If it can't tell where you are within 90 seconds, it gives up. Click **Stop** in Go Fish to end the whole schedule.
 
 ## Run
 
@@ -32,14 +33,14 @@ Go Fish picks a new session length and a new break length for each cycle. The br
 
 ## Move the overlay
 
-While Go Fish fishes, a small pill sits over the top of the game and shows what it is doing, how many fish it has caught and which key stops it. If it is in your way, move it:
+While Go Fish fishes, a small pill sits over the top of the game and shows what it is doing and how many fish it has caught. If it is in your way, move it:
 
 1. Start the game, so Go Fish has a window to put it on. Don't start fishing.
 2. In **Settings**, under **Overlay**, click **Move overlay**. The pill appears over the game with a dashed outline.
 3. Drag it where you want it in the game.
 4. Click **Done** in Go Fish.
 
-Go Fish keeps the place, as a share of the game window, so it holds when you change the window size or resolution. The pill can't be dragged out of the window. While you move it the pill takes the mouse, but only the pill does: the rest of the game stays clickable. Once you are done, or when you start fishing, it takes no clicks again. It never shows up in the picture Go Fish looks at.
+The place stays when you resize the game window. Once you are done, the pill lets every click through to the game again.
 
 ## Appearance
 

@@ -284,14 +284,16 @@ end
 ---------------------------------------------------------------------------
 
 -- Go Fish presses the Cast key and, when it reels with the Interact key, the
--- Interact key. Its installer writes both into BobberMarkerKeys (Keys.lua,
--- loaded before this file), and this puts them to work in the game so nobody has
--- to: a macro that casts Fishing on the Cast key, and the game's own Interact
--- action on the Interact key. Macros and bindings cannot change in combat, so
+-- Interact key, and the Logout key when it takes breaks. Its installer writes
+-- them into BobberMarkerKeys (Keys.lua, loaded before this file), and this puts
+-- them to work in the game so nobody has to: a macro that casts Fishing on the
+-- Cast key, the game's own Interact action on the Interact key, and a macro
+-- that logs out on the Logout key. Macros and bindings cannot change in combat, so
 -- this waits for it to end. It changes only what differs and never writes to the
 -- chat; what went wrong is kept in keyProblems for /bobbermarker to show.
 
 local CAST_MACRO = "Fishing";
+local LOGOUT_MACRO = "Logout";
 local FISHING = 7620;      -- the spell ID of Fishing; its name is looked up, so the macro follows the game's language
 local MACRO_ICON = 134400; -- the question mark icon
 local INTERACT = "INTERACTTARGET";
@@ -316,21 +318,32 @@ local function FishingName()
 	return name or "Fishing";
 end
 
--- Makes sure the account-wide Cast macro casts Fishing. False when it cannot.
-local function EnsureCastMacro()
-	local body = "#showtooltip\n/cast " .. FishingName();
-	local index = GetMacroIndexByName(CAST_MACRO);
+-- Makes sure the account-wide macro name holds body. False when it cannot.
+local function EnsureMacro(name, body)
+	local index = GetMacroIndexByName(name);
 	if index and index > 0 then
 		local _, _, current = GetMacroInfo(index);
 		if current ~= body then
-			EditMacro(index, CAST_MACRO, nil, body);
+			EditMacro(index, name, nil, body);
 		end
 		return true;
 	end
-	if CreateMacro(CAST_MACRO, MACRO_ICON, body, false) then
+	if CreateMacro(name, MACRO_ICON, body, false) then
 		return true;
 	end
-	Problem("could not create the " .. CAST_MACRO .. " macro; the macro list may be full.");
+	Problem("could not create the " .. name .. " macro; the macro list may be full.");
+	return false;
+end
+
+-- Binds key to the macro name holding body. True when the binding changed.
+local function BindMacro(key, name, body)
+	if not key or key == "" or not EnsureMacro(name, body) or GetBindingAction(key) == "MACRO " .. name then
+		return false;
+	end
+	if SetBindingMacro(key, name) then
+		return true;
+	end
+	Problem("could not bind " .. key .. "; bind it to the " .. name .. " macro in Key Bindings.");
 	return false;
 end
 
@@ -346,14 +359,9 @@ local function SetUpKeys()
 	keysPending = false;
 	keyProblems = {};
 	local changed = false;
-	local cast, interact = keys.cast, keys.interact;
-	if cast and cast ~= "" and EnsureCastMacro() and GetBindingAction(cast) ~= "MACRO " .. CAST_MACRO then
-		if SetBindingMacro(cast, CAST_MACRO) then
-			changed = true;
-		else
-			Problem("could not bind " .. cast .. "; bind it to the " .. CAST_MACRO .. " macro in Key Bindings.");
-		end
-	end
+	local interact = keys.interact;
+	changed = BindMacro(keys.cast, CAST_MACRO, "#showtooltip\n/cast " .. FishingName()) or changed;
+	changed = BindMacro(keys.logout, LOGOUT_MACRO, "/logout") or changed;
 	if interact and interact ~= "" and GetBindingAction(interact) ~= INTERACT then
 		if SetBinding(interact, INTERACT) then
 			changed = true;

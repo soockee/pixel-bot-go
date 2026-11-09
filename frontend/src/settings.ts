@@ -15,18 +15,21 @@ type Field = { key: Key; label: string; hint: string; when?: (v: Settings) => bo
 
 /** User groups come first; dev groups (detection tuning) show only in debug
  * mode, recorder groups while the Recorder is shown. */
-const interact = (v: Settings) => v.reelMethod === "interact_key";
 const breaks = (v: Settings) => v.schedule;
 const logout = (v: Settings) => v.schedule || v.reposition;
 
 const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] = [
   {
-    title: "Fishing",
+    title: "Fishing keys",
     fields: [
-      { key: "castKey", label: "Cast key", hint: "The key or mouse side button that casts Fishing in game", kind: "key" },
+      { key: "castKey", label: "Cast key", hint: "Choose a key or mouse side button. Bobber Marker binds it to Fishing in WoW.", kind: "key" },
+    ],
+  },
+  {
+    title: "Reeling",
+    fields: [
+      { key: "interactKey", label: "Interact key", hint: "Optional. Set it to the same binding as Interact With Target in WoW to unlock the Interact reel method.", kind: "key" },
       { key: "reelMethod", label: "Reel method", hint: "Right-click the bobber, or press the game's Interact key without moving the cursor", kind: "reelMethod" },
-      { key: "interactKey", label: "Interact key", hint: "The same binding as Interact With Target in game", kind: "key", when: interact },
-      { key: "stopKey", label: "Stop key", hint: "Stops fishing from anywhere; applies after a restart", kind: "key" },
     ],
   },
   {
@@ -60,7 +63,7 @@ const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] 
       { key: "playMaxMinutes", label: "Longest session", hint: "Upper end of the random play time", kind: "slider", min: 1, max: 240, step: 1, unit: "min", when: breaks },
       { key: "breakMinMinutes", label: "Shortest break", hint: "Lower end of the random break", kind: "slider", min: 1, max: 240, step: 1, unit: "min", when: breaks },
       { key: "breakMaxMinutes", label: "Longest break", hint: "Upper end of the random break", kind: "slider", min: 1, max: 240, step: 1, unit: "min", when: breaks },
-      { key: "logoutKey", label: "Logout key", hint: "Binding for your /logout macro in game. Bobber Marker tells Go Fish when you are logged out.", kind: "key", when: logout },
+      { key: "logoutKey", label: "Logout key", hint: "A spare key. Bobber Marker puts a Logout macro on it; update the addon and type /reload after setting it.", kind: "key", when: logout },
     ],
   },
   {
@@ -122,20 +125,39 @@ interface Control {
   enable(on: boolean): void;
 }
 
-export function setupSettings(): (s: State) => void {
+export function setupSettings() {
   const form = $<HTMLFormElement>("settings");
   const controls = new Map<Key, Control>();
   const conditional: { row: HTMLElement; when: (v: Settings) => boolean }[] = [];
   const values = () => Object.fromEntries([...controls].map(([k, c]) => [k, c.get()])) as unknown as Settings;
   const refresh = (v: Settings) => {
     for (const c of conditional) c.row.hidden = !c.when(v);
+    const reel = controls.get("reelMethod")?.input;
+    const option = reel?.querySelector<HTMLOptionElement>('option[value="interact_key"]');
+    if (option) option.disabled = !v.interactKey && v.reelMethod !== "interact_key";
   };
   const gated: { fs: HTMLElement; show: "debug" | "recorder" }[] = [];
   const message = h("p", "Changes save as you make them", "settings-status");
   let running = false;
   let shown = { debug: false, recorder: false };
   let saving = Promise.resolve();
+  let saveFailed = false;
   let savedValues: Settings | undefined;
+  let castRow: HTMLElement | undefined;
+  let castHome: HTMLElement | undefined;
+  let castSlot: HTMLElement | undefined;
+
+  function placeCastKey() {
+    if (!castRow || !castHome) return;
+    const parent = castSlot ?? castHome;
+    if (castRow.parentElement === parent) return;
+    if (castSlot) {
+      castSlot.append(castRow, message);
+    } else {
+      castHome.firstElementChild?.after(castRow);
+      form.prepend(message);
+    }
+  }
 
   function setMessage(text: string, bad = false) {
     message.textContent = text;
@@ -149,10 +171,12 @@ export function setupSettings(): (s: State) => void {
     saving = saving.then(async () => {
       try {
         const stored = await Service.SaveSettings(next);
+        saveFailed = false;
         savedValues = stored;
         for (const [k, c] of controls) c.set(stored[k]);
         setMessage("Saved");
       } catch (e) {
+        saveFailed = true;
         if (savedValues) {
           for (const [k, c] of controls) c.set(savedValues[k]);
         }
@@ -406,6 +430,10 @@ export function setupSettings(): (s: State) => void {
         c.set(data.values[f.key]);
         controls.set(f.key, c);
         const r = row(`setting-${f.key}`, f.label, f.hint, c.el, c.input);
+        if (f.key === "castKey") {
+          castRow = r;
+          castHome = fs;
+        }
         if (f.when) conditional.push({ row: r, when: f.when });
         fs.append(r);
       }
@@ -416,13 +444,14 @@ export function setupSettings(): (s: State) => void {
     look.append(h("legend", "Theme"), picker, row("setting-sounds", "Theme sounds", "Each theme greets a catch with its own sound", sound, sound));
     const user = groups.findIndex((g) => g.title === "Data sharing");
     form.replaceChildren(message, ...sections.slice(0, user), look, ...sections.slice(user));
+    placeCastKey();
     lock();
   }
 
   form.addEventListener("submit", (e) => e.preventDefault()); // Enter in the text field must not reload
-  void build();
+  const built = build();
 
-  return (s) => {
+  function render(s: State) {
     for (const c of choices) c.checked = c.value === s.theme;
     if (s.debug !== shown.debug || s.recorder !== shown.recorder) {
       shown = { debug: s.debug, recorder: s.recorder };
@@ -431,5 +460,21 @@ export function setupSettings(): (s: State) => void {
     if (s.running === running) return;
     running = s.running;
     lock();
+  }
+
+  return {
+    render,
+    mountCastKey(slot?: HTMLElement) {
+      castSlot = slot;
+      placeCastKey();
+    },
+    async finishSaving() {
+      await built;
+      await saving;
+      if (saveFailed) {
+        saveFailed = false;
+        throw new Error(message.textContent || "Could not save fishing keys");
+      }
+    },
   };
 }

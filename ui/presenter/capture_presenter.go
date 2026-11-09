@@ -73,7 +73,7 @@ func (c *CapturePresenter) Disable() {
 	c.view.SetRunning(false)
 }
 
-// OnState records a halt from any source, such as the stop hotkey or a limit.
+// OnState records a halt from any source, such as the Stop button or a limit.
 // Register it as an FSM listener.
 func (c *CapturePresenter) OnState(_, next fishing.FishingState) {
 	if next == fishing.StateHalt {

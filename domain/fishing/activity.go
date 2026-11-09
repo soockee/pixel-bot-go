@@ -27,7 +27,6 @@ func CheckActivityKeys(cfg config.Config, parse func(string) (byte, bool)) error
 	}{
 		{cfg.CastKey, "Cast", false},
 		{cfg.InteractKey, "Interact", false},
-		{cfg.StopKey, "Stop", false},
 		{cfg.LogoutKey, "Logout", false},
 		{cfg.TargetPlayerKey, "Target passing player", true},
 	} {

@@ -80,7 +80,7 @@ export function setupLive(): (state: State) => void {
   img.addEventListener("load", fit);
   new ResizeObserver(fit).observe(stage);
 
-  windowSelect.addEventListener("change", () => void Service.SetWindow(windowSelect.value));
+  windowSelect.addEventListener("change", () => void Service.SetWindow(windowSelect.value).then(() => Service.CheckGame()));
   windowSelect.addEventListener("mousedown", () => void loadWindows()); // the game may have opened since
   start.addEventListener("click", () => void Service.ToggleCapture());
 
@@ -131,7 +131,7 @@ export function setupLive(): (state: State) => void {
     }
     windowSelect.disabled = s.running;
     start.textContent = s.running ? words.stop : words.start;
-    start.classList.toggle("primary", !s.running);
+    start.classList.toggle("primary", !s.running && s.setupDone);
     start.classList.toggle("stop", s.running);
     start.disabled = s.recording;
     $("start-hint").hidden = true;

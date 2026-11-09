@@ -9,7 +9,7 @@ A recording saves the screen and your input together, on the same clock, and sen
 1. Start the app. On the **Fishing** tab, pick the game window (the list reloads when you open it).
 2. Open the **Recorder** tab and click **Record**. The new recording opens and follows your input live.
 3. Focus the game and play by hand.
-4. Press the stop hotkey (default F10), or click **Stop recording** in the app.
+4. Click **Stop recording** in the app.
 
 Each recording gets a new timestamped folder holding `frames/`, `input.jsonl` and the game's sound in `audio.wav`. You still hear the game while it records, and music or voice chat from other programs is not recorded. Set **Recording folder** and **Record keys** on the **Settings** tab (debug mode). The default `datasets/` folder is ignored by git. Start stays disabled while recording, and Record while the bot runs.
 

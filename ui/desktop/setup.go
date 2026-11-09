@@ -4,11 +4,11 @@ import "fmt"
 
 // setupSlots is how many steps State carries. State is compared as a value to
 // decide what to send, so the steps are an array, not a slice.
-const setupSlots = 2
+const setupSlots = 3
 
 // SetupStep is one thing the bot needs before it can fish.
 type SetupStep struct {
-	ID     string `json:"id"` // "game" or "addon"; "" for an unused slot
+	ID     string `json:"id"` // "game", "cast" or "addon"; "" for an unused slot
 	Title  string `json:"title"`
 	Done   bool   `json:"done"`
 	Detail string `json:"detail"` // what to do or what is wrong; a reminder when Done
@@ -23,28 +23,38 @@ func setupSteps(s State) (steps [setupSlots]SetupStep, done bool) {
 		return steps, true
 	}
 	game := SetupStep{ID: "game", Title: "Game window", Done: s.GameFound}
-	if !game.Done {
+	if game.Done {
+		game.Detail = fmt.Sprintf("Found the %s window.", s.Window)
+	} else {
 		switch s.Window {
 		case "", "<none>", defaultWindow:
-			game.Detail = "Start World of Warcraft: Forever. Go Fish finds its window by itself."
+			game.Detail = "Waiting for the WoW window. Open WoW: Forever, or select its window if it is already open."
 		default:
 			game.Detail = fmt.Sprintf("The window %q is not open. Start it, or choose another under Game window.", s.Window)
 		}
 	}
 
+	// A current addon already holds the saved Cast key, so there is nothing to choose.
+	cast := SetupStep{ID: "cast", Title: "Cast key", Done: s.CastKeyChosen || s.Addon == "current"}
+	if cast.Done {
+		cast.Detail = "Bobber Marker puts Fishing on this key."
+	} else {
+		cast.Detail, cast.Action = "Keep F3 or press another spare key. Bobber Marker puts Fishing on it.", "Use this key"
+	}
+
 	addon := SetupStep{ID: "addon", Title: "Bobber Marker addon"}
 	switch s.Addon {
 	case "current":
-		addon.Done, addon.Detail = true, "Type /reload in the game after an install or update."
+		addon.Done, addon.Detail = true, "Installed and up to date."
 	case "missing":
-		addon.Detail, addon.Action = "Install it into the game. It marks your bobber and sets up your Cast key.", "Install"
+		addon.Detail, addon.Action = "Install it into the game. It marks your bobber and binds your Cast key.", "Install addon"
 	case "outdated":
-		addon.Detail, addon.Action = "Update it for the new version or your changed keys, then type /reload in the game.", "Update"
+		addon.Detail, addon.Action = "Update it to apply your keys and the new version.", "Update addon"
 	default:
-		addon.Detail = "Start the game, so Go Fish can find its folder."
+		addon.Detail = "Go Fish needs to find the game folder before it can install Bobber Marker."
 	}
 
-	steps[0], steps[1] = game, addon
+	steps[0], steps[1], steps[2] = game, cast, addon
 
 	done = true
 	for _, step := range steps {
