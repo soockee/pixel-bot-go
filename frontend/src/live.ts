@@ -95,9 +95,11 @@ export function setupLive(): (state: State) => void {
   windowSelect.addEventListener("change", () => void Service.SetWindow(windowSelect.value).then(() => Service.CheckGame()));
   windowSelect.addEventListener("mousedown", () => void loadWindows()); // the game may have opened since
   start.addEventListener("click", () => void Service.ToggleCapture());
-  // The coffee page opens in the browser; Go remembers it and hides the card.
+  // The coffee page opens in the browser and the card hides until the next milestone.
   $("support-open").addEventListener("click", () => void Service.OpenSupport());
   $("support-dismiss").addEventListener("click", () => void Service.DismissSupport());
+  // Both mean: never ask again. The status bar link stays.
+  for (const id of ["support-already", "support-never"]) $(id).addEventListener("click", () => void Service.MuteSupport());
 
   // The time in the current step ticks between state events.
   setInterval(() => {
@@ -158,11 +160,15 @@ export function setupLive(): (state: State) => void {
     meter("session", s.sessionSeconds, s.sessionLimit * 60, `${clock(s.sessionSeconds)} of ${s.sessionLimit} min`);
     meter("failed", s.failedInRow, s.maxFailed, `${s.failedInRow} of ${s.maxFailed}`);
 
-    // The thank-you card: Go decides when it shows (ui/desktop/support.go).
+    // The thank-you card: Go decides when it shows (ui/desktop/support.go), at
+    // catch milestones after a good run.
     const thanks = s.support;
     $("support-card").hidden = !thanks.ask;
+    $("support-open").textContent = words.support;
     if (thanks.ask) {
-      $("support-text").textContent = `Go Fish landed ${thanks.runCatches} fish this run and ${thanks.catches.toLocaleString()} for you so far. It is made by one person in their spare time. If it saves you time, a coffee helps keep it going.`;
+      const hours = Math.floor(thanks.seconds / 3600);
+      const fished = hours >= 1 ? `${hours} ${hours === 1 ? "hour" : "hours"}` : `${Math.max(1, Math.round(thanks.seconds / 60))} minutes`;
+      $("support-text").textContent = `Go Fish has caught ${thanks.catches.toLocaleString()} fish for you, in ${fished} of fishing you did not have to click through. It is made by one person in their spare time. If that is worth something to you, here is how to say thanks.`;
     }
   };
 }

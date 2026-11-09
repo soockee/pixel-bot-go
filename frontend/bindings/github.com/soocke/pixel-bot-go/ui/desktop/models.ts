@@ -305,12 +305,17 @@ export interface Support {
     "ask": boolean;
 
     /**
-     * catches in the run that just ended
+     * the milestone just reached
      */
-    "runCatches": number;
+    "milestone": number;
 
     /**
      * catches on this computer so far
      */
     "catches": number;
+
+    /**
+     * time Go Fish fished on this computer so far
+     */
+    "seconds": number;
 }

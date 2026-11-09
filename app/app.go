@@ -49,7 +49,7 @@ type app struct {
 	schedule        *playSchedule
 	recoveryAllowed bool
 	scheduleStop    atomic.Bool
-	reelsSeen       int  // catches of the current run already counted; used on the loop
+	runSeconds      int  // how long the current run has fished; used on the loop
 	wasRunning      bool // a run went on at the last tick; used on the loop
 }
 
@@ -193,7 +193,7 @@ func (a *app) tick() {
 	}
 	a.followGame()
 	run := c.FSM.Stats()
-	a.countCatches(run.Reels, c.View.State().Running)
+	a.countCatches(run, c.View.State())
 	c.View.SetRun(run.Casts, run.Reels, run.ReelAttempts, run.ReelInputs, run.FailedInRow, c.Config.MaxFailedCasts, c.Config.MaxSessionMinutes)
 	c.View.SetOutcomes(run.Caught, run.GotAway, run.NotHooked)
 	c.View.Flush()

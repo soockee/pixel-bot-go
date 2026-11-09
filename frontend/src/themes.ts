@@ -10,6 +10,8 @@ export interface Words {
   stop: string;
   catches: [one: string, many: string];
   empty: string;
+  /** support labels the coffee button and link: the theme's way of buying the maker a coffee. */
+  support: string;
   cycle: Record<string, [step: string, caption: string]>;
 }
 
@@ -30,6 +32,7 @@ const graphiteWords: Words = {
   stop: "Stop",
   catches: ["catch this run", "catches this run"],
   empty: "Start to watch the game window here",
+  support: "Buy me a coffee",
   cycle: {
     focus: ["Focus", "Waiting for the game window to have focus"],
     searching: ["Search", "Looking for the bobber"],
@@ -81,6 +84,7 @@ export const themes: Theme[] = [
       stop: "Pack up the rod",
       catches: ["fish in the creel", "fish in the creel"],
       empty: "Set out, and the waters will show here",
+      support: "Buy the barkeep a pint",
       cycle: {
         focus: ["Attend", "Awaiting the game's attention"],
         searching: ["Seek", "Seeking the bobber upon the water"],
@@ -107,6 +111,7 @@ export const themes: Theme[] = [
       stop: "Break the circle",
       catches: ["fish conjured", "fish conjured"],
       empty: "Begin the ritual to open the scrying glass",
+      support: "Brew me a mana potion",
       cycle: {
         focus: ["Attune", "Attuning to the game window"],
         searching: ["Divine", "Divining where the bobber lies"],
@@ -131,6 +136,7 @@ export const themes: Theme[] = [
       stop: "Head home",
       catches: ["fish from the ice", "fish from the ice"],
       empty: "Cut the ice to look into the water",
+      support: "Buy me a hot cocoa",
       cycle: {
         focus: ["Still", "Waiting for the game window to settle"],
         searching: ["Spot", "Spotting the bobber"],
@@ -157,6 +163,7 @@ export const themes: Theme[] = [
       stop: "Quench",
       catches: ["fish claimed", "fish claimed"],
       empty: "Unleash to stoke the forge",
+      support: "Stoke the maker's forge",
       cycle: {
         focus: ["Lock", "Locking onto the game window"],
         searching: ["Hunt", "Hunting the bobber"],
@@ -182,6 +189,7 @@ export const themes: Theme[] = [
       stop: "Back to shore",
       catches: ["fish hauled in", "fish hauled in"],
       empty: "Cast off to see the waves here",
+      support: "Toss me some bait",
       cycle: {
         focus: ["Ahoy", "Waiting for the game window"],
         searching: ["Spot", "Looking for the bobber"],

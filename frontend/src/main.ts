@@ -49,7 +49,7 @@ document.querySelector(".tabs")!.addEventListener("keydown", (e) => {
 // Go shows the download's progress and any error in the status bar.
 $("update").addEventListener("click", () => void Service.Update().catch(() => undefined));
 // Opens the coffee page in the browser.
-$("support-link").addEventListener("click", () => void Service.OpenSupport());
+for (const id of ["support-link", "support-updates"]) $(id).addEventListener("click", () => void Service.OpenSupport());
 // Opens a filled-in GitHub issue in the browser; the person submits it there.
 $("report-problem").addEventListener("click", () => void Service.ReportProblem());
 
@@ -69,6 +69,7 @@ function render(s: State) {
     $<HTMLImageElement>("brand-icon").src = `/themes/${theme}.svg`;
     const words = themeById(theme).words;
     for (const t of tabs) $(`tab-${t}`).textContent = words.tabs[t];
+    $("support-link").textContent = words.support;
     recorder.shown(); // canvases read the theme colours
   }
   // Themes react to the fishing step, for example a glow while watching.

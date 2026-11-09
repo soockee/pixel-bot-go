@@ -26,7 +26,7 @@ Go Fish goes round these steps; the Fishing tab highlights the current one.
 
 ## Thank-you note
 
-After a run of at least 10 catches, once Go Fish has landed 20 fish for you in total, a short note under the counters thanks you and offers **Buy me a coffee**. **Not now** hides it for two weeks; after you open the coffee page it waits three months. It never shows during a dry run, and Go Fish keeps the count on your PC only.
+When Go Fish has caught 100 fish for you in total, and again at 500, 1,000, 2,500, 5,000 and every 5,000 after, a short note under the counters says how many fish and how many hours of fishing that was, and offers to say thanks. It only shows after a run that went well (at least one catch, few reels with no fish hooked), never during a dry run. **Not now** hides it until the next milestone; **I already support it** and **Don't ask again** hide it for good, and only the small link in the status bar stays. The button's wording follows the theme. Go Fish keeps the counts on your PC only.
 
 ## Picture
 

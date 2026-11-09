@@ -4,7 +4,6 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
-	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/detect"
@@ -251,18 +250,25 @@ func pickWindow(current string, picked bool) string {
 	return defaultWindow
 }
 
-// OpenSupport opens the coffee page in the browser, hides the thank-you card
-// and remembers when, so the card waits a long while before it asks again.
+// OpenSupport opens the coffee page in the browser and hides the thank-you card.
 func (s *Service) OpenSupport() {
 	_ = s.do(func() {
 		s.cmds.OpenURL(SupportURL)
 		s.view.SetSupport(Support{})
-		s.cfg.SupportOpenedAt = time.Now().Unix()
-		if err := s.cfg.Save(s.cfgPath); err != nil {
-			s.logger.Error("persist support click failed", "error", err)
-		}
 	})
 }
 
-// DismissSupport hides the thank-you card ("Not now").
+// DismissSupport hides the thank-you card until the next milestone ("Not now").
 func (s *Service) DismissSupport() { _ = s.do(func() { s.view.SetSupport(Support{}) }) }
+
+// MuteSupport hides the thank-you card for good: the person supports Go Fish
+// already or does not want to be asked. The status bar link stays.
+func (s *Service) MuteSupport() {
+	_ = s.do(func() {
+		s.view.SetSupport(Support{})
+		s.cfg.SupportMuted = true
+		if err := s.cfg.Save(s.cfgPath); err != nil {
+			s.logger.Error("persist support choice failed", "error", err)
+		}
+	})
+}
