@@ -10,7 +10,7 @@ type Value = Settings[Key];
 /** when hides a field the other values make pointless; optional keys can be cleared. */
 type Field = { key: Key; label: string; hint: string; when?: (v: Settings) => boolean; optional?: boolean } & (
   | { kind: "key" | "switch" | "text" | "port" | "locator" | "biteDetector" | "reelMethod" }
-  | { kind: "slider"; min: number; max: number; step: number; unit?: string }
+  | { kind: "slider"; min: number; max: number; step: number; unit?: string; zero?: string }
 );
 
 /** User groups come first; dev groups (detection tuning) show only in debug
@@ -43,7 +43,7 @@ const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] 
     fields: [
       { key: "maxSessionMinutes", label: "Session length", hint: "Stop at the first cast after this long", kind: "slider", min: 5, max: 240, step: 5, unit: "min" },
       { key: "maxFailedCasts", label: "Casts without a bite", hint: "Stop after this many casts in a row without a catch", kind: "slider", min: 1, max: 20, step: 1 },
-      { key: "cooldownSeconds", label: "Pause after a catch", hint: "Wait before the next cast", kind: "slider", min: 1, max: 60, step: 1, unit: "s" },
+      { key: "cooldownSeconds", label: "Pause after a catch", hint: "Wait before the next cast. Quick casts again after 0.4 to 1.2 s", kind: "slider", min: 0, max: 60, step: 1, unit: "s", zero: "Quick" },
       { key: "maxCastDurationSeconds", label: "Cast length", hint: "Recast when no bite comes within this time", kind: "slider", min: 5, max: 180, step: 5, unit: "s" },
     ],
   },
@@ -275,7 +275,8 @@ export function setupSettings() {
     range.step = String(f.step);
     const out = h("output", "", "mono");
     const decimals = String(f.step).split(".")[1]?.length ?? 0;
-    const show = () => (out.textContent = `${Number(range.value).toFixed(decimals)}${f.unit ? ` ${f.unit}` : ""}`);
+    const show = () =>
+      (out.textContent = f.zero && Number(range.value) === 0 ? f.zero : `${Number(range.value).toFixed(decimals)}${f.unit ? ` ${f.unit}` : ""}`);
     range.addEventListener("input", show);
     range.addEventListener("change", save); // on release, not on every step
     box.append(range, out);

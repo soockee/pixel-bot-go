@@ -290,6 +290,7 @@ func runCursorFit(dirs []string, cast, reel, train, modelPath string, out io.Wri
 		TrialsPerReach  int                    `json:"trials_per_reach"`
 		Direct          cursorErrors           `json:"direct"`
 		Fitted          cursorErrors           `json:"fitted"`
+		Default         cursorErrors           `json:"default"`
 		HumanSettles    int                    `json:"human_settles"`
 		FittedSettles   int                    `json:"fitted_settles"`
 		HumanApproaches []motionMetrics        `json:"human_approaches"`
@@ -309,6 +310,8 @@ func runCursorFit(dirs []string, cast, reel, train, modelPath string, out io.Wri
 			for seed := uint64(1); seed <= repeats; seed++ {
 				steps := model.Planner(seed)(example.start, example.target, example.bounds, false)
 				report.Fitted.add(measureMotion(example.start, example.target, steps), example.human, 1/float64(heldOutPaths*repeats))
+				fallback := cursormotion.DefaultPath(example.start, example.target, example.bounds, false)
+				report.Default.add(measureMotion(example.start, example.target, fallback), example.human, 1/float64(heldOutPaths*repeats))
 				withSettle := model.Planner(seed)(example.start, example.target, example.bounds, true)
 				if withSettle[len(withSettle)-1].After > steps[len(steps)-1].After {
 					report.FittedSettles++
@@ -318,6 +321,7 @@ func runCursorFit(dirs []string, cast, reel, train, modelPath string, out io.Wri
 		audit.Human = human.result()
 		for seed := uint64(1); seed <= repeats; seed++ {
 			audit.Fitted = append(audit.Fitted, auditFittedReaches(examples, model.Planner(seed)))
+			audit.Default = append(audit.Default, auditFittedReaches(examples, cursormotion.DefaultPath))
 		}
 		report.ReachAudits = append(report.ReachAudits, audit)
 	}

@@ -259,6 +259,13 @@ main { min-height: 0; overflow: hidden; }
 
 /* main.ts sizes the frame to the image's aspect inside the stage. */
 .frame { position: relative; line-height: 0; }
+/* While a bobber is watched the frame zooms onto the live area around it
+   (live.ts), and the still rest of the window dims. */
+.frame { transform-origin: 0 0; transition: transform 600ms var(--ease); }
+.frame #capture-img { transition: filter 600ms var(--ease); }
+.frame.zoomed #capture-img { filter: brightness(0.45); }
+.frame.zoomed .lock { border-color: transparent; box-shadow: none; }
+@media (prefers-reduced-motion: reduce) { .frame, .frame #capture-img { transition: none; } }
 .frame img { display: block; width: 100%; height: 100%; }
 
 /* The signature: the addon's corner brackets around live imagery. */

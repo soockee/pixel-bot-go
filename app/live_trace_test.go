@@ -139,7 +139,7 @@ func TestDryRunExportsCorrelatedEventsWithoutDetectorModel(t *testing.T) {
 			t.Fatalf("unexpected event %d: %+v", i, row)
 		}
 	}
-	if plan := rows[3].Timing; plan == nil || plan.HoldUS != 60_000 || plan.DelayUS != 300_000 || plan.CooldownUS != 8_000_000 {
+	if plan := rows[3].Timing; plan == nil || plan.HoldUS != 60_000 || plan.DelayUS != 300_000 || plan.CooldownUS < 400_000 || plan.CooldownUS >= 1_200_000 {
 		t.Fatalf("unexpected reel plan: %+v", plan)
 	}
 	if rows[4].ElapsedUS-rows[2].ElapsedUS != 300_000 || rows[4].Outcome != traceobserver.OutcomeDryRunDispatched ||

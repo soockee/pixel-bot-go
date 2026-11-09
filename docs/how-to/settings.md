@@ -28,7 +28,7 @@ Each session and each break gets a new random length. At the end of a break Go F
 
 - **Session length**: Go Fish stops at the first cast after this time.
 - **Casts without a bite**: Go Fish stops after this many casts in a row without a catch, for example when you have run out of bait or moved away from the water.
-- **Pause after a catch**: how long it waits before casting again.
+- **Pause after a catch**: how long it waits before casting again. **Quick**, the default, casts again within about a second.
 - **Cast length**: if nothing bites within this time, it casts again.
 
 ## Move the overlay

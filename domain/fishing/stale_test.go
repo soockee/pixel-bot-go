@@ -79,3 +79,25 @@ func TestMarkerIsStale(t *testing.T) {
 		t.Error("a marker is never stale when there was no earlier bobber")
 	}
 }
+
+// The default pause after a catch is quick and varies; a configured pause is
+// kept exactly.
+func TestPauseAfterACatch(t *testing.T) {
+	f := &FishingFSM{cfg: *testConfig()}
+	f.cfg.CooldownSeconds = 0
+	seen := map[time.Duration]bool{}
+	for range 100 {
+		d := f.pause()
+		if d < quickPauseMin || d >= quickPauseMax {
+			t.Fatalf("quick pause %v, want %v to %v", d, quickPauseMin, quickPauseMax)
+		}
+		seen[d] = true
+	}
+	if len(seen) < 50 {
+		t.Errorf("only %d different pauses in 100", len(seen))
+	}
+	f.cfg.CooldownSeconds = 5
+	if d := f.pause(); d != 5*time.Second {
+		t.Errorf("configured pause = %v, want 5s", d)
+	}
+}

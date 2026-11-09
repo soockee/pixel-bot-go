@@ -43,6 +43,9 @@ type Scenario struct {
 	Loop      bool      `json:"loop"`
 	Timeline  []Segment `json:"timeline"`
 	SplashLum byte      `json:"splash_lum"`
+	// Spread lands each new bobber at a random spot up to this many pixels
+	// from BobberX, BobberY, so the pointer has new ways to go; 0 keeps it still.
+	Spread int `json:"bobber_spread"`
 }
 
 // DefaultScenario returns a looping cast: empty, bobber, bite, empty.
@@ -102,6 +105,7 @@ type Renderer struct {
 	sc   Scenario
 	tmpl image.Image
 	bg   *image.RGBA
+	at   image.Point // the bobber's top-left, see Land
 }
 
 // NewRenderer builds a renderer for the scenario and bobber template.
@@ -114,7 +118,7 @@ func NewRenderer(sc Scenario, tmpl image.Image) *Renderer {
 			bg.SetRGBA(x, y, color.RGBA{v, v + 10, v + 25, 255})
 		}
 	}
-	return &Renderer{sc: sc, tmpl: tmpl, bg: bg}
+	return &Renderer{sc: sc, tmpl: tmpl, bg: bg, at: image.Pt(sc.BobberX, sc.BobberY)}
 }
 
 // BobberRect is the on-scene rectangle covered by the scaled bobber.
@@ -122,7 +126,25 @@ func (r *Renderer) BobberRect() image.Rectangle {
 	b := r.tmpl.Bounds()
 	w := int(float64(b.Dx()) * r.sc.Scale)
 	h := int(float64(b.Dy()) * r.sc.Scale)
-	return image.Rect(r.sc.BobberX, r.sc.BobberY, r.sc.BobberX+w, r.sc.BobberY+h)
+	return image.Rect(r.at.X, r.at.Y, r.at.X+w, r.at.Y+h)
+}
+
+// Land moves the bobber to a random spot within the scenario's spread of its
+// home, keeping the addon's brackets inside the scene. Call it when a new cast
+// begins; with no spread the bobber stays where it is.
+func (r *Renderer) Land(rng *rand.Rand) {
+	if r.sc.Spread <= 0 {
+		return
+	}
+	size := r.BobberRect().Size()
+	pick := func(home, extent, scene int) int {
+		lo, hi := max(24, home-r.sc.Spread), min(scene-extent-24, home+r.sc.Spread)
+		if hi <= lo {
+			return home
+		}
+		return lo + rng.Intn(hi-lo+1)
+	}
+	r.at = image.Pt(pick(r.sc.BobberX, size.X, r.sc.Width), pick(r.sc.BobberY, size.Y, r.sc.Height))
 }
 
 // MarkerRect is the area the addon's brackets surround.

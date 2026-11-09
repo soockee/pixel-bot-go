@@ -163,6 +163,16 @@ export interface State {
      * where the ROI sits on the capture, in screen pixels
      */
     "roiBox": Rect;
+
+    /**
+     * version of /frames/scene, the live area around the ROI while watching; 0 means none
+     */
+    "scene": number;
+
+    /**
+     * where the scene sits on the capture
+     */
+    "sceneBox": Rect;
     "dryRun": boolean;
 
     /**

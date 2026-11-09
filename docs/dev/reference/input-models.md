@@ -58,10 +58,27 @@ Only named training sessions supply paths to the model. For each held-out reach,
 The `reach_audits` section keeps each held-out session separate. It reports peak normalized speed, when that peak occurred, and mean step interval. For path repetition, it resamples each reach to 32 points on a normalized clock and compares it with up to 16 earlier reaches using band-limited dynamic time warping. A smaller nearest distance means a more similar preceding path. Each fitted seed runs through the entire session with its own planner. Direct jumps have zero duration and are counted separately. The fitted values describe planned waypoints without optional settling. These exploratory scores have no alert threshold.
 
 Right-click mode chooses whether to wait, park near the edge of the
-marked box, or approach its center. Without a recorded profile, bounded
-curved paths provide the default movement. The planner for a recorded
+marked box, or approach its center. Without a recorded profile, `cursormotion.DefaultPath` provides the movement, shaped after the reviewed recordings: the reach time follows Fitts' law (230 ms plus 105 ms per bit of log2(distance/40+1), times a log-normal spread, 150–900 ms), 85–95 % of the way is a fast primary movement in the first 30–75 % of the time and the rest slow homing, waypoints come every 8–12 ms, the bend is log-normal around a tenth of the reach, and about a third of the reaches overshoot and a quarter stop short, each followed by an 80–220 ms correction. Dry runs use the same planner and approach choice as live runs. The planner for a recorded
 profile samples paths weighted by reach distance, rotates and scales their recorded waypoints, and clips them to the client area. It spaces the approach steps evenly at roughly 16 ms and gradually corrects for any difference between the recorded endpoint and the intended destination. On some monitoring approaches it pauses near the bobber and makes one final correction. The final waypoint is the exact reel target. A bite replaces any unfinished approach and waits for the new path to reach the target. Stop, focus loss, a changed client area or user takeover cancel pending waypoints. Additional gestures are limited to that observed pointer correction. The separate timing profile can also vary reel holds and recast waits.
 
-Use `-dry-run -cursor-model <file> -trace-out <new-jsonl>` for simulated movement. `-live-cursor -cursor-model <file>` explicitly enables real pointer movement and requires the pointer to start inside the selected client area. Both can be combined with their respective timing-profile flags. `-timing-seed` controls both profiles in a dry run.
+Use `-dry-run -trace-out <new-jsonl>` for simulated movement with the default path, and add `-cursor-model <file>` for a recorded profile. `-live-cursor -cursor-model <file>` explicitly enables real pointer movement and requires the pointer to start inside the selected client area. Both can be combined with their respective timing-profile flags. `-timing-seed` controls both profiles in a dry run.
 
 Set `VRL_CURSOR_REPLAY_MODEL` to the model's absolute path and run `go test ./domain/fishing -run TestPairedCursorReplay -count=1 -v` to compare direct and fitted paths using the real FSM and capture engine with scripted frames.
+
+## Testing Cursor Movement in the Fake Game
+
+`fakegame -follow <app-trace>` draws the dry run's pointer and its last 1.5 s of trail over the scene, in a see-through window that screen capture skips, so the bot never sees it. Pass the same file the app writes with `-trace-out`; the fake game shows only moves written after it started. A scenario with `bobber_spread` lands each new bobber up to that many pixels from `bobber_x`, `bobber_y`, so the pointer has new ways to go:
+
+```powershell
+'{"width": 900, "height": 600, "bobber_x": 420, "bobber_y": 260, "bobber_spread": 300}' | Set-Content spread.json
+./pixel-bot-go.exe -dry-run -screen 2 -auto-window "Fake Game" -auto-start -trace-out app.jsonl
+./fakegame.exe -screen 2 -pos 1000,50 -scenario spread.json -follow app.jsonl
+```
+
+`responsebench -cursor-audit` then puts the dry run's reaches next to the reviewed recordings, with the median reach time, travel ratio and bend, and the reach audit of `-cursor-fit`. Files are app traces, directories are recordings:
+
+```powershell
+go run ./cmd/responsebench -cursor-audit app.jsonl datasets/20261108-012132 datasets/20261108-035820
+```
+
+A trace reach runs from where the pointer rested to the last waypoint before a pause of more than 60 ms. Reaches under 20 pixels are left out, but short parking moves at the edge of the box still raise the mean peak speed, so compare runs with similar reach lengths. `-cursor-fit` also reports the default path next to the fitted profile (`default`, `default_by_trial`).

@@ -41,6 +41,8 @@ type State struct {
 	FrameSize      Point                 `json:"frameSize"`   // the capture's size in screen pixels; the image may be smaller
 	ROI            int                   `json:"roi"`         // version of /frames/roi, the live box around the bobber; 0 means none
 	ROIBox         Rect                  `json:"roiBox"`      // where the ROI sits on the capture, in screen pixels
+	Scene          int                   `json:"scene"`       // version of /frames/scene, the live area around the ROI while watching; 0 means none
+	SceneBox       Rect                  `json:"sceneBox"`    // where the scene sits on the capture
 	DryRun         bool                  `json:"dryRun"`
 	Theme          string                `json:"theme"`          // one of config.Themes
 	Debug          bool                  `json:"debug"`          // show the developer views

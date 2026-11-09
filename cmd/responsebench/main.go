@@ -64,7 +64,15 @@ func main() {
 	cursorFit := flag.Bool("cursor-fit", false, "fit and compare cursor paths against held-out recording directories")
 	cursorTrain := flag.String("cursor-train", "", "comma-separated training directory names; remaining sessions are held out")
 	cursorModel := flag.String("cursor-model-out", "", "new file for a frozen cursor profile")
+	cursorAudit := flag.Bool("cursor-audit", false, "summarize pointer reaches of dry-run traces (files) and reviewed recordings (directories) as JSON")
 	flag.Parse()
+	if *cursorAudit {
+		if err := runCursorAudit(flag.Args(), *manualCast, *manualReel, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "responsebench:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if *cursorFit {
 		if err := runCursorFit(flag.Args(), *manualCast, *manualReel, *cursorTrain, *cursorModel, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "responsebench:", err)

@@ -27,7 +27,7 @@ func TestValidateClamps(t *testing.T) {
 		{"roi ceiling", func(c *Config) { c.ROISizePx = 1000 }, func(c *Config) any { return c.ROISizePx }, 256},
 		{"max cast floor", func(c *Config) { c.MaxCastDurationSeconds = 1 }, func(c *Config) any { return c.MaxCastDurationSeconds }, 5},
 		{"max cast ceiling", func(c *Config) { c.MaxCastDurationSeconds = 999 }, func(c *Config) any { return c.MaxCastDurationSeconds }, 180},
-		{"cooldown floor", func(c *Config) { c.CooldownSeconds = 0 }, func(c *Config) any { return c.CooldownSeconds }, 1},
+		{"cooldown floor", func(c *Config) { c.CooldownSeconds = -1 }, func(c *Config) any { return c.CooldownSeconds }, 0},
 		{"cooldown ceiling", func(c *Config) { c.CooldownSeconds = 999 }, func(c *Config) any { return c.CooldownSeconds }, 60},
 		{"negative screen", func(c *Config) { c.Screen = -1 }, func(c *Config) any { return c.Screen }, 0},
 		{"empty cast key", func(c *Config) { c.CastKey = "" }, func(c *Config) any { return c.CastKey }, "F3"},

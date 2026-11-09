@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"math/rand"
 	"net/http"
 	"os"
 	"strconv"
@@ -88,6 +89,7 @@ func main() {
 	title := flag.String("title", "Fake Game", "window title")
 	pos := flag.String("pos", "50,50", "window position x,y, relative to the chosen screen")
 	screen := flag.Int("screen", 0, "monitor to open on: 1 = primary, 2 = next from the left (0 = primary origin)")
+	follow := flag.String("follow", "", "the app's dry-run -trace-out file: draw its pointer and trail over the scene, hidden from capture")
 	flag.Parse()
 
 	sc := fakegame.DefaultScenario()
@@ -118,10 +120,38 @@ func main() {
 	}
 	view := &scene{}
 	view.set(r.Render(fakegame.PhaseEmpty))
-	game := application.New(application.Options{Name: *title, Assets: application.AssetOptions{Handler: view}})
+	mux := http.NewServeMux()
+	mux.Handle("/", view)
+	trail := &pointer{}
+	if *follow != "" {
+		mux.Handle("/pointer", trail)
+		mux.Handle("/pointer.html", trail)
+		go trail.follow(*follow)
+	}
+	game := application.New(application.Options{Name: *title, Assets: application.AssetOptions{Handler: mux}})
 	win := game.Window.NewWithOptions(application.WebviewWindowOptions{Title: *title, Frameless: true, DisableResize: true, URL: "/", Hidden: true})
+	var trailWin *application.WebviewWindow
+	if *follow != "" {
+		trailWin = newPointerWindow(game)
+	}
 	game.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
-		win.SetPhysicalBounds(application.Rect{X: px, Y: py, Width: sc.Width, Height: sc.Height})
+		bounds := application.Rect{X: px, Y: py, Width: sc.Width, Height: sc.Height}
+		if trailWin != nil {
+			// Shown first, so the game, shown last, ends up in front with the focus.
+			trailWin.SetPhysicalBounds(bounds)
+			trailWin.Show()
+			go func() {
+				for range 100 {
+					if application.InvokeSyncWithResult(func() bool { return passThrough(trailWin) }) {
+						application.InvokeSync(win.Focus) // the trail window may have taken it while it opened
+						return
+					}
+					time.Sleep(50 * time.Millisecond)
+				}
+				fmt.Fprintln(os.Stderr, "fakegame: the pointer window could not be hidden from capture")
+			}()
+		}
+		win.SetPhysicalBounds(bounds)
 		win.Show()
 	})
 
@@ -138,12 +168,16 @@ func main() {
 		}
 	}
 	biteID := 0
+	landing := rand.New(rand.NewSource(sc.Seed))
 	var traceErr error
 	current := fakegame.Phase("")
 	enc := json.NewEncoder(os.Stdout)
 	tick := func() bool {
 		phase, done := sc.PhaseAt(time.Since(start))
 		if phase != current {
+			if phase == fakegame.PhaseBobber && current != fakegame.PhaseSplash {
+				r.Land(landing) // a new cast
+			}
 			current = phase
 			br := r.BobberRect()
 			_ = enc.Encode(map[string]any{

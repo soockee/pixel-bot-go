@@ -25,7 +25,7 @@ Go Fish goes round these steps; the Fishing tab highlights the current one.
 
 ## Picture
 
-The large picture is what Go Fish sees of the game window. Once it has found the bobber, a box marks the area it watches for the bite.
+The large picture is what Go Fish sees of the game window. While it watches for a bite, the picture zooms in on your bobber and the water around it, live; the rest of the window dims.
 
 ## Status bar
 

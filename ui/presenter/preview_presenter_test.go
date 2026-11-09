@@ -15,7 +15,7 @@ func (s *mockPreviewSource) Preview() *fishing.Preview { return s.preview }
 type mockPreviewView struct{ captures, rois int }
 
 func (v *mockPreviewView) UpdateCapture(*image.RGBA) { v.captures++ }
-func (v *mockPreviewView) UpdateDetection(img *image.RGBA, _ image.Rectangle) {
+func (v *mockPreviewView) UpdateDetection(img *image.RGBA, _ image.Rectangle, _ *image.RGBA, _ image.Rectangle) {
 	if img != nil {
 		v.rois++
 	}

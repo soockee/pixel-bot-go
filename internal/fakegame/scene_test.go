@@ -2,6 +2,7 @@ package fakegame
 
 import (
 	"image"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -85,4 +86,30 @@ func cropROI(src *image.RGBA, cx, cy, size int) *image.RGBA {
 		copy(out.Pix[y*out.Stride:(y+1)*out.Stride], src.Pix[src.PixOffset(rect.Min.X, rect.Min.Y+y):])
 	}
 	return out
+}
+
+// With a spread, each new bobber lands somewhere else, always with its
+// brackets inside the scene; without one it stays home.
+func TestLandSpreadsTheBobber(t *testing.T) {
+	tmpl := image.NewRGBA(image.Rect(0, 0, 40, 40))
+	sc := DefaultScenario()
+	r := NewRenderer(sc, tmpl)
+	rng := rand.New(rand.NewSource(1))
+	r.Land(rng)
+	if got := r.BobberRect().Min; got != image.Pt(sc.BobberX, sc.BobberY) {
+		t.Fatalf("no spread moved the bobber to %v", got)
+	}
+	sc.Spread = 150
+	r = NewRenderer(sc, tmpl)
+	seen := map[image.Point]bool{}
+	for range 50 {
+		r.Land(rng)
+		if !r.MarkerRect().In(image.Rect(0, 0, sc.Width, sc.Height)) {
+			t.Fatalf("brackets %v leave the scene", r.MarkerRect())
+		}
+		seen[r.BobberRect().Min] = true
+	}
+	if len(seen) < 20 {
+		t.Errorf("only %d places in 50 casts", len(seen))
+	}
 }

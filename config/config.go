@@ -101,6 +101,7 @@ type Config struct {
 	// If monitoring exceeds this duration, the target is considered lost and the system returns to searching.
 	MaxCastDurationSeconds int `json:"max_cast_duration_seconds"`
 	// CooldownSeconds defines how long to wait after reeling before attempting the next cast.
+	// 0, the default, casts again quickly, after a random 0.4 to 1.2 seconds.
 	CooldownSeconds int `json:"cooldown_seconds"`
 
 	// Theme is the window's look, one of Themes.
@@ -140,7 +141,7 @@ func DefaultConfig() *Config {
 		RecordKeys:             false,
 		ROISizePx:              80,
 		MaxCastDurationSeconds: 30,
-		CooldownSeconds:        8,
+		CooldownSeconds:        0,
 		Theme:                  Themes[0],
 		OverlayX:               0.5,
 		OverlayY:               0.01,
@@ -216,7 +217,7 @@ func (c *Config) Validate() error {
 	}
 	c.ROISizePx = min(max(c.ROISizePx, 32), 256) // keep the ROI modest for performance
 	c.MaxCastDurationSeconds = min(max(c.MaxCastDurationSeconds, 5), 180)
-	c.CooldownSeconds = min(max(c.CooldownSeconds, 1), 60)
+	c.CooldownSeconds = min(max(c.CooldownSeconds, 0), 60)
 	c.Screen = max(c.Screen, 0)
 	if !slices.Contains(Themes, c.Theme) {
 		c.Theme = d.Theme

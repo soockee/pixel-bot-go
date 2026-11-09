@@ -492,7 +492,7 @@ func (f *FishingFSM) transition(next FishingState) {
 		cooldown := f.reelTiming.Cooldown
 		f.reelTiming = ReelTiming{}
 		if cooldown == 0 {
-			cooldown = time.Duration(f.cfg.CooldownSeconds) * time.Second
+			cooldown = f.pause()
 		}
 		f.arm(cooldown)
 	}
@@ -578,7 +578,7 @@ func (f *FishingFSM) startReel() {
 	if f.actions.PlanReel != nil {
 		f.reelTiming = f.actions.PlanReel(f.cfg.BiteDetector)
 		if f.reelTiming.Cooldown == 0 {
-			f.reelTiming.Cooldown = time.Duration(f.cfg.CooldownSeconds) * time.Second
+			f.reelTiming.Cooldown = f.pause()
 		}
 		f.reelPressed = false
 	}
@@ -727,6 +727,19 @@ func (f *FishingFSM) tapKeyboard(vk byte, hold time.Duration) bool {
 	}
 	return true
 }
+
+// pause is the wait after a catch before the next cast: the configured
+// seconds, or by default a quick random 0.4 to 1.2 seconds, as a player
+// throws out again right after reeling in. The next search ignores the last
+// bobber's marker (markerIsStale) while that bobber fades.
+func (f *FishingFSM) pause() time.Duration {
+	if f.cfg.CooldownSeconds > 0 {
+		return time.Duration(f.cfg.CooldownSeconds) * time.Second
+	}
+	return quickPauseMin + rand.N(quickPauseMax-quickPauseMin)
+}
+
+const quickPauseMin, quickPauseMax = 400 * time.Millisecond, 1200 * time.Millisecond
 
 func (f *FishingFSM) interactVK(cfg config.Config) (byte, bool) {
 	vk, ok := f.actions.ParseVK(cfg.InteractKey)
