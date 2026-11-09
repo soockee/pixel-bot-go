@@ -7,6 +7,7 @@ import (
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/detect"
+	"github.com/soocke/pixel-bot-go/internal/cloud"
 	"github.com/soocke/pixel-bot-go/internal/recorder"
 )
 
@@ -22,7 +23,7 @@ type Commands struct {
 	// sign-in waits for the browser, an upload and an update for the network.
 	SignIn  func() error
 	SignOut func()
-	Upload  func(dir string) error
+	Upload  func(dir, fingerprint string, frames, audio bool) error
 	Update  func() error
 	// CheckUpdate asks GitHub for the latest release; it also waits for the network.
 	CheckUpdate  func() error
@@ -144,9 +145,18 @@ func (s *Service) SaveSettings(values Settings) (saved Settings, err error) {
 			err = errors.New("the Interact key matches the active Stop hotkey")
 			return
 		}
-		if next.Schedule && sameKey(next.LogoutKey, s.view.State().StopKey) {
+		if (next.Schedule || next.RepositionKey != "") && sameKey(next.LogoutKey, s.view.State().StopKey) {
 			err = errors.New("the Logout key matches the active Stop hotkey")
 			return
+		}
+		for _, optional := range []struct{ key, label string }{
+			{next.IdleKey, "Between-catch action"}, {next.TargetPlayerKey, "Target passing player"},
+			{next.RepositionKey, "Reposition key"},
+		} {
+			if optional.key != "" && sameKey(optional.key, s.view.State().StopKey) {
+				err = errors.New("the " + optional.label + " key matches the active Stop hotkey")
+				return
+			}
 		}
 		if err = next.Save(s.cfgPath); err != nil {
 			s.logger.Error("config save failed", "error", err)
@@ -192,13 +202,32 @@ func (s *Service) SignIn() error { return s.cmds.SignIn() }
 // SignOut forgets the signed-in account.
 func (s *Service) SignOut() { s.cmds.SignOut() }
 
-// Upload sends recording name to the upload service and returns when done.
-func (s *Service) Upload(name string) error {
+// ReviewUpload inspects the local recording before any upload request.
+func (s *Service) ReviewUpload(name string) (cloud.RecordingReview, error) {
+	dir, err := s.recordings.path(name)
+	if err != nil {
+		return cloud.RecordingReview{}, err
+	}
+	var active bool
+	if err := s.do(func() { active = s.view.State().RecordingName == name }); err != nil {
+		return cloud.RecordingReview{}, err
+	}
+	if active {
+		return cloud.RecordingReview{}, errors.New("stop recording before reviewing the upload")
+	}
+	return cloud.ReviewRecording(dir)
+}
+
+// Upload sends a key-free reviewed copy with the approved media.
+func (s *Service) Upload(name, fingerprint string, frames, audio bool) error {
 	dir, err := s.recordings.path(name)
 	if err != nil {
 		return err
 	}
-	return s.cmds.Upload(dir)
+	if fingerprint == "" {
+		return errors.New("review the recording before uploading")
+	}
+	return s.cmds.Upload(dir, fingerprint, frames, audio)
 }
 
 // Update downloads, verifies and installs the newer release, then restarts.

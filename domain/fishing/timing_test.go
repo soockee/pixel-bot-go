@@ -144,7 +144,7 @@ func TestPairedTimingReplay(t *testing.T) {
 				var holds []time.Duration
 				sample := model.Sampler(42)
 				actions := recordingActions(&actionLog{})
-				actions.ClickRight = func() { presses = append(presses, time.Now()) }
+				actions.ClickRight = func() bool { presses = append(presses, time.Now()); return true }
 				actions.PlanReel = func(detector string) ReelTiming {
 					s := inputtiming.Sample{HoldUS: inputtiming.FixedHoldUS}
 					if profile == "fitted" {

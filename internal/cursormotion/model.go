@@ -154,8 +154,11 @@ func (m Model) Planner(seed uint64) Planner {
 		// Divide the duration evenly to avoid a very short final interval.
 		intervals := (duration + 8*time.Millisecond) / (16 * time.Millisecond)
 		for i := time.Duration(1); i < intervals; i++ {
-			at := duration * i / intervals
-			progress := float64(i) / float64(intervals)
+			// Vary interior dispatch times while keeping the path's
+			// total duration and leaving space on either side.
+			jitter := time.Duration(rng.IntN(4001)-2000) * time.Microsecond
+			at := duration*i/intervals + jitter
+			progress := float64(at) / float64(duration)
 			us := int64(float64(end.US) * progress)
 			for idx < len(s.Points)-1 && s.Points[idx].US < us {
 				idx++

@@ -25,13 +25,13 @@ func newGuardFixture() *guardFixture {
 		Area:       func() *image.Rectangle { return f.area },
 		CursorPos:  func() (int, int, bool) { return f.cursor.X, f.cursor.Y, true },
 		OnTakeover: func() { f.takeovers++ },
-		Press:      func(byte) { f.sent = append(f.sent, "press") },
+		Press:      func(byte) bool { f.sent = append(f.sent, "press"); return true },
 		Move: func(x, y int) bool {
 			f.cursor = image.Pt(x, y)
 			f.sent = append(f.sent, "move")
 			return true
 		},
-		Click: func() { f.sent = append(f.sent, "click") },
+		Click: func() bool { f.sent = append(f.sent, "click"); return true },
 	}
 	return f
 }
@@ -126,5 +126,27 @@ func TestGuardHandsOverWhenTheUserMovesTheCursor(t *testing.T) {
 				t.Errorf("takeovers = %d, want 1", f.takeovers)
 			}
 		})
+	}
+}
+
+func TestCameraDragRequiresRoomAndFocus(t *testing.T) {
+	f := newGuardFixture()
+	f.cursor = image.Pt(90, 150)
+	called := false
+	drag := func(_ int, allowed func() bool) bool {
+		called = true
+		return allowed()
+	}
+	if attempted, moved := f.DragCamera(12, drag); attempted || moved || called {
+		t.Fatal("drag was attempted with the pointer outside the game")
+	}
+	f.cursor = image.Pt(150, 150)
+	if attempted, moved := f.DragCamera(12, drag); !attempted || !moved || !called {
+		t.Fatal("drag did not run inside the focused game")
+	}
+	f.inFront = false
+	called = false
+	if attempted, moved := f.DragCamera(12, drag); !attempted || moved || called {
+		t.Fatal("lost focus should block the drag and its fallback")
 	}
 }

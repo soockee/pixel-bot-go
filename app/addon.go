@@ -35,7 +35,7 @@ func (a *app) gameDir() (string, error) {
 // always, the Interact key only when it is the reel method.
 func (a *app) addonKeys() addon.Keys {
 	cfg := a.container.Config
-	keys := addon.Keys{Cast: addon.BindingKey(cfg.CastKey)}
+	keys := addon.Keys{Cast: addon.BindingKey(cfg.CastKey), TargetPlayer: addon.BindingKey(cfg.TargetPlayerKey)}
 	if cfg.ReelMethod == config.ReelInteractKey {
 		keys.Interact = addon.BindingKey(cfg.InteractKey)
 	}

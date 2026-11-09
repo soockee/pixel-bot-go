@@ -16,14 +16,17 @@ Nothing about your fishing. The pictures it looks at, the casts and the catches 
 
 ## What a shared recording holds
 
-Recording is off unless you switch on **Share recordings** in Settings, start a recording, and later click **Upload**. See [Record and share a session](../how-to/share-recordings.md). A recording holds:
+Recording is off unless you switch on **Share recordings** in Settings, start a recording, and later confirm **Upload reviewed copy**. See [Record and share a session](../how-to/share-recordings.md). A recording holds:
 
-- pictures of the **game window only**, never the rest of your screen: the whole window every ten seconds, and while your bobber is out, the small area around it about ten times a second;
+- pictures of the game client area, taken while the game is focused and the area passes an overlap check. Frames can contain names, chat or other sensitive material visible in the game;
 - your **mouse**: where it is and what you click, while it is over the game;
-- your **keys** while the game is in front, including what you type in chat, unless you switch off **Record keys**;
+- your **keys** while the game is in front only if you enable **Record keys**. This local trace can include sensitive typing;
 - the **game's sound** only, not music, voice chat or other programs.
 
-It holds no passwords, no files from your PC, and nothing from other windows.
+Reviewing an upload sends nothing. Go Fish flags potentially sensitive
+typing bursts and removes all raw key events from the upload copy. Frames
+and audio are optional and may contain personal information. Review them
+before including them. The original recording stays on your PC.
 
 ## What it is used for
 

@@ -2,6 +2,7 @@ package dataset
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/draw"
@@ -70,6 +71,9 @@ func Record(ctx context.Context, frames FrameSource, locator detect.Locator, dir
 			return written, nil
 		}
 		frame, err := frames.Next()
+		if errors.Is(err, capture.ErrFrameUnavailable) {
+			continue
+		}
 		if err != nil {
 			return written, err
 		}

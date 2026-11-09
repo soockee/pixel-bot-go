@@ -93,6 +93,9 @@ func (e *Engine) Start() error {
 		return nil
 	}
 	cfg := *e.cfg
+	if err := CheckActivityKeys(cfg, e.fsm.actions.ParseVK); err != nil {
+		return err
+	}
 	switch cfg.ReelMethod {
 	case "", config.ReelRightClick:
 	case config.ReelInteractKey:
@@ -126,7 +129,7 @@ func (e *Engine) Start() error {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel, e.done = cancel, make(chan struct{})
-	r := &run{engine: e, locator: locator, bite: bite, interact: cfg.ReelMethod == config.ReelInteractKey}
+	r := &run{engine: e, locator: locator, bite: bite, interact: cfg.ReelMethod == config.ReelInteractKey, watchPlayer: cfg.TargetPlayerKey != ""}
 	r.listener, _ = bite.(detect.SoundBiteDetector)
 	go r.loop(ctx, e.done, closeKeyboard)
 	return nil
@@ -148,20 +151,23 @@ func (e *Engine) Preview() *Preview { return e.preview.Load() }
 
 // run holds the state of one Start to Stop span. Only its goroutine touches it.
 type run struct {
-	engine       *Engine
-	locator      detect.Locator
-	bite         detect.BiteDetector
-	listener     detect.SoundBiteDetector // bite, when it also listens
-	target       image.Rectangle          // locked area in screen coordinates; the last bobber's while searching
-	targetWindow image.Rectangle          // client area when the target was found
-	searchStart  time.Time                // when this search began, zero outside searching
-	markerGone   bool                     // no marker has been seen since this search began
-	window       capture.Frame            // the last capture of the whole game window
-	lastSearch   time.Time
-	searches     int
-	monitoring   bool
-	interact     bool
-	lastErr      string
+	engine                 *Engine
+	locator                detect.Locator
+	bite                   detect.BiteDetector
+	listener               detect.SoundBiteDetector // bite, when it also listens
+	target                 image.Rectangle          // locked area in screen coordinates; the last bobber's while searching
+	targetWindow           image.Rectangle          // client area when the target was found
+	searchStart            time.Time                // when this search began, zero outside searching
+	markerGone             bool                     // no marker has been seen since this search began
+	window                 capture.Frame            // the last capture of the whole game window
+	lastSearch             time.Time
+	searches               int
+	monitoring             bool
+	interact               bool
+	lastErr                string
+	watchPlayer            bool
+	playerPoll             time.Time
+	playerSeen, playerSent uint8
 }
 
 func (r *run) loop(ctx context.Context, done chan<- struct{}, closeKeyboard func()) {
@@ -264,6 +270,9 @@ func (r *run) step() {
 		return
 	}
 	roi := r.monitor(frame)
+	if r.watchPlayer && e.fsm.Current() == StateMonitoring {
+		r.pollPlayer(window)
+	}
 	e.preview.Store(&Preview{Frame: r.window.Image, ROI: roi, ROIBox: r.target.Sub(r.window.Origin)})
 }
 
@@ -289,11 +298,19 @@ func (r *run) search(frame capture.Frame, window image.Rectangle) {
 		r.target = match.Box.Add(frame.Origin)
 		r.targetWindow = window
 		target := evtTargetAcquiredAt{
-			x: frame.Origin.X + match.X, y: frame.Origin.Y + match.Y,
+			x: frame.Origin.X + match.X, y: frame.Origin.Y + match.Y, box: r.target,
 			valid: func() bool {
 				current, err := e.frames.Window()
 				return err == nil && current == window
 			},
+		}
+		// A miss may click just outside the marker, away from the window edge.
+		for _, x := range []int{r.target.Min.X - 4, r.target.Max.X + 3} {
+			aim := image.Pt(x, target.y)
+			if aim.In(window.Inset(8)) && !aim.In(r.target) {
+				target.missAim = &aim
+				break
+			}
 		}
 		if r.interact {
 			area := r.target.Inset(-8).Intersect(window)

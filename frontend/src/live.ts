@@ -146,8 +146,8 @@ export function setupLive(): (state: State) => void {
       : "Sign in with Google to fish";
 
     $("reels").textContent = String(s.reels);
-    $("reels-label").textContent = s.reels === 1 ? "catch this run" : "catches this run";
-    $("casts").textContent = s.casts ? `${s.reels} of ${s.casts} casts got a bite` : "No casts yet";
+    $("reels-label").textContent = s.reels === 1 ? "reel sent this run" : "reels sent this run";
+    $("casts").textContent = s.casts ? `${s.casts} casts · ${s.reelInputs} of ${s.reelAttempts} reel inputs sent` : "No casts yet";
     meter("session", s.sessionSeconds, s.sessionLimit * 60, `${clock(s.sessionSeconds)} of ${s.sessionLimit} min`);
     meter("failed", s.failedInRow, s.maxFailed, `${s.failedInRow} of ${s.maxFailed}`);
   };

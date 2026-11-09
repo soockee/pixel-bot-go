@@ -81,8 +81,10 @@ func (a *app) setClickThrough(on bool) {
 func (a *app) followGame() {
 	c := a.container
 	var area image.Rectangle
-	if c.Capture.Enabled() || a.overlayMove {
-		area, _ = capture.WindowArea(c.Capture.Window()) // a minimised or closed game parks it
+	if c.Capture.Enabled() {
+		area, _ = c.frames().Window()
+	} else if a.overlayMove {
+		area, _ = capture.WindowArea(c.Capture.Window())
 	}
 	want := overlayPlacement{area: area, move: a.overlayMove}
 	if want == a.overlayPlaced {

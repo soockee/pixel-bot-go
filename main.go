@@ -44,7 +44,8 @@ func main() {
 	liveCursor := flag.Bool("live-cursor", false, "use the cursor profile for real pointer movement")
 	record := flag.String("record", "", "record the -window game into this new directory until Ctrl+C; sends no input")
 	window := flag.String("window", "", "with -record: the window to record, its picture plus your mouse and key input and its sound")
-	noKeys := flag.Bool("no-keys", false, "with -record: record only mouse input")
+	recordKeys := flag.Bool("record-keys", false, "with -record: also record keyboard input")
+	noKeys := flag.Bool("no-keys", false, "with -record: omit keyboard input")
 	listWindows := flag.Bool("list-windows", false, "print visible window titles and exit")
 	autoWindow := flag.String("auto-window", "", "preselect the target window title (headless runs)")
 	autoStart := flag.Bool("auto-start", false, "start capture automatically after launch (needs -auto-window)")
@@ -72,7 +73,7 @@ func main() {
 	if *record != "" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
-		err := recordSession(ctx, recorder.Session{Dir: *record, Window: *window, Label: *traceSession, Keys: !*noKeys, Status: os.Stderr})
+		err := recordSession(ctx, recorder.Session{Dir: *record, Window: *window, Label: *traceSession, Keys: *recordKeys && !*noKeys, Status: os.Stderr})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "recorder:", err)
 			os.Exit(1)
@@ -199,10 +200,15 @@ func recordSession(ctx context.Context, session recorder.Session) error {
 	if session.Window == "" {
 		return errors.New("-record needs -window, the game window to record")
 	}
-	region, err := capture.WindowArea(session.Window)
+	target, err := capture.ResolveWindow(session.Window)
 	if err != nil {
 		return err
 	}
+	region, err := target.Area()
+	if err != nil {
+		return err
+	}
+	session.Target = &target
 	session.Frames = capture.Source{Region: func() *image.Rectangle { return &region }}
 	fmt.Fprintln(session.Status, "Recording", region, "to", session.Dir, "- press Ctrl+C to stop")
 	return session.Run(ctx)

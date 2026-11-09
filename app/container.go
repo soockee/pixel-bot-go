@@ -6,7 +6,9 @@ import (
 	"image"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
@@ -38,6 +40,7 @@ type AppContainer struct {
 	RecordPresenter  *presenter.RecordPresenter
 	Loop             *presenter.Loop
 	trace            *liveTrace
+	gameWindow       atomic.Pointer[capture.WindowIdentity]
 }
 
 // TraceOptions configures desktop tracing and the optional reel timing profile.
@@ -58,7 +61,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	c.Recordings = desktop.NewRecordings(func() string { return cfg.RecordDir })
 	inFront := c.gameFocused
 
-	callbacks := fishing.ActionCallbacks{ParseVK: action.ParseVK}
+	callbacks := fishing.ActionCallbacks{ParseVK: action.ParseVK, CanAct: inFront}
 	dryRun := cfg.DryRun
 	if dryRun {
 		logger.Warn("dry-run enabled: input actions are logged, not injected")
@@ -84,6 +87,8 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			callbacks.Cursor = c.dryCursor(trace.Cursor, inFront, callbacks.MoveCursor)
 		}
 	} else {
+		callbacks.ReelRoll = rand.IntN
+		callbacks.RepositionRoll = rand.IntN
 		var keyboard esp32.Keyboard
 		callbacks.OpenKeyboard = func(run config.Config) (func(), error) {
 			port, err := esp32.PortName(run.ESP32Port)
@@ -99,10 +104,20 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			if err := keyboard.Open(port); err != nil {
 				return nil, err
 			}
-			logger.Info("ESP32 keyboard ready", "port", keyboard.Name())
+			if trace.Timing != nil {
+				if err := keyboard.PrepareTimedTaps(); err != nil {
+					return nil, err
+				}
+			}
+			if run.RepositionKey == config.RepositionAuto {
+				if err := keyboard.PrepareCamera(); err != nil {
+					return nil, err
+				}
+			}
+			logger.Info("ESP32 keyboard ready", "port", keyboard.Name(), "camera", keyboard.CanDragCamera())
 			return keyboard.Close, nil
 		}
-		callbacks.TapKeyboard = func(vk byte) error {
+		callbacks.TapKeyboard = func(vk byte, hold time.Duration) error {
 			usage, ok := esp32.ForegroundUsage(vk)
 			if !inFront() {
 				return errors.New("selected game window lost focus")
@@ -110,7 +125,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			if !ok {
 				return errors.New("ESP32 could not map the key in the active keyboard layout")
 			}
-			return keyboard.Tap(usage)
+			return keyboard.TapFor(usage, hold)
 		}
 		guard := &action.Guard{
 			Logger: logger, InFront: inFront, Area: c.gameArea, CursorPos: action.CursorPos,
@@ -121,25 +136,52 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		}
 		callbacks.PressKey, callbacks.MoveCursor, callbacks.ClickRight = guard.PressKey, guard.MoveCursor, guard.ClickRight
 		callbacks.HoldInteract = guard.HoldKey
-		if trace.Timing != nil {
-			callbacks.HoldRight = guard.HoldRight
-		}
-		if trace.Cursor != nil {
-			callbacks.Cursor = &fishing.CursorCallbacks{
-				Plan: func(target image.Point, settle bool) ([]fishing.CursorStep, bool) {
-					start, area, ok := guard.BeginCursor()
-					if !ok {
-						return nil, false
-					}
-					return cursorSteps(trace.Cursor(start, target, area, settle))
-				},
-				Move: guard.TryMoveCursor, Reset: guard.ResetCursor,
+		callbacks.HoldRight = guard.HoldRight
+		callbacks.DragCamera = func(dx int) (bool, bool) { return guard.DragCamera(dx, action.DragCamera) }
+		callbacks.DragHardwareCamera = func(dx int) (bool, bool) {
+			if !keyboard.CanDragCamera() || action.LeftMouseDown() {
+				return false, false
 			}
+			return guard.DragCamera(dx, func(dx int, allowed func() bool) bool {
+				if !allowed() || action.LeftMouseDown() {
+					return false
+				}
+				if err := keyboard.DragCamera(dx); err != nil {
+					logger.Error("ESP32 camera drag failed", "error", err)
+					return false
+				}
+				return true
+			})
+		}
+		plan := trace.Cursor
+		if plan == nil {
+			plan = cursormotion.DefaultPath
+		}
+		callbacks.Approach = func(center image.Point, box image.Rectangle) (image.Point, bool) {
+			area := c.gameArea()
+			x, y, ok := action.CursorPos()
+			if area == nil || !ok || !image.Pt(x, y).In(*area) {
+				return center, false
+			}
+			return cursormotion.ApproachPoint(center, box.Intersect(*area))
+		}
+		callbacks.Cursor = &fishing.CursorCallbacks{
+			Plan: func(target image.Point, settle bool) ([]fishing.CursorStep, bool) {
+				start, area, ok := guard.BeginCursor()
+				if !ok {
+					return nil, false
+				}
+				return cursorSteps(plan(start, target, area, settle))
+			},
+			Move: guard.TryMoveCursor, Reset: guard.ResetCursor,
 		}
 	}
-	if trace.Timing != nil || dryRun && trace.Output != nil {
+	if !dryRun || trace.Timing != nil || trace.Output != nil {
 		callbacks.PlanReel = func(detector string) fishing.ReelTiming {
-			s := inputtiming.Sample{HoldUS: inputtiming.FixedHoldUS}
+			var s inputtiming.Sample
+			if dryRun {
+				s.HoldUS = inputtiming.FixedHoldUS
+			}
 			if trace.Timing != nil {
 				s = trace.Timing()
 			}
@@ -149,6 +191,8 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			}
 			if dryRun {
 				timing.AfterDetection = time.Duration(trace.Calibration.DelayUS(detector, s)) * time.Microsecond
+			} else {
+				timing.AfterDetection = time.Duration(200+rand.IntN(121)+rand.IntN(121)) * time.Millisecond
 			}
 			return timing
 		}
@@ -164,11 +208,11 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		return locator, bite, err
 	}
 	sound := func(ctx context.Context, emit func([]byte, time.Time) error) error {
-		pid, err := capture.WindowProcess(c.Capture.Window())
-		if err != nil {
-			return err
+		target := c.gameWindow.Load()
+		if target == nil || !target.Valid() {
+			return errors.New("selected game window is no longer available")
 		}
-		return capture.CaptureAudio(ctx, pid, emit)
+		return capture.CaptureAudio(ctx, target.PID, emit)
 	}
 	c.Engine = fishing.NewEngine(c.frames(), sound, c.FSM, detectors, cfg, logger)
 
@@ -232,28 +276,49 @@ func cursorSteps(path []cursormotion.Step) ([]fishing.CursorStep, bool) {
 }
 
 // gameFrames captures the game window the person picked.
-type gameFrames struct{ title func() string }
+type gameFrames struct {
+	target func() *capture.WindowIdentity
+}
 
-func (g gameFrames) Window() (image.Rectangle, error) { return capture.WindowArea(g.title()) }
+func (g gameFrames) Window() (image.Rectangle, error) {
+	if w := g.target(); w != nil {
+		return w.Area()
+	}
+	return image.Rectangle{}, errors.New("select a game window")
+}
 func (g gameFrames) Grab(area image.Rectangle) (capture.Frame, error) {
 	return capture.Grab(area)
 }
 
-func (c *AppContainer) frames() gameFrames { return gameFrames{title: c.Capture.Window} }
+func (c *AppContainer) frames() gameFrames { return gameFrames{target: c.gameWindow.Load} }
 
 // gameArea is the game window's client area, or nil when it is not open. The
 // guard keeps every cursor move inside it.
 func (c *AppContainer) gameArea() *image.Rectangle {
-	area, err := capture.WindowArea(c.Capture.Window())
+	area, err := c.frames().Window()
 	if err != nil {
 		return nil
 	}
 	return &area
 }
 
+// bindGameWindow resolves the current choice before a run. Every operation
+// during that run uses this identity, including a scheduled logout.
+func (c *AppContainer) bindGameWindow() error {
+	if c.FSM.Current() != fishing.StateHalt {
+		return errors.New("wait for the previous fishing run to stop")
+	}
+	target, err := capture.ResolveWindow(c.Capture.Window())
+	if err != nil {
+		return err
+	}
+	c.gameWindow.Store(&target)
+	return nil
+}
+
 // startProblem explains why a run or recording must not start, or returns "".
 func (c *AppContainer) startProblem() string {
-	area, err := capture.WindowArea(c.Capture.Window())
+	area, err := c.frames().Window()
 	if err != nil {
 		return err.Error()
 	}
@@ -267,12 +332,16 @@ func (c *AppContainer) startProblem() string {
 // prepareRecording builds a recording of the game window in a new timestamped
 // folder.
 func (c *AppContainer) prepareRecording() (presenter.RecordJob, error) {
+	if err := c.bindGameWindow(); err != nil {
+		return presenter.RecordJob{}, err
+	}
 	if problem := c.startProblem(); problem != "" {
 		return presenter.RecordJob{}, errors.New(problem)
 	}
 	// A recording keeps the area it started with, so frame pixels and the saved
 	// window offset mean the same thing for the whole session.
-	region, err := capture.WindowArea(c.Capture.Window())
+	target := *c.gameWindow.Load()
+	region, err := target.Area()
 	if err != nil {
 		return presenter.RecordJob{}, err
 	}
@@ -280,6 +349,7 @@ func (c *AppContainer) prepareRecording() (presenter.RecordJob, error) {
 		Dir:    filepath.Join(c.Config.RecordDir, time.Now().Format("20060102-150405")),
 		Frames: capture.Source{Region: func() *image.Rectangle { return &region }},
 		Window: c.Capture.Window(),
+		Target: &target,
 		Live:   true,
 		Keys:   c.Config.RecordKeys,
 		Status: io.Discard,

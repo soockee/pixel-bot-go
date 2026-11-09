@@ -1,4 +1,4 @@
-// Package esp32 sends bounded keyboard taps to the Go Fish BLE firmware.
+// Package esp32 sends bounded keyboard taps and camera drags to the Go Fish BLE firmware.
 package esp32
 
 import (
@@ -45,6 +45,8 @@ type Keyboard struct {
 	mu     sync.Mutex
 	port   serial.Port
 	reader *bufio.Reader
+	timed  bool
+	camera bool
 	name   string                                          // the port in use, which AutoPort resolves
 	open   func(string, *serial.Mode) (serial.Port, error) // nil opens the real port; tests replace it
 	list   func() ([]string, error)                        // nil lists the USB serial ports; tests replace it
@@ -180,29 +182,111 @@ func (k *Keyboard) handshake() error {
 	}
 }
 
+// PrepareTimedTaps checks for optional hold support without sending input.
+// Call it before live actions so a focus check is not followed by negotiation.
+func (k *Keyboard) PrepareTimedTaps() error {
+	return k.prepareCapability("TAPMS", &k.timed)
+}
+
+// PrepareCamera probes for mouse support without moving the pointer.
+func (k *Keyboard) PrepareCamera() error {
+	return k.prepareCapability("MOUSE", &k.camera)
+}
+
+func (k *Keyboard) prepareCapability(command string, supported *bool) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.port == nil {
+		return errors.New("ESP32 port is closed")
+	}
+	reply, err := k.exchange(command)
+	if err != nil {
+		k.closePort()
+		return fmt.Errorf("ESP32 %s capability: %w", command, err)
+	}
+	switch reply {
+	case command:
+		*supported = true
+	case "ERR command":
+		*supported = false // older firmware
+	default:
+		k.closePort()
+		return fmt.Errorf("ESP32 %s capability: unexpected response %q", command, reply)
+	}
+	return nil
+}
+
+// CanDragCamera reports whether the open port advertised mouse support.
+func (k *Keyboard) CanDragCamera() bool {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.camera
+}
+
+// DragCamera requests one bounded horizontal drag. The firmware owns the
+// press and release. An unacknowledged gesture is never retried.
+func (k *Keyboard) DragCamera(dx int) error {
+	if dx < -24 || dx > 24 || dx == 0 {
+		return errors.New("ESP32 camera drag must be between 1 and 24 counts")
+	}
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.port == nil || !k.camera {
+		return errors.New("ESP32 mouse support is unavailable")
+	}
+	return k.sendAction(fmt.Sprintf("DRAG %d", dx), "camera drag")
+}
+
 // Tap waits for acknowledgment of a bounded press and release. A failed
 // transaction closes the port because the press might already have happened.
 func (k *Keyboard) Tap(usage byte) error {
+	return k.TapFor(usage, 0)
+}
+
+// TapFor requests a 10–500 ms hold on current firmware. Zero and legacy
+// firmware use the board's default hold. Call PrepareTimedTaps before the
+// run to enable the optional command.
+func (k *Keyboard) TapFor(usage byte, hold time.Duration) error {
 	if usage < 0x04 || usage > 0x65 {
 		return errors.New("ESP32 requires a keyboard key")
+	}
+	if hold != 0 && (hold < 10*time.Millisecond || hold > 500*time.Millisecond) {
+		return errors.New("ESP32 hold must be between 10 and 500 ms")
 	}
 	k.mu.Lock()
 	defer k.mu.Unlock()
 	if k.port == nil {
 		return errors.New("ESP32 port is closed")
 	}
-	reply, err := k.exchange(fmt.Sprintf("TAP %02X", usage))
+	command := fmt.Sprintf("TAP %02X", usage)
+	custom := hold != 0 && hold != 40*time.Millisecond
+
+	if k.timed && custom {
+		command = fmt.Sprintf("%s %d", command, hold.Milliseconds())
+	}
+	if k.timed {
+		if err := k.port.SetReadTimeout(300*time.Millisecond + hold); err != nil {
+			k.closePort()
+			return fmt.Errorf("ESP32 tap timeout: %w", err)
+		}
+	}
+	return k.sendAction(command, "tap")
+}
+
+// sendAction runs with the port locked.
+func (k *Keyboard) sendAction(command, action string) error {
+	reply, err := k.exchange(command)
 	if err == nil && reply == "OK" {
 		return nil
 	}
 	k.closePort()
 	if err != nil {
-		return fmt.Errorf("ESP32 tap acknowledgment: %w", err)
+		return fmt.Errorf("ESP32 %s acknowledgment: %w", action, err)
 	}
 	if reply == "ERR disconnected" {
 		return errors.New("the ESP32 lost its Bluetooth link to this PC; reconnect Go Fish ESP32 Probe")
 	}
-	return fmt.Errorf("ESP32 rejected tap: %q", reply)
+	return fmt.Errorf("ESP32 rejected %s: %q", action, reply)
 }
 
 // Close releases the port. The firmware owns the release of any pending tap.
@@ -216,6 +300,7 @@ func (k *Keyboard) closePort() {
 	if k.port != nil {
 		_ = k.port.Close()
 		k.port, k.reader, k.name = nil, nil, ""
+		k.timed, k.camera = false, false
 	}
 }
 

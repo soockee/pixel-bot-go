@@ -201,3 +201,81 @@ func TestTapOnClosedKeyboard(t *testing.T) {
 		t.Fatal("Tap on a closed keyboard succeeded")
 	}
 }
+
+func TestTimedTapNegotiatesOnceAndSupportsLegacyFirmware(t *testing.T) {
+	for _, tc := range []struct{ capability, taps string }{
+		{"TAPMS", "TAP 04 500\nTAP 05 70\n"},
+		{"ERR command", "TAP 04\nTAP 05\n"},
+	} {
+		t.Run(tc.capability, func(t *testing.T) {
+			port := &scriptedPort{reply: strings.NewReader("GOFISH 1 READY\n" + tc.capability + "\nOK\nOK\n")}
+			keyboard := openWith(port, nil)
+			if err := keyboard.Open("COM3"); err != nil {
+				t.Fatal(err)
+			}
+			defer keyboard.Close()
+			if err := keyboard.PrepareTimedTaps(); err != nil {
+				t.Fatal(err)
+			}
+			if err := keyboard.TapFor(4, 501*time.Millisecond); err == nil {
+				t.Fatal("accepted hold longer than firmware limit")
+			}
+			if err := keyboard.TapFor(4, 500*time.Millisecond); err != nil {
+				t.Fatal(err)
+			}
+			if err := keyboard.TapFor(5, 70*time.Millisecond); err != nil {
+				t.Fatal(err)
+			}
+			if got, want := port.writes.String(), "HELLO\nTAPMS\n"+tc.taps; got != want {
+				t.Fatalf("serial writes = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestCameraProtocol(t *testing.T) {
+	for _, tc := range []struct {
+		name, capability, reply string
+		supported, fail         bool
+	}{
+		{name: "mouse-capable firmware", capability: "MOUSE", reply: "OK", supported: true},
+		{name: "legacy firmware", capability: "ERR command"},
+		{name: "mouse report rejected", capability: "MOUSE", reply: "ERR BLE report", supported: true, fail: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			port := &scriptedPort{reply: strings.NewReader("GOFISH 1 READY\n" + tc.capability + "\n" + tc.reply + "\n")}
+			keyboard := openWith(port, nil)
+			if err := keyboard.Open("COM3"); err != nil {
+				t.Fatal(err)
+			}
+			defer keyboard.Close()
+			if err := keyboard.PrepareCamera(); err != nil {
+				t.Fatal(err)
+			}
+			if got := keyboard.CanDragCamera(); got != tc.supported {
+				t.Fatalf("camera available = %v, want %v", got, tc.supported)
+			}
+			if err := keyboard.DragCamera(25); err == nil {
+				t.Fatal("sent an out-of-range drag")
+			}
+			if err := keyboard.DragCamera(-12); (err != nil) != (tc.fail || !tc.supported) {
+				t.Fatalf("unexpected drag result: %v", err)
+			}
+			if tc.fail {
+				if keyboard.CanDragCamera() || !port.closed {
+					t.Fatal("failed drag left the port open")
+				}
+				if err := keyboard.DragCamera(-12); err == nil {
+					t.Fatal("retried a failed drag")
+				}
+			}
+			want := "HELLO\nMOUSE\n"
+			if tc.supported {
+				want += "DRAG -12\n"
+			}
+			if got := port.writes.String(); got != want {
+				t.Fatalf("serial writes = %q, want %q", got, want)
+			}
+		})
+	}
+}

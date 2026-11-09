@@ -25,7 +25,7 @@ onState((s) => {
   }
   if (!s.running) return;
   step.textContent = cycle.find(([key]) => key === s.fsm)?.[2] ?? "Starting";
-  catches.textContent = `${s.reels} ${s.reels === 1 ? "catch" : "catches"}`;
+  catches.textContent = `${s.reels} ${s.reels === 1 ? "reel sent" : "reels sent"}`;
   stop.textContent = `${keyLabel(s.stopKey)} to stop`;
   status.hidden = s.status === "" || s.status === "Ready";
   status.textContent = s.status;

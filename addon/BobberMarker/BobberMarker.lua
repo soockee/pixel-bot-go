@@ -19,6 +19,7 @@ local BOX = 96;
 local ARM = 20;
 local THICKNESS = 3;
 local DEFAULT_Y = -40; -- the bobber sits this far below its nameplate's centre
+local OFFSET_RADIUS = 2;
 local COLOR = { 1, 0, 1 }; -- opaque magenta: exact over any background, and rare in the world
 
 local POLL = 0.1; -- seconds between checks while fishing
@@ -36,6 +37,7 @@ local PLATE = "SoftTargetNameplateInteract";
 
 local db;
 local fishing = false;
+local offsetX, offsetY = 0, 0;
 local plateBefore; -- your SoftTargetNameplateInteract while the marker had it on
 local anchor;      -- the nameplate the marker hangs on
 
@@ -84,6 +86,57 @@ end
 
 -- Sizes the box and its brackets in screen pixels. Each corner gets a
 -- horizontal and a vertical bar that meet in the corner.
+local playerSignal = CreateFrame("Frame", nil, UIParent);
+playerSignal:SetFrameStrata("TOOLTIP");
+playerSignal:Hide();
+local signalBlocks = {};
+local previousPlayer;
+local playerSequence = 0;
+for i, rgb in ipairs({ { 0, 1, 1 }, { 1, 1, 0 }, { 1, 0, 1 }, { 0, 0, 1 }, { 0, 0, 0 } }) do
+    local block = playerSignal:CreateTexture(nil, "OVERLAY");
+    block:SetColorTexture(rgb[1], rgb[2], rgb[3], 1);
+    signalBlocks[i] = block;
+end
+
+local function UpdatePlayerSignal()
+    local key = BobberMarkerKeys and BobberMarkerKeys.targetPlayer;
+    if not key or key == "" or not fishing or InCombatLockdown() or
+        GetBindingAction(key, true) ~= "CLICK BobberMarkerTargetPlayer:LeftButton" then
+        return playerSignal:Hide();
+    end
+    local ok, guid = pcall(function()
+        local player = UnitIsPlayer("softfriend");
+        local self = UnitIsUnit("softfriend", "player");
+        local selected = UnitIsUnit("softfriend", "target");
+        if issecretvalue and (issecretvalue(player) or issecretvalue(self) or issecretvalue(selected)) then
+            return false;
+        end
+        if player and not self and not selected then
+            local id = UnitGUID("softfriend");
+            if Readable(id) and type(id) == "string" then
+                return id;
+            end
+        end
+    end);
+    if not ok or not guid then
+        return playerSignal:Hide();
+    end
+    if guid ~= previousPlayer then
+        previousPlayer = guid;
+        playerSequence = playerSequence % 255 + 1;
+        signalBlocks[5]:SetColorTexture(playerSequence / 255, 211 / 255, 77 / 255, 1);
+    end
+    local px = PixelSize(playerSignal);
+    playerSignal:ClearAllPoints();
+    playerSignal:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 8 * px, -8 * px);
+    playerSignal:SetSize(30 * px, 6 * px);
+    for i, block in ipairs(signalBlocks) do
+        block:SetPoint("TOPLEFT", playerSignal, "TOPLEFT", (i - 1) * 6 * px, 0);
+        block:SetSize(6 * px, 6 * px);
+    end
+    playerSignal:Show();
+end
+
 local function Layout()
 	local px = PixelSize(marker);
 	marker:SetSize(BOX * px, BOX * px);
@@ -118,7 +171,8 @@ local function Attach(plate)
 	end
 	Layout();
 	marker:ClearAllPoints();
-	marker:SetPoint("CENTER", plate, "CENTER", 0, db.y * PixelSize(marker));
+	local px = PixelSize(marker);
+	marker:SetPoint("CENTER", plate, "CENTER", offsetX * px, (db.y + offsetY) * px);
 	marker:Show();
 	anchor = plate;
 end
@@ -158,10 +212,16 @@ poller:SetScript("OnUpdate", function(_, elapsed)
 	if sinceCheck >= POLL then
 		sinceCheck = 0;
 		Evaluate();
+		UpdatePlayerSignal();
 	end
 end);
 
 local function StartFishing()
+	if not fishing then
+		-- Reattaching the same cast's marker must keep the watched box steady.
+		offsetX = math.random(-OFFSET_RADIUS, OFFSET_RADIUS);
+		offsetY = math.random(-OFFSET_RADIUS, OFFSET_RADIUS);
+	end
 	fishing = true;
 	if not db.prepared and not InCombatLockdown() then
 		for name, value in pairs(NEEDED) do
@@ -180,6 +240,7 @@ end
 local function StopFishing()
 	fishing = false;
 	poller:Hide();
+	playerSignal:Hide();
 	Release();
 	if plateBefore ~= nil then
 		SetCVarValue(PLATE, plateBefore);
@@ -210,6 +271,10 @@ local CAST_MACRO = "Fishing";
 local FISHING = 7620;      -- the spell ID of Fishing; its name is looked up, so the macro follows the game's language
 local MACRO_ICON = 134400; -- the question mark icon
 local INTERACT = "INTERACTTARGET";
+local targetButton = CreateFrame("Button", "BobberMarkerTargetPlayer", UIParent, "SecureActionButtonTemplate");
+targetButton:RegisterForClicks("AnyDown", "AnyUp");
+targetButton:SetAttribute("type", "target");
+targetButton:SetAttribute("unit", "softfriend");
 local keysPending = false;
 local keyProblems = {};
 
@@ -272,8 +337,30 @@ local function SetUpKeys()
 			Problem("could not bind " .. interact .. "; bind Interact With Target to it in Key Bindings.");
 		end
 	end
+	ClearOverrideBindings(targetButton);
+	local targetPlayer = keys.targetPlayer;
+	local softFriend = GetCVarValue("SoftTargetFriend");
+	if targetPlayer and targetPlayer ~= "" then
+		if GetBindingAction(targetPlayer) == "" then
+			SetOverrideBindingClick(targetButton, false, targetPlayer, targetButton:GetName(), "LeftButton");
+			if softFriend and softFriend ~= "3" then
+				db.softFriendBefore = db.softFriendBefore or softFriend;
+				SetCVarValue("SoftTargetFriend", "3");
+			end
+			if GetCVarValue("SoftTargetFriend") ~= "3" then
+				Problem("friendly soft targeting could not be enabled.");
+			end
+		else
+			Problem("the passing-player key " .. targetPlayer .. " is already bound; choose an unused key.");
+		end
+	elseif db.softFriendBefore then
+		if softFriend == "3" then
+			SetCVarValue("SoftTargetFriend", db.softFriendBefore);
+		end
+		db.softFriendBefore = nil;
+	end
 	if changed then
-		SaveBindings(GetCurrentBindingSet());
+        SaveBindings(GetCurrentBindingSet());
 	end
 end
 
@@ -334,6 +421,9 @@ end
 
 handlers.NAME_PLATE_UNIT_ADDED = Evaluate;
 handlers.PLAYER_SOFT_INTERACT_CHANGED = Evaluate;
+handlers.PLAYER_SOFT_FRIEND_CHANGED = UpdatePlayerSignal;
+handlers.PLAYER_TARGET_CHANGED = UpdatePlayerSignal;
+handlers.PLAYER_REGEN_DISABLED = function() playerSignal:Hide(); end;
 
 local addonName = ...;
 local events = CreateFrame("Frame");
@@ -363,7 +453,7 @@ SlashCmdList.BOBBERMARKER = function(input)
 			Attach(plate);
 		end
 	end
-	print(("|cffff00ffBobber Marker:|r the box is %d pixels from the nameplate's centre. Move it with /bobbermarker y <pixels>, negative is down (default %d)."):format(db.y, DEFAULT_Y));
+	print(("|cffff00ffBobber Marker:|r the base vertical offset from the nameplate's centre is %d pixels. Move it with /bobbermarker y <pixels>, negative is down (default %d)."):format(db.y, DEFAULT_Y));
 	for _, problem in ipairs(keyProblems) do
 		print("|cffff00ffBobber Marker:|r " .. problem);
 	end

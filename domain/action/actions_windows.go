@@ -26,6 +26,9 @@ const (
 	inputMouse    = 0
 	inputKeyboard = 1
 	keyEventUp    = 0x0002
+	mouseMove     = 0x0001
+	mouseLeftDn   = 0x0002
+	mouseLeftUp   = 0x0004
 	mouseRightDn  = 0x0008
 	mouseRightUp  = 0x0010
 	mouseXDown    = 0x0080
@@ -76,10 +79,15 @@ func sendInput[T keyboardInput | mouseInput](in T) bool {
 }
 
 // ClickRight sends a right mouse button click (down then up).
-func ClickRight() {
-	sendInput(mouseInput{kind: inputMouse, flags: mouseRightDn})
+func ClickRight() bool {
+	const vkRightButton = 0x02
+	state, _, _ := procGetAsyncKeyState.Call(vkRightButton)
+	if state&0x8000 != 0 || !sendInput(mouseInput{kind: inputMouse, flags: mouseRightDn}) {
+		return false
+	}
 	time.Sleep(30 * time.Millisecond)
-	sendInput(mouseInput{kind: inputMouse, flags: mouseRightUp})
+	up := mouseInput{kind: inputMouse, flags: mouseRightUp}
+	return sendInput(up) || sendInput(up)
 }
 
 // BeginRightHold presses the right button and returns its release. A nil
@@ -95,6 +103,31 @@ func BeginRightHold() func() {
 			sendInput(mouseInput{kind: inputMouse, flags: mouseRightUp})
 		}
 	}
+}
+
+// LeftMouseDown reports whether the left mouse button is already held.
+func LeftMouseDown() bool {
+	const vkLeftButton = 0x01
+	state, _, _ := procGetAsyncKeyState.Call(vkLeftButton)
+	return state&0x8000 != 0
+}
+
+// DragCamera holds left mouse, moves horizontally, and always releases.
+func DragCamera(dx int, allowed func() bool) bool {
+	if LeftMouseDown() || !allowed() || !sendInput(mouseInput{kind: inputMouse, flags: mouseLeftDn}) {
+		return false
+	}
+	defer func() {
+		if !sendInput(mouseInput{kind: inputMouse, flags: mouseLeftUp}) {
+			sendInput(mouseInput{kind: inputMouse, flags: mouseLeftUp})
+		}
+	}()
+	time.Sleep(25 * time.Millisecond)
+	if !allowed() || !sendInput(mouseInput{kind: inputMouse, dx: int32(dx), flags: mouseMove}) {
+		return false
+	}
+	time.Sleep(25 * time.Millisecond)
+	return true
 }
 
 // MoveCursor moves the OS mouse pointer to (x, y) and reports success.
@@ -115,10 +148,13 @@ func CursorPos() (x, y int, ok bool) {
 
 // PressKey sends a key down followed by a key up for the virtual-key code, or
 // a click for a mouse side button.
-func PressKey(vk byte) {
-	sendKey(vk, false)
+func PressKey(vk byte) bool {
+	state, _, _ := procGetAsyncKeyState.Call(uintptr(vk))
+	if state&0x8000 != 0 || !sendKey(vk, false) {
+		return false
+	}
 	time.Sleep(40 * time.Millisecond)
-	sendKey(vk, true)
+	return sendKey(vk, true) || sendKey(vk, true)
 }
 
 // BeginKeyHold presses a key or side button and returns its mandatory release.

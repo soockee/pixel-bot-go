@@ -189,15 +189,21 @@ func physicalPixels() func() {
 // WindowArea returns the client area of the window titled title, in
 // physical screen pixels: what a game draws into, without its frame.
 func WindowArea(title string) (image.Rectangle, error) {
-	name, err := windows.UTF16PtrFromString(title)
+	target, err := ResolveWindow(title)
 	if err != nil {
 		return image.Rectangle{}, err
 	}
-	defer physicalPixels()()
-	hwnd, _, _ := procFindWindow.Call(0, uintptr(unsafe.Pointer(name)))
-	if hwnd == 0 {
-		return image.Rectangle{}, fmt.Errorf("no window titled %q", title)
+	return target.Area()
+}
+
+// Area returns the selected window's client rectangle in physical pixels.
+func (w WindowIdentity) Area() (image.Rectangle, error) {
+	if !w.Valid() {
+		return image.Rectangle{}, errors.New("selected game window has closed or changed")
 	}
+	defer physicalPixels()()
+	hwnd := uintptr(w.Handle)
+	title := w.Title
 	var client struct{ Left, Top, Right, Bottom int32 }
 	if ok, _, err := procGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&client))); ok == 0 {
 		return image.Rectangle{}, fmt.Errorf("window %q: %w", title, err)

@@ -726,3 +726,23 @@ input.switch:disabled { opacity: 0.5; cursor: default; }
 .trace-body { display: flex; flex-direction: column; gap: 16px; }
 .trace > *, .trace-body > * { flex: none; }
 .lock img { display: block; width: 100%; height: 100%; }
+
+#upload-review {
+  max-width: min(34rem, 90vw);
+  max-height: 85vh;
+  padding: 1.25rem;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: .6rem;
+}
+#upload-review::backdrop { background: rgb(0 0 0 / .55); }
+#upload-review-warning, .sensitive-span { color: var(--accent-text); }
+#upload-review-error { color: var(--bad); }
+#upload-review label { display: block; margin-block: .55rem; }
+#upload-review-sensitive { max-height: 12rem; overflow: auto; }
+.sensitive-span { font-weight: 650; }
+.upload-review-actions { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1rem; }
+
+#upload-review-image { display: block; max-width: 100%; max-height: 26vh; }
+#upload-review-player { width: 100%; }

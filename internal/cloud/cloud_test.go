@@ -98,7 +98,7 @@ func TestUploadSendsRecordingFiles(t *testing.T) {
 	c := New(service.URL, "client", "secret")
 	s := &Session{c: c, tokens: fakeTokens{}}
 	var last int
-	if err := s.Upload(context.Background(), dir, func(done, total int) { last = done; _ = total }); err != nil {
+	if err := s.uploadFiles(context.Background(), filepath.Base(dir), testRecordingFiles(t, dir), func(done, total int) { last = done; _ = total }); err != nil {
 		t.Fatal(err)
 	}
 	if last != 3 {
@@ -125,7 +125,7 @@ func TestUploadReportsRefusal(t *testing.T) {
 	}))
 	defer service.Close()
 	s := &Session{c: New(service.URL, "client", "secret"), tokens: fakeTokens{}}
-	err := s.Upload(context.Background(), dir, func(int, int) {})
+	err := s.uploadFiles(context.Background(), filepath.Base(dir), testRecordingFiles(t, dir), func(int, int) {})
 	if err == nil || !strings.Contains(err.Error(), "may not upload") {
 		t.Errorf("err = %v", err)
 	}
@@ -144,4 +144,13 @@ func mustAtoi(t *testing.T, s string) int64 {
 		t.Errorf("size %q", s)
 	}
 	return n
+}
+
+func testRecordingFiles(t *testing.T, dir string) []file {
+	t.Helper()
+	files, err := recordingFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
 }

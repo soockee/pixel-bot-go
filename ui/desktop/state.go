@@ -32,13 +32,15 @@ type State struct {
 	SessionSeconds int                   `json:"sessionSeconds"`
 	SessionLimit   int                   `json:"sessionLimit"` // minutes; the run stops at the first cast after it
 	Casts          int                   `json:"casts"`        // this run's casts
-	Reels          int                   `json:"reels"`        // this run's reels, each a bite answered
-	FailedInRow    int                   `json:"failedInRow"`  // casts in a row without a reel
-	MaxFailed      int                   `json:"maxFailed"`    // the run stops when FailedInRow reaches it
-	Frame          int                   `json:"frame"`        // version of /frames/capture; 0 means none
-	FrameSize      Point                 `json:"frameSize"`    // the capture's size in screen pixels; the image may be smaller
-	ROI            int                   `json:"roi"`          // version of /frames/roi, the live box around the bobber; 0 means none
-	ROIBox         Rect                  `json:"roiBox"`       // where the ROI sits on the capture, in screen pixels
+	ReelAttempts   int                   `json:"reelAttempts"`
+	ReelInputs     int                   `json:"reelInputs"`
+	Reels          int                   `json:"reels"`       // this run's reels, each a bite answered
+	FailedInRow    int                   `json:"failedInRow"` // casts in a row without a reel
+	MaxFailed      int                   `json:"maxFailed"`   // the run stops when FailedInRow reaches it
+	Frame          int                   `json:"frame"`       // version of /frames/capture; 0 means none
+	FrameSize      Point                 `json:"frameSize"`   // the capture's size in screen pixels; the image may be smaller
+	ROI            int                   `json:"roi"`         // version of /frames/roi, the live box around the bobber; 0 means none
+	ROIBox         Rect                  `json:"roiBox"`      // where the ROI sits on the capture, in screen pixels
 	DryRun         bool                  `json:"dryRun"`
 	StopKey        string                `json:"stopKey"`
 	Dark           bool                  `json:"dark"`
