@@ -161,6 +161,50 @@ local function LayoutWorldSignal()
     end
 end
 
+
+-- Tells Go Fish how each cast ended, so it can count catches and tell a reel
+-- on a false bite ("No fish are hooked") from a fish that got away. Yellow,
+-- cyan and yellow blocks under the in-world blocks, then a block whose red is
+-- a counter that changes with every outcome and whose green is the outcome.
+local outcomeSignal = CreateFrame("Frame");
+outcomeSignal:SetFrameStrata("TOOLTIP");
+outcomeSignal:Hide();
+local outcomeBlocks = {};
+for i, rgb in ipairs({ { 1, 1, 0 }, { 0, 1, 1 }, { 1, 1, 0 }, { 0, 0, 0 } }) do
+    local block = outcomeSignal:CreateTexture(nil, "OVERLAY");
+    block:SetColorTexture(rgb[1], rgb[2], rgb[3], 1);
+    outcomeBlocks[i] = block;
+end
+local outcomeSequence = 0;
+-- The green of the last block for each outcome; Go Fish reads the same values.
+local OUTCOME_CAUGHT, OUTCOME_GOT_AWAY, OUTCOME_NOT_HOOKED = 64, 128, 192;
+
+local function LayoutOutcomeSignal()
+    local px = PixelSize(outcomeSignal);
+    outcomeSignal:ClearAllPoints();
+    outcomeSignal:SetPoint("TOPLEFT", WorldFrame, "TOPLEFT", 8 * px, -24 * px);
+    outcomeSignal:SetSize(24 * px, 6 * px);
+    for i, block in ipairs(outcomeBlocks) do
+        block:SetPoint("TOPLEFT", outcomeSignal, "TOPLEFT", (i - 1) * 6 * px, 0);
+        block:SetSize(6 * px, 6 * px);
+    end
+end
+
+local function ShowOutcome(code)
+    outcomeSequence = outcomeSequence % 255 + 1;
+    outcomeBlocks[4]:SetColorTexture(outcomeSequence / 255, code / 255, 77 / 255, 1);
+    LayoutOutcomeSignal();
+    outcomeSignal:Show();
+end
+
+-- The game's messages for a fish that got away and for a reel with nothing on
+-- the hook, as the game names them where it has them, else in English.
+local function Message(global, english)
+    local text = _G[global];
+    return (type(text) == "string" and text ~= "" and text or english):lower():gsub("[%.!]+$", "");
+end
+local GOT_AWAY = Message("ERR_FISH_ESCAPED", "Your fish got away!");
+local NOT_HOOKED = Message("ERR_FISH_NOT_HOOKED", "No fish are hooked.");
 local function Layout()
 	local px = PixelSize(marker);
 	marker:SetSize(BOX * px, BOX * px);
@@ -452,17 +496,38 @@ function handlers.NAME_PLATE_UNIT_REMOVED(unit)
 	end
 end
 
+-- arg1 is the message type and arg2 the text on current clients; older ones
+-- pass only the text.
+function handlers.UI_ERROR_MESSAGE(arg1, arg2)
+	local text = type(arg2) == "string" and arg2 or arg1;
+	if type(text) ~= "string" then
+		return;
+	end
+	text = text:lower():gsub("[%.!]+$", "");
+	if text == GOT_AWAY then
+		ShowOutcome(OUTCOME_GOT_AWAY);
+	elseif text == NOT_HOOKED then
+		ShowOutcome(OUTCOME_NOT_HOOKED);
+	end
+end
+
+function handlers.LOOT_OPENED()
+	if IsFishingLoot and IsFishingLoot() then
+		ShowOutcome(OUTCOME_CAUGHT);
+	end
+end
+
 handlers.NAME_PLATE_UNIT_ADDED = Evaluate;
 handlers.PLAYER_SOFT_INTERACT_CHANGED = Evaluate;
 handlers.PLAYER_SOFT_FRIEND_CHANGED = UpdatePlayerSignal;
 handlers.PLAYER_TARGET_CHANGED = UpdatePlayerSignal;
 handlers.PLAYER_REGEN_DISABLED = function() playerSignal:Hide(); end;
-handlers.DISPLAY_SIZE_CHANGED = LayoutWorldSignal;
-handlers.UI_SCALE_CHANGED = LayoutWorldSignal;
+handlers.DISPLAY_SIZE_CHANGED = function() LayoutWorldSignal(); LayoutOutcomeSignal(); end;
+handlers.UI_SCALE_CHANGED = handlers.DISPLAY_SIZE_CHANGED;
 
 local addonName = ...;
 local events = CreateFrame("Frame");
-events:SetScript("OnEvent", function(_, event, arg1)
+events:SetScript("OnEvent", function(_, event, arg1, arg2)
 	if event == "ADDON_LOADED" then
 		if arg1 == addonName then
 			handlers.ADDON_LOADED();
@@ -470,7 +535,7 @@ events:SetScript("OnEvent", function(_, event, arg1)
 		return;
 	end
 	if db then
-		handlers[event](arg1);
+		handlers[event](arg1, arg2);
 	end
 end);
 for event in pairs(handlers) do

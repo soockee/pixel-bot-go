@@ -139,6 +139,21 @@ export interface State {
     "failedInRow": number;
 
     /**
+     * casts that ended with fishing loot, as Bobber Marker reports
+     */
+    "caught": number;
+
+    /**
+     * reels where the fish got away
+     */
+    "gotAway": number;
+
+    /**
+     * reels with no fish hooked: false bites
+     */
+    "notHooked": number;
+
+    /**
      * the run stops when FailedInRow reaches it
      */
     "maxFailed": number;

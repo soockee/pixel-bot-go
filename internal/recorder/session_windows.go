@@ -29,6 +29,8 @@ type Session struct {
 	Label  string                       // shared with other traces from this playtest
 	Keys   bool                         // record keys as well as the mouse
 	Status io.Writer                    // progress messages
+	// OnStart, when set, gets the start time frame names and the input trace count from.
+	OnStart func(start time.Time)
 }
 
 // Run records until ctx ends or either recording fails. Frames and input share
@@ -65,6 +67,9 @@ func (s Session) Run(parent context.Context) error {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	start := time.Now()
+	if s.OnStart != nil {
+		s.OnStart(start)
+	}
 	var frames int
 	var frameErr, inputErr, audioErr error
 	var wg sync.WaitGroup

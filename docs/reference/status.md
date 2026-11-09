@@ -20,6 +20,7 @@ Go Fish goes round these steps; the Fishing tab highlights the current one.
 ## Counters
 
 - **Catches this run**: fish reeled in since you pressed Start, and how many casts that took.
+- **Caught, got away, not hooked**: how the reels ended, as the game told Bobber Marker. "Not hooked" means Go Fish reeled with no fish on the hook. Shown once Bobber Marker 1.5.0 or later is installed.
 - **Session**: how long this run has gone, against the session length.
 - **Casts without a bite**: casts in a row without a catch, against the limit that stops the run.
 

@@ -146,12 +146,15 @@ export function setupLive(): (state: State) => void {
     start.textContent = s.running ? words.stop : words.start;
     start.classList.toggle("primary", !s.running && s.setupDone);
     start.classList.toggle("stop", s.running);
-    start.disabled = s.recording;
     $("start-hint").hidden = true;
 
     $("reels").textContent = String(s.reels);
     $("reels-label").textContent = words.catches[s.reels === 1 ? 0 : 1];
     $("casts").textContent = s.casts ? `${s.casts} casts · ${s.reelInputs} of ${s.reelAttempts} reel inputs sent` : "No casts yet";
+    // How reels ended, from Bobber Marker: "not hooked" is a reel on a false bite.
+    const told = s.caught + s.gotAway + s.notHooked;
+    $("outcomes").hidden = told === 0;
+    $("outcomes").textContent = `${s.caught} caught · ${s.gotAway} got away · ${s.notHooked} not hooked`;
     meter("session", s.sessionSeconds, s.sessionLimit * 60, `${clock(s.sessionSeconds)} of ${s.sessionLimit} min`);
     meter("failed", s.failedInRow, s.maxFailed, `${s.failedInRow} of ${s.maxFailed}`);
 

@@ -177,9 +177,8 @@ export function setupRecorder(isVisible: () => boolean): { onState: (s: State) =
       record.textContent = s.recording ? "Stop recording" : "Record";
       record.classList.toggle("primary", !s.recording);
       record.classList.toggle("stop", s.recording);
-      record.disabled = s.running;
       $("record-hint").textContent = s.running
-        ? "Stop the run to record"
+        ? "Records the bot run: the game window, its sound, the input and what the bot decided"
         : "Records the game window, plus your mouse, keys and sound in the target window";
       if (s.recordingName !== live) {
         const started = s.recordingName;

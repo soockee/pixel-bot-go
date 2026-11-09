@@ -38,9 +38,11 @@ type AppContainer struct {
 	Recordings       *desktop.Recordings
 	CapturePresenter *presenter.CapturePresenter
 	RecordPresenter  *presenter.RecordPresenter
-	Loop             *presenter.Loop
-	trace            *liveTrace
-	gameWindow       atomic.Pointer[capture.WindowIdentity]
+	// botLog copies the bot's log into a recording that runs alongside it.
+	botLog     *recorder.BotLog
+	Loop       *presenter.Loop
+	trace      *liveTrace
+	gameWindow atomic.Pointer[capture.WindowIdentity]
 }
 
 // TraceOptions configures desktop tracing and the optional reel timing profile.
@@ -56,7 +58,9 @@ type TraceOptions struct {
 // BuildContainer constructs and wires all components. It opens no window;
 // emit sends the window state to the frontend.
 func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions, emit func(desktop.State)) *AppContainer {
-	c := &AppContainer{Config: cfg, Capture: &model.CaptureModel{}, Frames: desktop.NewFrames()}
+	botLog := recorder.NewBotLog(logger.Handler())
+	logger = slog.New(botLog) // everything built here logs through it
+	c := &AppContainer{Config: cfg, Capture: &model.CaptureModel{}, Frames: desktop.NewFrames(), botLog: botLog}
 	c.View = desktop.NewView(c.Frames, emit)
 	c.Recordings = desktop.NewRecordings(func() string { return cfg.RecordDir })
 	inFront := c.gameFocused
@@ -389,14 +393,20 @@ func (c *AppContainer) prepareRecording() (presenter.RecordJob, error) {
 	if err != nil {
 		return presenter.RecordJob{}, err
 	}
+	dir := filepath.Join(c.Config.RecordDir, time.Now().Format("20060102-150405"))
 	session := recorder.Session{
-		Dir:    filepath.Join(c.Config.RecordDir, time.Now().Format("20060102-150405")),
-		Frames: capture.Source{Region: func() *image.Rectangle { return &region }},
-		Window: c.Capture.Window(),
-		Target: &target,
-		Live:   true,
-		Keys:   c.Config.RecordKeys,
-		Status: io.Discard,
+		Dir:     dir,
+		Frames:  capture.Source{Region: func() *image.Rectangle { return &region }},
+		Window:  c.Capture.Window(),
+		Target:  &target,
+		Live:    true,
+		Keys:    c.Config.RecordKeys,
+		Status:  io.Discard,
+		OnStart: func(start time.Time) { c.botLog.Start(dir, start) },
 	}
-	return presenter.RecordJob{Dir: session.Dir, Run: session.Run}, nil
+	run := func(ctx context.Context) error {
+		defer c.botLog.Stop()
+		return session.Run(ctx)
+	}
+	return presenter.RecordJob{Dir: session.Dir, Run: run}, nil
 }

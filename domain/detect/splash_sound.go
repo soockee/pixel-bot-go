@@ -19,22 +19,33 @@ import (
 //
 // A splash is a bright splash at the centre, or a clear change there for the
 // water's own level (centreMotion), which also catches the small splash of a
-// far bobber. When the game makes no sound at all, for example with its sound
-// switched off, the change at the centre alone reports the bite. When the game
-// makes sound but not the bite sound, for example with sound effects off and
-// music on, a cast whose splash brought no bite is taken as a game without the
-// bite sound, and from then on the splash alone reports the bite. The engine
-// builds a detector per run, so Stop and Start listen for the sound again.
+// far bobber.
+//
+// Two fallbacks cover games that never play the bite sound. A game that has
+// made no sound at all since the run started, for example with its sound
+// switched off, takes the change at the centre alone as the bite. A game that
+// makes sound but no bite sound, for example with sound effects off and music
+// on, is recognised after unansweredCasts casts in a row whose splash brought
+// no bite; from then on the splash alone reports the bite. Neither applies
+// once the run has heard the game, or a bite sound: a game with sound effects
+// on is silent between them, and in recorded hand play every bite had its
+// sound. The engine builds a detector per run, so the run's memory starts
+// again at Start.
 type SplashSoundDetector struct {
-	logger      *slog.Logger
-	scene       brightening
-	motion      centreMotion
-	start       time.Time // the first frame since Reset
-	splashFrom  time.Time // first frame of the latest splash at the bobber
-	splash      time.Time // its last frame
-	sound       onsets
-	fired       bool
-	noBiteSound bool // kept across casts: the game plays no bite sound
+	logger     *slog.Logger
+	scene      brightening
+	motion     centreMotion
+	start      time.Time // the first frame since Reset
+	splashFrom time.Time // first frame of the latest splash at the bobber
+	splash     time.Time // its last frame
+	sound      onsets
+	fired      bool
+
+	// Kept across casts for the run.
+	heardGame   bool // the game made some sound
+	heardBite   bool // a bite was confirmed by its sound
+	unanswered  int  // casts in a row whose splash brought no bite
+	noBiteSound bool // the game plays no bite sound
 }
 
 const (
@@ -50,6 +61,11 @@ const (
 	// SilentFor is how long the game must be silent before a splash alone
 	// counts; tests wait this long after a lock before a silent bite.
 	SilentFor = 3 * time.Second
+	// unansweredCasts is how many casts in a row must see a splash without a
+	// bite before a game that makes sound counts as one without the bite
+	// sound. One is too few: a cast that runs out, or another player's spell,
+	// also leaves an unanswered splash.
+	unansweredCasts = 3
 )
 
 // NewSplashSoundDetector returns a detector. A nil logger discards logs.
@@ -61,14 +77,27 @@ func NewSplashSoundDetector(logger *slog.Logger) *SplashSoundDetector {
 }
 
 // Reset forgets the scene and the sound, ready for the next cast. It keeps
-// whether the game plays a bite sound: a cast that saw a splash but no bite
-// counts as a game without one.
+// what the run learned about the game's sound.
 func (s *SplashSoundDetector) Reset() {
-	noBiteSound := s.noBiteSound || !s.fired && !s.splash.IsZero()
-	if noBiteSound && !s.noBiteSound {
-		s.logger.Info("no bite sound after a splash; the splash alone reports bites for the rest of the run")
+	run := SplashSoundDetector{
+		logger:      s.logger,
+		heardGame:   s.heardGame || !s.sound.audible.IsZero(),
+		heardBite:   s.heardBite,
+		unanswered:  s.unanswered,
+		noBiteSound: s.noBiteSound,
 	}
-	*s = SplashSoundDetector{logger: s.logger, noBiteSound: noBiteSound}
+	switch {
+	case s.fired:
+		run.unanswered = 0
+	case !s.splash.IsZero():
+		run.unanswered++
+	}
+	if !run.noBiteSound && !run.heardBite && run.heardGame && run.unanswered >= unansweredCasts {
+		run.noBiteSound = true
+		s.logger.Info("no bite sound after splashes in several casts; the splash alone reports bites for the rest of the run",
+			"casts", run.unanswered)
+	}
+	*s = run
 }
 
 // Feed takes one frame of the watched box and remembers splashes. Only Hear
@@ -99,8 +128,8 @@ func (s *SplashSoundDetector) Feed(roi *image.RGBA, t time.Time) bool {
 			"change", m.change, "centre", b.centre, "brightened", b.all)
 		return true
 	}
-	heard := s.sound.audible
-	if !moved || t.Sub(s.start) < SilentFor || !heard.IsZero() && t.Sub(heard) < SilentFor {
+	// A silent game: nothing heard this run, and at least SilentFor listened.
+	if !moved || t.Sub(s.start) < SilentFor || s.heardGame || !s.sound.audible.IsZero() {
 		return false
 	}
 	s.fired = true
@@ -125,6 +154,7 @@ func (s *SplashSoundDetector) Hear(pcm []byte, t time.Time) bool {
 	gap := at.Sub(s.splashFrom)
 	s.fired = gap >= 0 && at.Sub(s.splash) <= soundAfterSplash
 	if s.fired {
+		s.heardBite = true
 		s.logger.Info("bite detected", "detector", "splash_sound", "sound_after_splash_ms", gap.Milliseconds())
 	}
 	return s.fired

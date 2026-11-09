@@ -36,6 +36,9 @@ type State struct {
 	ReelInputs     int                   `json:"reelInputs"`
 	Reels          int                   `json:"reels"`       // this run's reels, each a bite answered
 	FailedInRow    int                   `json:"failedInRow"` // casts in a row without a reel
+	Caught         int                   `json:"caught"`      // casts that ended with fishing loot, as Bobber Marker reports
+	GotAway        int                   `json:"gotAway"`     // reels where the fish got away
+	NotHooked      int                   `json:"notHooked"`   // reels with no fish hooked: false bites
 	MaxFailed      int                   `json:"maxFailed"`   // the run stops when FailedInRow reaches it
 	Frame          int                   `json:"frame"`       // version of /frames/capture; 0 means none
 	FrameSize      Point                 `json:"frameSize"`   // the capture's size in screen pixels; the image may be smaller

@@ -39,7 +39,7 @@ Go Fish only fishes while the game is the window in front. Click into the game.
 
 - Move the brackets so the bobber sits in the middle; see [Addon commands](../reference/addon-commands.md).
 - Fish where the water is calm and the bobber is easy to see, away from other players' bobbers.
-- With the game's sound effects off, Go Fish misses the first bite of each run while it learns that no bite sound comes, then reels on the splash alone. Turn sound effects on for fewer false reels near other players' spells.
+- With the game's sound effects off, Go Fish needs three casts without a reel before it reels on the splash alone. Keep sound effects on: then it waits for the bite sound, and other players' spells and ripples do not fool it.
 
 
 ## Still stuck

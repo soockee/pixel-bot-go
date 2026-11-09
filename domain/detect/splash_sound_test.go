@@ -111,10 +111,12 @@ func water(x, y, radius int) *image.RGBA {
 // the splash alone reports the bite.
 func TestSplashSoundLearnsAGameWithoutBiteSound(t *testing.T) {
 	d := NewSplashSoundDetector(nil)
-	if _, fired := listen(d, 4*time.Second, -1); fired {
-		t.Fatal("fired on the first splash without a bite sound")
+	for cast := range unansweredCasts {
+		if _, fired := listen(d, 4*time.Second, -1); fired {
+			t.Fatalf("fired on splash %d without a bite sound", cast+1)
+		}
+		d.Reset()
 	}
-	d.Reset()
 	at, fired := listen(d, 4*time.Second, -1)
 	if !fired || at != 4*time.Second {
 		t.Fatalf("fired = %v at %v, want the splash at 4s", fired, at)
@@ -122,6 +124,41 @@ func TestSplashSoundLearnsAGameWithoutBiteSound(t *testing.T) {
 	d.Reset()
 	if _, fired := listen(d, -1, -1); fired {
 		t.Error("fired on calm water")
+	}
+}
+
+// Once a bite was confirmed by its sound, the game plays the bite sound:
+// unanswered splashes later in the run, from casts that ran out or other
+// players' spells, never switch to the splash alone.
+func TestSplashSoundKeepsNeedingTheSoundAfterAHeardBite(t *testing.T) {
+	d := NewSplashSoundDetector(nil)
+	if _, fired := listen(d, 4*time.Second, 4300*time.Millisecond); !fired {
+		t.Fatal("missed the bite with its sound")
+	}
+	for range 2 * unansweredCasts {
+		d.Reset()
+		if at, fired := listen(d, 4*time.Second, -1); fired {
+			t.Fatalf("fired at %v on a splash without a sound", at)
+		}
+	}
+}
+
+// A game with sound effects on is silent between them. Once the run heard the
+// game, a quiet stretch in a later cast is no reason to take motion alone.
+func TestSplashSoundIgnoresSilenceOnceTheGameWasHeard(t *testing.T) {
+	d := NewSplashSoundDetector(nil)
+	start := time.Unix(0, 0)
+	for at := time.Duration(0); at < 500*time.Millisecond; at += 10 * time.Millisecond {
+		d.Hear(tone(200), start.Add(at)) // the cast sound
+	}
+	d.Reset()
+	if at, fired := watch(d, 7*time.Second, func(at time.Duration) *image.RGBA {
+		if at >= 4*time.Second {
+			return pond(rand.New(rand.NewPCG(1, 2)), 100, 90, 30, 0)
+		}
+		return pond(rand.New(rand.NewPCG(3, 4)), 100, 90, 0, 0)
+	}); fired {
+		t.Errorf("fired at %v on motion alone after the game was heard", at)
 	}
 }
 
