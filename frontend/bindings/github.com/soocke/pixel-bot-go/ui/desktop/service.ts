@@ -101,6 +101,14 @@ export function ReleaseNotes(): $CancellablePromise<void> {
 }
 
 /**
+ * ReportProblem opens a new GitHub issue on the problem form in the browser,
+ * with the version, Windows and app details filled in.
+ */
+export function ReportProblem(): $CancellablePromise<void> {
+    return $Call.ByID(2681595640);
+}
+
+/**
  * SaveSettings validates and saves settings, and returns the values as saved,
  * clamped to safe ranges. Settings cannot change during a run.
  */

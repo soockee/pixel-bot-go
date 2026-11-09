@@ -48,6 +48,8 @@ document.querySelector(".tabs")!.addEventListener("keydown", (e) => {
 
 // Go shows the download's progress and any error in the status bar.
 $("update").addEventListener("click", () => void Service.Update().catch(() => undefined));
+// Opens a filled-in GitHub issue in the browser; the person submits it there.
+$("report-problem").addEventListener("click", () => void Service.ReportProblem());
 
 const live = setupLive();
 const moveOverlay = setupMoveOverlay();

@@ -1,0 +1,32 @@
+name: zizmor
+
+# Audits the GitHub Actions workflows for security problems; any finding fails
+# the check. Configuration: .github/zizmor.yml.
+on:
+  pull_request:
+    paths:
+      - .github/**
+  push:
+    branches: [main]
+    paths:
+      - .github/**
+
+permissions: {}
+
+jobs:
+  zizmor:
+    # Forks never run this repository's workflows.
+    if: github.repository == 'soockee/pixel-bot-go'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@45d7276c9ca790aabd705e31ca99c6185c3e76dd # v0.8.1
+        with:
+          advanced-security: false

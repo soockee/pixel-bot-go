@@ -1,0 +1,6 @@
+rules:
+  # The `uses: $/...` self-repository syntax is new (July 2026); keep the
+  # workspace-relative ./ form for the reusable CI workflow until it is
+  # proven in this repository's runs.
+  self-repository:
+    disable: true

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Player guide
+    url: https://soockee.github.io/pixel-bot-go/
+    about: Setup, settings and fixes for common problems

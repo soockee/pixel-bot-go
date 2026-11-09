@@ -1,0 +1,16 @@
+name: Idea or question
+description: A suggestion, a question, or anything that is not a problem in the app
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like
+      description: The idea or question, in your own words.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters
+      description: Optional. What it would make easier, or where you got stuck.

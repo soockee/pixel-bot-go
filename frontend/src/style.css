@@ -157,6 +157,8 @@ button, select, input { font: inherit; color: inherit; }
 .button.stop { background: var(--text); color: var(--bg); }
 .button.stop:hover { background: var(--text-2); }
 .button.wide { width: 100%; height: 36px; }
+.button.quiet { border-color: transparent; background: transparent; color: var(--text-2); }
+.button.quiet:hover { background: var(--raised); color: var(--text); }
 
 .icon-button {
   display: inline-grid;
