@@ -17,31 +17,51 @@ import (
 // effects splash without the sound, so neither alone triggers it.
 // Not safe for concurrent use; call Feed and Hear from a single goroutine.
 //
-// A splash is a bright splash at the centre, or a clear change there for the
-// water's own level (centreMotion), which also catches the small splash of a
-// far bobber. When the game makes no sound at all, for example with its sound
-// switched off, the change at the centre alone reports the bite. When the game
-// makes sound but not the bite sound, for example with sound effects off and
-// music on, a cast whose splash brought no bite is taken as a game without the
-// bite sound, and from then on the splash alone reports the bite. The engine
-// builds a detector per run, so Stop and Start listen for the sound again.
+// A splash is white spray at the centre of the box, where the bobber sits:
+// pixels that turn lighter than a lagging baseline and nearly colourless.
+// Pets, players and the fishing line passing through the box are dark, and
+// spell effects are coloured, so neither counts; a change in brightness or
+// motion alone does not either. On labelled bot and hand-play recordings a
+// bite's spray covers 10 to 40 % of the centre disc, everything else on open
+// water at most about 6 %. A fishing pool's foam sprays the centre all the
+// time, so a splash must also stand out from the water's recent level
+// (sprayLevel).
+//
+// Two fallbacks cover games that never play the bite sound. A game that has
+// made no sound at all since the run started, for example with its sound
+// switched off, takes the splash alone as the bite. A game that
+// makes sound but no bite sound, for example with sound effects off and music
+// on, is recognised after unansweredCasts casts in a row whose splash brought
+// no bite; from then on the splash alone reports the bite. Neither applies
+// once the run has heard the game, or a bite sound: a game with sound effects
+// on is silent between them, and in recorded hand play every bite had its
+// sound. The engine builds a detector per run, so the run's memory starts
+// again at Start.
 type SplashSoundDetector struct {
-	logger      *slog.Logger
-	scene       brightening
-	motion      centreMotion
-	start       time.Time // the first frame since Reset
-	splashFrom  time.Time // first frame of the latest splash at the bobber
-	splash      time.Time // its last frame
-	sound       onsets
-	fired       bool
-	noBiteSound bool // kept across casts: the game plays no bite sound
+	logger     *slog.Logger
+	scene      brightening
+	level      sprayLevel // the centre's recent spray, which a splash must stand out from
+	start      time.Time  // the first frame since Reset
+	splashFrom time.Time  // first frame of the latest splash at the bobber
+	splash     time.Time  // its last frame
+	sound      onsets
+	fired      bool
+
+	// Kept across casts for the run.
+	heardGame   bool // the game made some sound
+	heardBite   bool // a bite was confirmed by its sound
+	unanswered  int  // casts in a row whose splash brought no bite
+	noBiteSound bool // the game plays no bite sound
 }
 
 const (
 	splashSettle    = 3 * time.Second        // landing ripples fade within this time after the lock
-	splashRise      = 35                     // luminance above the baseline that counts as brightened
+	splashRise      = 12                     // luminance above the baseline that counts as spray
 	splashLag       = 500 * time.Millisecond // the baseline takes on lasting changes, such as the landed bobber or a parked cursor
-	splashMinCentre = 0.04                   // share of the centre disc that must brighten
+	splashSpread    = 25                     // at most this spread between colour channels: spray is nearly colourless
+	splashMinCentre = 0.09                   // share of the centre disc that must turn to spray at least
+	splashLevelFor  = 3 * time.Second        // how far back the water's own spray level reaches
+	splashOverLevel = 2                      // and how many times its 90th percentile a splash must reach
 )
 
 const (
@@ -50,6 +70,11 @@ const (
 	// SilentFor is how long the game must be silent before a splash alone
 	// counts; tests wait this long after a lock before a silent bite.
 	SilentFor = 3 * time.Second
+	// unansweredCasts is how many casts in a row must see a splash without a
+	// bite before a game that makes sound counts as one without the bite
+	// sound. One is too few: a cast that runs out, or another player's spell,
+	// also leaves an unanswered splash.
+	unansweredCasts = 3
 )
 
 // NewSplashSoundDetector returns a detector. A nil logger discards logs.
@@ -61,18 +86,31 @@ func NewSplashSoundDetector(logger *slog.Logger) *SplashSoundDetector {
 }
 
 // Reset forgets the scene and the sound, ready for the next cast. It keeps
-// whether the game plays a bite sound: a cast that saw a splash but no bite
-// counts as a game without one.
+// what the run learned about the game's sound.
 func (s *SplashSoundDetector) Reset() {
-	noBiteSound := s.noBiteSound || !s.fired && !s.splash.IsZero()
-	if noBiteSound && !s.noBiteSound {
-		s.logger.Info("no bite sound after a splash; the splash alone reports bites for the rest of the run")
+	run := SplashSoundDetector{
+		logger:      s.logger,
+		heardGame:   s.heardGame || !s.sound.audible.IsZero(),
+		heardBite:   s.heardBite,
+		unanswered:  s.unanswered,
+		noBiteSound: s.noBiteSound,
 	}
-	*s = SplashSoundDetector{logger: s.logger, noBiteSound: noBiteSound}
+	switch {
+	case s.fired:
+		run.unanswered = 0
+	case !s.splash.IsZero():
+		run.unanswered++
+	}
+	if !run.noBiteSound && !run.heardBite && run.heardGame && run.unanswered >= unansweredCasts {
+		run.noBiteSound = true
+		s.logger.Info("no bite sound after splashes in several casts; the splash alone reports bites for the rest of the run",
+			"casts", run.unanswered)
+	}
+	*s = run
 }
 
 // Feed takes one frame of the watched box and remembers splashes. Only Hear
-// reports bites.
+// reports bites, unless the game makes no bite sound.
 func (s *SplashSoundDetector) Feed(roi *image.RGBA, t time.Time) bool {
 	if roi == nil || s.fired {
 		return false
@@ -81,30 +119,34 @@ func (s *SplashSoundDetector) Feed(roi *image.RGBA, t time.Time) bool {
 		s.start = t
 	}
 	b, settled := s.scene.measure(roi, t)
-	m, moved := s.motion.observe(roi, t)
-	moved = moved && t.Sub(s.start) >= splashSettle // the same settle as the bright splash
-	bright := settled && b.centreSplash()
-	if !bright && !moved {
+	share := float64(b.centre) / float64(max(b.disc, 1))
+	splash := settled && b.centre > 0 && share >= s.level.threshold(t)
+	if settled {
+		s.level.add(t, share)
+	}
+	if !splash {
 		return false
 	}
 	if s.splash.IsZero() || t.Sub(s.splash) > soundAfterSplash {
 		s.splashFrom = t // a new splash
 	}
 	s.splash = t
-	// Spell effects of other players brighten the whole box, so a bright splash
-	// alone needs at least half of the brightened pixels in the centre.
-	if s.noBiteSound && (moved || 2*b.centre >= b.all) {
+	// Spray of a splash elsewhere in the box, such as another player's bobber,
+	// is no bite of this one: alone, a splash needs half its spray at the centre.
+	if 2*b.centre < b.all {
+		return false
+	}
+	if s.noBiteSound {
 		s.fired = true
-		s.logger.Info("bite detected", "detector", "splash_sound", "without_bite_sound", true,
-			"change", m.change, "centre", b.centre, "brightened", b.all)
+		s.logger.Info("bite detected", "detector", "splash_sound", "without_bite_sound", true, "spray", b.centre, "disc", b.disc)
 		return true
 	}
-	heard := s.sound.audible
-	if !moved || t.Sub(s.start) < SilentFor || !heard.IsZero() && t.Sub(heard) < SilentFor {
+	// A silent game: nothing heard this run, and at least SilentFor listened.
+	if t.Sub(s.start) < SilentFor || s.heardGame || !s.sound.audible.IsZero() {
 		return false
 	}
 	s.fired = true
-	s.logger.Info("bite detected", "detector", "splash_sound", "without_sound", true, "change", m.change, "threshold", m.threshold)
+	s.logger.Info("bite detected", "detector", "splash_sound", "without_sound", true, "spray", b.centre, "disc", b.disc)
 	return true
 }
 
@@ -125,6 +167,7 @@ func (s *SplashSoundDetector) Hear(pcm []byte, t time.Time) bool {
 	gap := at.Sub(s.splashFrom)
 	s.fired = gap >= 0 && at.Sub(s.splash) <= soundAfterSplash
 	if s.fired {
+		s.heardBite = true
 		s.logger.Info("bite detected", "detector", "splash_sound", "sound_after_splash_ms", gap.Milliseconds())
 	}
 	return s.fired
@@ -229,13 +272,10 @@ type brightening struct {
 	start, last time.Time
 }
 
-// brightened counts pixels that rose by splashRise, in the whole box and in the
+// brightened counts spray: pixels that rose by splashRise and are nearly
+// colourless (channel spread at most splashSpread), in the whole box and in the
 // centre disc where the bobber sits.
 type brightened struct{ all, centre, disc int }
-
-func (b brightened) centreSplash() bool {
-	return b.centre > 0 && float64(b.centre) >= splashMinCentre*float64(b.disc)
-}
 
 // measure updates the baseline with roi and reports what brightened. It reports
 // false until the scene has settled after the first frame.
@@ -264,7 +304,7 @@ func (s *brightening) measure(roi *image.RGBA, t time.Time) (brightened, bool) {
 			if inDisc {
 				b.disc++
 			}
-			if l-s.base[i] > splashRise {
+			if l-s.base[i] > splashRise && max(p[0], p[1], p[2])-min(p[0], p[1], p[2]) <= splashSpread {
 				b.all++
 				if inDisc {
 					b.centre++
@@ -274,4 +314,34 @@ func (s *brightening) measure(roi *image.RGBA, t time.Time) (brightened, bool) {
 		}
 	}
 	return b, !first && t.Sub(s.start) >= splashSettle
+}
+
+// sprayLevel keeps the centre's spray share over the last splashLevelFor, so
+// a splash must stand out from the water's own churn: almost none on open
+// water, while the foam of a fishing pool keeps 10 to 16 % of the centre
+// sprayed in recordings, up to 26 % without a bite.
+type sprayLevel struct {
+	at    []time.Time
+	share []float64
+}
+
+// threshold is the spray share a frame at t needs to count as a splash:
+// splashMinCentre, or splashOverLevel times the recent 90th percentile once
+// a second of history is known.
+func (l *sprayLevel) threshold(t time.Time) float64 {
+	if len(l.at) == 0 || t.Sub(l.at[0]) < time.Second {
+		return splashMinCentre
+	}
+	recent := slices.Clone(l.share)
+	slices.Sort(recent)
+	return max(splashMinCentre, splashOverLevel*recent[len(recent)*9/10])
+}
+
+// add remembers a frame's spray share and forgets what is older than splashLevelFor.
+func (l *sprayLevel) add(t time.Time, share float64) {
+	drop := 0
+	for drop < len(l.at) && t.Sub(l.at[drop]) > splashLevelFor {
+		drop++
+	}
+	l.at, l.share = append(l.at[drop:], t), append(l.share[drop:], share)
 }

@@ -59,6 +59,11 @@ func (v *View) SetRecording(dir string) {
 // SetSession shows the session duration; the window has no use for the total.
 func (v *View) SetSession(session, _ time.Duration) { v.state.SessionSeconds = int(session.Seconds()) }
 
+// SetOutcomes shows how the run's casts ended, as Bobber Marker reports them.
+func (v *View) SetOutcomes(caught, gotAway, notHooked int) {
+	v.state.Caught, v.state.GotAway, v.state.NotHooked = caught, gotAway, notHooked
+}
+
 // SetRun shows the run's counts and the limits that stop it.
 func (v *View) SetRun(casts, reels, attempts, inputs, failedInRow, maxFailed, sessionLimit int) {
 	v.state.Casts, v.state.Reels, v.state.FailedInRow = casts, reels, failedInRow

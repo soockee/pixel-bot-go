@@ -59,7 +59,7 @@ type FishingFSM struct {
 	repositionLogout    atomic.Bool
 	failedCasts         int
 	sessionEnd          time.Time
-	stats               struct{ casts, reels, reelAttempts, reelInputs, failedInRow atomic.Int32 } // this run, for the UI
+	stats               struct{ casts, reels, reelAttempts, reelInputs, failedInRow, caught, gotAway, notHooked atomic.Int32 } // this run, for the UI
 	actions             ActionCallbacks
 	events              chan any
 	done                <-chan struct{}
@@ -178,6 +178,9 @@ func (f *FishingFSM) handle(ev any) {
 			f.stats.reels.Store(0)
 			f.stats.reelAttempts.Store(0)
 			f.stats.reelInputs.Store(0)
+			f.stats.caught.Store(0)
+			f.stats.gotAway.Store(0)
+			f.stats.notHooked.Store(0)
 			f.stats.failedInRow.Store(0)
 			f.checkingReposition = false
 			f.repositionLogout.Store(false)
@@ -544,6 +547,10 @@ func (f *FishingFSM) startMonitoring() {
 	f.arm(time.Duration(f.cfg.MaxCastDurationSeconds) * time.Second)
 }
 
+// reelMissOdds is the n of the reel roll: outcomes 0 and 1 of [0, n) miss on
+// purpose, so 2/n of bites, 5%.
+const reelMissOdds = 40
+
 func (f *FishingFSM) startReel() {
 	f.reelDone = nil
 	if !f.coordSet {
@@ -558,7 +565,9 @@ func (f *FishingFSM) startReel() {
 	f.offTargetReel = false
 	aim := image.Pt(f.coordX, f.coordY)
 	if f.actions.ReelRoll != nil {
-		switch f.actions.ReelRoll(60) {
+		// One bite in reelMissOdds is not reeled, one is clicked beside the
+		// bobber: 5% deliberate misses, as a person makes.
+		switch f.actions.ReelRoll(reelMissOdds) {
 		case 0:
 			f.finishMiss("forgot to reel")
 			return
@@ -824,6 +833,8 @@ type Stats struct {
 	ReelAttempts int // dispatch attempts, including blocked and off-target input
 	ReelInputs   int // acknowledged reel inputs, including off-target input
 	FailedInRow  int // casts in a row that ended without a reel
+	// How casts ended, as Bobber Marker reports them (OutcomeSignalArea).
+	Caught, GotAway, NotHooked int
 }
 
 // Stats returns the current run's counts. Safe from any goroutine.
@@ -832,6 +843,7 @@ func (f *FishingFSM) Stats() Stats {
 		Casts: int(f.stats.casts.Load()), Reels: int(f.stats.reels.Load()),
 		ReelAttempts: int(f.stats.reelAttempts.Load()), ReelInputs: int(f.stats.reelInputs.Load()),
 		FailedInRow: int(f.stats.failedInRow.Load()),
+		Caught:      int(f.stats.caught.Load()), GotAway: int(f.stats.gotAway.Load()), NotHooked: int(f.stats.notHooked.Load()),
 	}
 }
 

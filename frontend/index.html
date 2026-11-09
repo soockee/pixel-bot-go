@@ -70,6 +70,7 @@
             <span class="muted" id="reels-label">reels sent this run</span>
           </div>
           <p class="muted small" id="casts">No casts yet</p>
+          <p class="muted small mono" id="outcomes" hidden></p>
           <div class="meter" id="meter-session">
             <div class="meter-head"><span>Session</span><span class="mono" id="session-text"></span></div>
             <div class="bar"><i id="session-bar"></i></div>
@@ -84,6 +85,7 @@
               <button class="button primary" id="support-open" type="button">Buy me a coffee</button>
               <button class="button quiet" id="support-dismiss" type="button">Not now</button>
             </div>
+            <p class="thanks-mute"><button class="link" id="support-already" type="button">I already support it</button> · <button class="link" id="support-never" type="button">Don't ask again</button></p>
           </div>
         </div>
 
@@ -171,7 +173,7 @@
             <span class="update-icon" aria-hidden="true"><span class="brand-mark"></span></span>
             <div class="update-info">
               <strong>Go Fish</strong>
-              <span class="hint"><span id="update-detail"></span><button class="link" id="release-notes" type="button" hidden>What's new</button></span>
+              <span class="hint"><span id="update-detail"></span><button class="link" id="release-notes" type="button" hidden>What's new</button> · <button class="link" id="support-updates" type="button" title="Opens buymeacoffee.com/socke in your browser">Support Go Fish</button></span>
             </div>
             <span class="pill" id="update-pill" hidden></span>
             <button class="button primary" id="install-update" type="button" hidden></button>

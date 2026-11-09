@@ -4,6 +4,8 @@ Go Fish is a Windows app for studying visual event detection and response timing
 
 **Documentation:** [soockee.github.io/pixel-bot-go](https://soockee.github.io/pixel-bot-go/)
 
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-socke-ffdd00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/socke)
+
 ## Install
 
 1. Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest) (`CHECKSUMS.txt` beside it lists its SHA-256). Start the game, then the exe. It needs Administrator only if the game runs as Administrator, since Windows blocks input into a process with more rights.

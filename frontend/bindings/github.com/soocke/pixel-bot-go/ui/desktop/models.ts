@@ -139,6 +139,21 @@ export interface State {
     "failedInRow": number;
 
     /**
+     * casts that ended with fishing loot, as Bobber Marker reports
+     */
+    "caught": number;
+
+    /**
+     * reels where the fish got away
+     */
+    "gotAway": number;
+
+    /**
+     * reels with no fish hooked: false bites
+     */
+    "notHooked": number;
+
+    /**
      * the run stops when FailedInRow reaches it
      */
     "maxFailed": number;
@@ -290,12 +305,17 @@ export interface Support {
     "ask": boolean;
 
     /**
-     * catches in the run that just ended
+     * the milestone just reached
      */
-    "runCatches": number;
+    "milestone": number;
 
     /**
      * catches on this computer so far
      */
     "catches": number;
+
+    /**
+     * time Go Fish fished on this computer so far
+     */
+    "seconds": number;
 }

@@ -11,7 +11,7 @@ A recording saves the screen and your input together, on the same clock, and sen
 3. Focus the game and play by hand.
 4. Click **Stop recording** in the app.
 
-Each recording gets a new timestamped folder holding `frames/`, `input.jsonl` and the game's sound in `audio.wav`. You still hear the game while it records, and music or voice chat from other programs is not recorded. Set **Recording folder** and **Record keys** on the **Settings** tab (debug mode). The default `datasets/` folder is ignored by git. Start stays disabled while recording, and Record while the bot runs.
+Each recording gets a new timestamped folder holding `frames/`, `input.jsonl` and the game's sound in `audio.wav`. You still hear the game while it records, and music or voice chat from other programs is not recorded. Set **Recording folder** and **Record keys** on the **Settings** tab (debug mode). The default `datasets/` folder is ignored by git. A recording can also run while the bot fishes: then `bot.jsonl` holds what the bot did, one JSON object per log entry with `ms` on the recording's clock (state changes, `bite detected` with the path that fired it, casts, reels, and `fishing outcome`).
 
 For scripts and agents, the same recording runs without a window: `pixel-bot-go.exe -record <dir> -window "<title>"`, stopped with Ctrl+C. It records the window's client area where it is at the start. Add `-record-keys` to capture keyboard input locally. `-list-windows` prints the titles.
 

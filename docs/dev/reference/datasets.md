@@ -42,4 +42,6 @@ A detector that listens, such as `splash_sound`, also gets the session's `audio.
 
 A cast with no reel, a reel within the first 2 s, and a click outside the frame are skipped and listed. Every labelled cast has a bite, so false bites can only count against early triggers.
 
+`detecteval -label-bot <dir> [-box 40]` labels a recording of a bot run (Record while the bot fishes) from its `bot.jsonl`, where Bobber Marker 1.5.1 or later reports how each reel ended. A reel that caught a fish or let it get away followed a real bite, labelled at the splash: the detection less the splash-to-sound gap the detector logged. A reel with "No fish are hooked" followed a false bite, and its cast is labelled without one. Each cast spans from the lock to the reel. Casts that ran out, deliberate misses and reels without an outcome are listed as skipped: whether a bite came there is for a person to check in the frames and add by hand. `bot.jsonl` gives the bobber in screen coordinates, which match the frames when the game window sits at the screen's origin; the bite metrics watch the locked marker box anyway.
+
 `detecteval -export <new dir> dir...` saves each cast's watched area, from the cast until the reel, as `<dataset>/cast-NNN/<ms>.png`. `index.jsonl` has one row per crop with `file`, `dataset`, `cast`, `ms`, `box`, `reel_ms` and the estimated `bite_ms`.

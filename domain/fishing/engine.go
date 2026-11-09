@@ -177,6 +177,8 @@ type run struct {
 	watchPlayer            bool
 	playerPoll             time.Time
 	playerSeen, playerSent uint8
+	outcomePoll            time.Time
+	outcomes               outcomes
 }
 
 func (r *run) loop(ctx context.Context, done chan<- struct{}, closeKeyboard func()) {
@@ -270,6 +272,7 @@ func (r *run) step() {
 		return
 	}
 	r.lastErr = ""
+	r.pollOutcome(window)
 	if !watching {
 		r.window = frame
 		r.monitoring = false

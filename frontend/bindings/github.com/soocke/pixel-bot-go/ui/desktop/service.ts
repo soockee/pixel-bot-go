@@ -50,7 +50,7 @@ export function ChooseCastKey(): $CancellablePromise<void> {
 }
 
 /**
- * DismissSupport hides the thank-you card ("Not now").
+ * DismissSupport hides the thank-you card until the next milestone ("Not now").
  */
 export function DismissSupport(): $CancellablePromise<void> {
     return $Call.ByID(1332834344);
@@ -87,8 +87,15 @@ export function MoveOverlay(on: boolean): $CancellablePromise<void> {
 }
 
 /**
- * OpenSupport opens the coffee page in the browser, hides the thank-you card
- * and remembers when, so the card waits a long while before it asks again.
+ * MuteSupport hides the thank-you card for good: the person supports Go Fish
+ * already or does not want to be asked. The status bar link stays.
+ */
+export function MuteSupport(): $CancellablePromise<void> {
+    return $Call.ByID(4204296541);
+}
+
+/**
+ * OpenSupport opens the coffee page in the browser and hides the thank-you card.
  */
 export function OpenSupport(): $CancellablePromise<void> {
     return $Call.ByID(2572135318);

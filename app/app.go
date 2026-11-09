@@ -49,7 +49,7 @@ type app struct {
 	schedule        *playSchedule
 	recoveryAllowed bool
 	scheduleStop    atomic.Bool
-	reelsSeen       int  // catches of the current run already counted; used on the loop
+	runSeconds      int  // how long the current run has fished; used on the loop
 	wasRunning      bool // a run went on at the last tick; used on the loop
 }
 
@@ -78,9 +78,8 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		SetWindow:     a.setWindow,
 		ToggleCapture: a.toggleCapture,
 		ToggleRecord: func() {
-			if a.schedule == nil && !c.Capture.Enabled() {
-				c.RecordPresenter.Toggle()
-			}
+			// A recording may run beside the bot: bot.jsonl then holds its decisions.
+			c.RecordPresenter.Toggle()
 		},
 		Running:       func() bool { return c.Capture.Enabled() || a.schedule != nil },
 		Exit:          func() { go a.wails.Quit() }, // Quit waits for the loop, which runs this
@@ -194,8 +193,9 @@ func (a *app) tick() {
 	}
 	a.followGame()
 	run := c.FSM.Stats()
-	a.countCatches(run.Reels, c.View.State().Running)
+	a.countCatches(run, c.View.State())
 	c.View.SetRun(run.Casts, run.Reels, run.ReelAttempts, run.ReelInputs, run.FailedInRow, c.Config.MaxFailedCasts, c.Config.MaxSessionMinutes)
+	c.View.SetOutcomes(run.Caught, run.GotAway, run.NotHooked)
 	c.View.Flush()
 }
 
@@ -229,10 +229,6 @@ func (a *app) toggleCapture() {
 		return
 	}
 	if !c.Capture.Enabled() {
-		if c.View.State().Recording {
-			c.View.SetStatus("Stop recording before starting a run")
-			return
-		}
 		if err := c.bindGameWindow(); err != nil {
 			c.View.SetStatus("Cannot start: " + err.Error())
 			return

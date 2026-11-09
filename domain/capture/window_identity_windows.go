@@ -14,6 +14,10 @@ var (
 	procGetWindow     = user32.NewProc("GetWindow")
 	procGetWindowRect = user32.NewProc("GetWindowRect")
 	procWindowVisible = user32.NewProc("IsWindowVisible")
+	// GetWindowDisplayAffinity tells a window kept out of screen captures, such as Go Fish's overlay.
+	procDisplayAffinity = user32.NewProc("GetWindowDisplayAffinity")
+	// DwmGetWindowAttribute tells a window Windows keeps hidden (cloaked), such as a launcher waiting for its hotkey.
+	procDwmAttribute = windows.NewLazySystemDLL("dwmapi.dll").NewProc("DwmGetWindowAttribute")
 )
 
 // ErrFrameUnavailable marks a recording frame skipped to protect privacy.
@@ -97,11 +101,40 @@ func (w WindowIdentity) RecordingClear(area image.Rectangle) bool {
 		if visible == 0 {
 			continue
 		}
+		if excludedFromCapture(hwnd) || cloaked(hwnd) {
+			continue // it shows nothing over the game
+		}
 		var rect struct{ Left, Top, Right, Bottom int32 }
 		ok, _, _ := procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rect)))
-		if ok == 0 || area.Overlaps(image.Rect(int(rect.Left), int(rect.Top), int(rect.Right), int(rect.Bottom))) {
+		if ok == 0 {
+			return false
+		}
+		// A window of a few pixels, such as the 1x1 helpers some programs keep
+		// at the screen's top-left corner, shows nothing.
+		if rect.Right-rect.Left < 8 || rect.Bottom-rect.Top < 8 {
+			continue
+		}
+		if area.Overlaps(image.Rect(int(rect.Left), int(rect.Top), int(rect.Right), int(rect.Bottom))) {
 			return false
 		}
 	}
 	return false
+}
+
+// excludedFromCapture reports whether hwnd is kept out of screen captures
+// (WDA_EXCLUDEFROMCAPTURE), like Go Fish's overlay over the game.
+func excludedFromCapture(hwnd uintptr) bool {
+	const excludeFromCapture = 0x11
+	var affinity uint32
+	ok, _, _ := procDisplayAffinity.Call(hwnd, uintptr(unsafe.Pointer(&affinity)))
+	return ok != 0 && affinity == excludeFromCapture
+}
+
+// cloaked reports whether Windows keeps hwnd hidden although it counts as
+// visible (DWMWA_CLOAKED), like a launcher waiting for its hotkey.
+func cloaked(hwnd uintptr) bool {
+	const dwmwaCloaked = 14
+	var value uint32
+	hr, _, _ := procDwmAttribute.Call(hwnd, dwmwaCloaked, uintptr(unsafe.Pointer(&value)), unsafe.Sizeof(value))
+	return hr == 0 && value != 0
 }
