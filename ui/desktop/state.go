@@ -64,4 +64,5 @@ type State struct {
 	OverlayY       float64               `json:"overlayY"`       // where the overlay pill sits down the game window: 0 is the top edge, 1 the bottom
 	OverlayMove    bool                  `json:"overlayMove"`    // the overlay is being placed: it takes the mouse and shows only the pill
 	Version        string                `json:"version"`        // the running build's release tag, "dev" for local builds
+	Support        Support               `json:"support"`        // the thank-you card after a run that saved time
 }

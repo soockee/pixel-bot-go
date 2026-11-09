@@ -95,6 +95,9 @@ export function setupLive(): (state: State) => void {
   windowSelect.addEventListener("change", () => void Service.SetWindow(windowSelect.value).then(() => Service.CheckGame()));
   windowSelect.addEventListener("mousedown", () => void loadWindows()); // the game may have opened since
   start.addEventListener("click", () => void Service.ToggleCapture());
+  // The coffee page opens in the browser; Go remembers it and hides the card.
+  $("support-open").addEventListener("click", () => void Service.OpenSupport());
+  $("support-dismiss").addEventListener("click", () => void Service.DismissSupport());
 
   // The time in the current step ticks between state events.
   setInterval(() => {
@@ -151,5 +154,12 @@ export function setupLive(): (state: State) => void {
     $("casts").textContent = s.casts ? `${s.casts} casts · ${s.reelInputs} of ${s.reelAttempts} reel inputs sent` : "No casts yet";
     meter("session", s.sessionSeconds, s.sessionLimit * 60, `${clock(s.sessionSeconds)} of ${s.sessionLimit} min`);
     meter("failed", s.failedInRow, s.maxFailed, `${s.failedInRow} of ${s.maxFailed}`);
+
+    // The thank-you card: Go decides when it shows (ui/desktop/support.go).
+    const thanks = s.support;
+    $("support-card").hidden = !thanks.ask;
+    if (thanks.ask) {
+      $("support-text").textContent = `Go Fish landed ${thanks.runCatches} fish this run and ${thanks.catches.toLocaleString()} for you so far. It is made by one person in their spare time. If it saves you time, a coffee helps keep it going.`;
+    }
   };
 }
