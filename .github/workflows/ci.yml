@@ -9,6 +9,8 @@ permissions:
 
 jobs:
   test:
+    # Forks never run this repository's workflows.
+    if: github.repository == 'soockee/pixel-bot-go'
     runs-on: windows-latest
     steps:
       - name: Checkout
