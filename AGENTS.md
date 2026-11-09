@@ -22,7 +22,7 @@ gofmt -l .                          # must print nothing
 GOOS=windows GOARCH=amd64 go build ./...   # cross-compile check from non-Windows
 ```
 
-There is no Makefile. Without a frontend build the window is empty (`frontend/dist` holds only `.gitkeep`). `.github/workflows/ci.yml` builds the frontend, then runs gofmt, vet, tests and the race detector on Windows for pull requests, and `auto-release.yml` runs it before every release. The race step stays non-blocking until it has a clean run.
+There is no Makefile. Without a frontend build the window is empty (`frontend/dist` holds only `.gitkeep`). `.github/workflows/ci.yml` builds the frontend, then runs gofmt, vet, tests and the race detector on Windows for pull requests, and `auto-release.yml` runs it before every release. `zizmor.yml` audits the workflows (config `.github/zizmor.yml`) and fails on any finding; run it locally with `uvx zizmor .github/workflows` before changing a workflow. Release jobs get write permission per job, check out without kept credentials and create the tag with `gh release create`. The race step stays non-blocking until it has a clean run.
 
 ## Layout
 
@@ -83,6 +83,7 @@ There is no Makefile. Without a frontend build the window is empty (`frontend/di
 
 ## Release and repository hygiene
 
+- Issues use the forms in `.github/ISSUE_TEMPLATE/`: `problem.yml` (label bug) for the app, `idea.yml` (label enhancement) for the rest; blank issues are off. **Report a problem** in the top bar opens `problem.yml` in the browser with `version`, `windows` and `details` filled in through query parameters (`ui/desktop/issue.go`, the run, setup checks, Settings values and the last 10 warnings from `pixel_bot_logs.json`). Keep those field ids; `issue_test.go` checks them. GitHub reads the forms from the default branch only.
 - Every push to `main` triggers auto-release: next patch tag `vX.Y.Z` (or run the workflow manually with a `version` input such as `v1.1.0` to pick the tag; tags so far are v1.0.0 to v1.0.7), Windows amd64 build, `CHECKSUMS.txt`, GitHub Release. Put `skip-release` in the commit message for docs-only or non-shippable commits.
 - History was purged of a large demo GIF and a test image and force-pushed (main and tags v1.0.0 to v1.0.7). Do not re-add large binaries (GIFs, videos, screenshots) to git. `.gitattributes` still routes `*.gif` through LFS; decide on LFS before adding GIFs, and prefer a release asset (for example an MP4) linked from the README.
 - Old objects may remain under `refs/pull/1` until PR #1 is deleted or GitHub support clears them.

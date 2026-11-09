@@ -24,8 +24,10 @@ type Commands struct {
 	// CheckUpdate asks GitHub for the latest release; it also waits for the network.
 	CheckUpdate  func() error
 	ReleaseNotes func()
-	CheckAddon   func()
-	InstallAddon func() error
+	// ReportProblem opens a new GitHub issue, filled in, in the browser.
+	ReportProblem func()
+	CheckAddon    func()
+	InstallAddon  func() error
 	// SetTheme shows the theme's icon on the window and the taskbar.
 	SetTheme func(theme string)
 	// MoveOverlay starts or ends placing the overlay; ending saves its place.
@@ -193,6 +195,10 @@ func (s *Service) CheckUpdate() error { return s.cmds.CheckUpdate() }
 
 // ReleaseNotes opens the latest release's page in the browser.
 func (s *Service) ReleaseNotes() { _ = s.do(s.cmds.ReleaseNotes) }
+
+// ReportProblem opens a new GitHub issue on the problem form in the browser,
+// with the version, Windows and app details filled in.
+func (s *Service) ReportProblem() { _ = s.do(s.cmds.ReportProblem) }
 
 // ChooseCastKey confirms the saved Cast key in setup, so the addon step comes next.
 func (s *Service) ChooseCastKey() { _ = s.do(s.view.SetCastKeyChosen) }

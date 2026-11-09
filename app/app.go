@@ -80,15 +80,16 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 				c.RecordPresenter.Toggle()
 			}
 		},
-		Running:      func() bool { return c.Capture.Enabled() || a.schedule != nil },
-		Exit:         func() { go a.wails.Quit() }, // Quit waits for the loop, which runs this
-		Update:       a.installUpdate,
-		CheckUpdate:  a.findUpdate,
-		ReleaseNotes: a.releaseNotes,
-		CheckAddon:   a.checkAddon,
-		InstallAddon: a.installAddon,
-		MoveOverlay:  a.setOverlayMove,
-		SetTheme:     a.setTheme,
+		Running:       func() bool { return c.Capture.Enabled() || a.schedule != nil },
+		Exit:          func() { go a.wails.Quit() }, // Quit waits for the loop, which runs this
+		Update:        a.installUpdate,
+		CheckUpdate:   a.findUpdate,
+		ReleaseNotes:  a.releaseNotes,
+		ReportProblem: a.reportProblem,
+		CheckAddon:    a.checkAddon,
+		InstallAddon:  a.installAddon,
+		MoveOverlay:   a.setOverlayMove,
+		SetTheme:      a.setTheme,
 	}, c.Recordings, cfg, config.FilePath, logger)
 
 	assets := http.NewServeMux()

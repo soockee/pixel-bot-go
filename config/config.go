@@ -22,6 +22,10 @@ func (c Config) CheckSchedule() error {
 // misspelling is kept so existing files keep loading.
 const FilePath = "pixle_bot_config.json"
 
+// LogPath is the JSON log, relative to the working directory, truncated at
+// each start.
+const LogPath = "pixel_bot_logs.json"
+
 const (
 	ReelRightClick  = "right_click"  // Reel by clicking the bobber.
 	ReelInteractKey = "interact_key" // Reel with the game's native Interact binding.

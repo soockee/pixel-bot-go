@@ -11,7 +11,7 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: auto-release
@@ -25,12 +25,17 @@ jobs:
 
   release:
     needs: test
+    # A commit message with skip-release ships nothing.
+    if: ${{ !contains(github.event.head_commit.message, 'skip-release') }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the tag and the release
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Setup Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -43,7 +48,6 @@ jobs:
         env:
           REQUESTED: ${{ github.event.inputs.version }}
         run: |
-          git fetch --tags
           requested="$REQUESTED"
           if [ -n "$requested" ]; then
             if ! echo "$requested" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
@@ -54,8 +58,7 @@ jobs:
               echo "tag $requested already exists" >&2
               exit 1
             fi
-            echo "last_tag=" >> $GITHUB_OUTPUT
-            echo "next_tag=$requested" >> $GITHUB_OUTPUT
+            echo "next_tag=$requested" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           last_tag=$(git tag --list 'v*' --sort=-version:refname | head -n1)
@@ -64,38 +67,23 @@ jobs:
           else
             ver=${last_tag#v}
             IFS='.' read -r major minor patch <<< "$ver"
-            patch=$((patch+1))
-            next="v${major}.${minor}.${patch}"
+            next="v${major}.${minor}.$((patch+1))"
           fi
-          echo "last_tag=$last_tag" >> $GITHUB_OUTPUT
-          echo "next_tag=$next" >> $GITHUB_OUTPUT
-
-      - name: Skip release if flagged
-        if: contains(github.event.head_commit.message, 'skip-release')
-        run: |
-          echo 'skip-release found in commit message; exiting early.'
-          exit 0
-
-      - name: Create tag
-        if: ${{ !contains(github.event.head_commit.message, 'skip-release') }}
-        run: |
-          git tag ${{ steps.next_tag.outputs.next_tag }}
-          git push origin ${{ steps.next_tag.outputs.next_tag }}
+          echo "next_tag=$next" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
+          package-manager-cache: false # nothing cached flows into a published build
 
       - name: Build frontend
-        if: ${{ !contains(github.event.head_commit.message, 'skip-release') }}
         working-directory: frontend
         run: |
           npm ci
           npm run build
 
       - name: Build Windows binary
-        if: ${{ !contains(github.event.head_commit.message, 'skip-release') }}
         env:
           VERSION: ${{ steps.next_tag.outputs.next_tag }}
         run: |
@@ -108,26 +96,20 @@ jobs:
             -o dist/pixel-bot-go-windows-amd64.exe .
 
       - name: Generate checksum
-        if: ${{ !contains(github.event.head_commit.message, 'skip-release') }}
-        run: |
-          cd dist
-          sha256sum * > CHECKSUMS.txt
+        working-directory: dist
+        run: sha256sum * > CHECKSUMS.txt
 
+      # gh creates the tag on this commit along with the release.
       - name: Create GitHub Release
-        if: ${{ !contains(github.event.head_commit.message, 'skip-release') }}
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.next_tag.outputs.next_tag }}
-          name: Go Fish ${{ steps.next_tag.outputs.next_tag }}
-          generate_release_notes: true
-          files: |
-            dist/pixel-bot-go-windows-amd64.exe
-            dist/CHECKSUMS.txt
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.next_tag.outputs.next_tag }}
+        run: |
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Go Fish $TAG" --generate-notes \
+            dist/pixel-bot-go-windows-amd64.exe dist/CHECKSUMS.txt
 
       - name: Upload build artifact (for inspection)
-        if: ${{ !contains(github.event.head_commit.message, 'skip-release') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pixel-bot-go-${{ steps.next_tag.outputs.next_tag }}

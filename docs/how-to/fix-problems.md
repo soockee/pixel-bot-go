@@ -44,4 +44,6 @@ Go Fish only fishes while the game is the window in front. Click into the game.
 
 ## Still stuck
 
-Open an issue on [GitHub](https://github.com/soockee/pixel-bot-go/issues) and attach the file `pixel_bot_logs.json` from the Go Fish folder. It holds what Go Fish did, but no passwords.
+Click **Report a problem** at the top right of Go Fish. Your browser opens a new issue on [GitHub](https://github.com/soockee/pixel-bot-go/issues) with the Go Fish version, your Windows version, your settings and Go Fish's recent warnings already filled in. Describe what happened, pick where it happened, and submit. You need a GitHub account to submit, and nothing is sent before you do.
+
+If you can, drag the file `pixel_bot_logs.json` from the Go Fish folder into the issue. It holds what Go Fish did, but no passwords.

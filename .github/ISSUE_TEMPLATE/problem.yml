@@ -1,0 +1,57 @@
+# Go Fish opens this form from the app (Report a problem) and fills in the
+# fields whose ids ui/desktop/issue.go names. Keep those ids when editing.
+name: Problem with Go Fish
+description: Something in the app does not work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Opened from Go Fish with **Report a problem**, the version, Windows and app details below are already filled in, so you only need to describe what happened.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you saw, and what you expected instead.
+      placeholder: I pressed Start fishing, the bobber landed, a fish bit, but Go Fish did not reel in.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where
+      options:
+        - Setting up (game window, addon, keys)
+        - Finding the bobber
+        - Noticing a bite or reeling in
+        - Casting or moving
+        - Updating Go Fish
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Go Fish version
+      description: Shown at the bottom right of the window.
+      placeholder: v1.2.0
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 (build 26100)
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: App details
+      description: Filled in by Go Fish, the run state, setup checks, settings and recent warnings. Remove anything you would rather not share.
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log file
+      description: Optional. Drag `pixel_bot_logs.json` from the Go Fish folder here. It holds what Go Fish did, but no passwords.
