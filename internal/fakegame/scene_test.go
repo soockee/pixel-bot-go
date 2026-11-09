@@ -64,13 +64,14 @@ func TestBiteDetectorSeesSplashNotStatic(t *testing.T) {
 	bd.Reset()
 	start := time.Now()
 	crop := func(p Phase) *image.RGBA { return cropROI(r.Render(p), cx, cy, 80) }
-	for i := 0; i < 8; i++ {
+	// The detector ignores the landing, so the bobber floats for 2 s first.
+	for i := 0; i < 40; i++ {
 		if bd.Feed(crop(PhaseBobber), start.Add(time.Duration(i)*50*time.Millisecond)) {
 			t.Fatalf("static frame %d triggered a bite", i)
 		}
 	}
 	hit := false
-	for i := 8; i < 11 && !hit; i++ {
+	for i := 40; i < 43 && !hit; i++ {
 		hit = bd.Feed(crop(PhaseSplash), start.Add(time.Duration(i)*50*time.Millisecond))
 	}
 	if !hit {

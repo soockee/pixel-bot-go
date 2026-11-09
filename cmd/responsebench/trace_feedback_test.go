@@ -161,7 +161,7 @@ func TestFakeGameReplayFeedsDryRunAttemptsToScorer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	const casts, quietFrames, splashFrames = 24, 8, 3
+	const casts, quietFrames, splashFrames = 24, 40, 3 // 2 s of quiet frames: the detector ignores the landing
 	const frameInterval, settle = 50 * time.Millisecond, 350 * time.Millisecond
 	duration := casts * ((quietFrames+splashFrames)*frameInterval + settle)
 	observer := traceobserver.New(model, duration.Milliseconds())

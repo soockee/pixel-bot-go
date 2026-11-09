@@ -102,6 +102,7 @@ func TestEngineReelsWhenTheSceneSplashes(t *testing.T) {
 			t.Fatalf("scene %v at %v, want a live area around the box %v", p.Scene.Bounds(), p.SceneBox, p.ROIBox)
 		}
 
+		time.Sleep(detect.LandingSettle) // the bite detector ignores the landing
 		frames.set(fakegame.PhaseSplash)
 		time.Sleep(200*time.Millisecond + reelClickDelay)
 
@@ -145,6 +146,7 @@ func TestInteractKeyReelRequiresAFreshMarkerAndReleasesOnFocusLoss(t *testing.T)
 				wantState(t, fsm, StateMonitoring)
 				wantActions(t, log)
 
+				time.Sleep(detect.LandingSettle) // the bite detector ignores the landing
 				frames.set(fakegame.PhaseSplash)
 				time.Sleep(frameInterval)
 				wantState(t, fsm, StateReeling)
@@ -250,6 +252,7 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 				fsm.ForceCast()
 				time.Sleep(500 * time.Millisecond)
 				wantState(t, fsm, StateMonitoring)
+				time.Sleep(detect.LandingSettle) // the bite detector ignores the landing
 				frames.set(fakegame.PhaseSplash)
 				time.Sleep(frameInterval + reelClickDelay)
 				if test.failReel {
@@ -486,6 +489,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				fsm.ForceCast()
 				time.Sleep(500 * time.Millisecond)
 				wantState(t, fsm, StateMonitoring)
+				time.Sleep(detect.LandingSettle) // the bite detector ignores the landing
 				frames.set(fakegame.PhaseSplash)
 				time.Sleep(500 * time.Millisecond)
 				wantState(t, fsm, StateCooldown)
@@ -520,6 +524,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				}
 				// The returned bobber must be usable, not just visible.
 				time.Sleep(300 * time.Millisecond)
+				time.Sleep(detect.LandingSettle) // the bite detector ignores the landing
 				frames.set(fakegame.PhaseSplash)
 				time.Sleep(500 * time.Millisecond)
 				wantState(t, fsm, StateCooldown)

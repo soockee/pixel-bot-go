@@ -98,7 +98,7 @@ func TestGuardDetectsTakeoverBeforeFirstWaypoint(t *testing.T) {
 	if _, _, ok := f.BeginCursor(); !ok {
 		t.Fatal("expected a plan to start inside the window")
 	}
-	f.cursor.X++
+	f.cursor.X += 20 // a hand on the mouse
 	if f.TryMoveCursor(image.Pt(160, 150)) || f.takeovers != 1 || len(f.sent) != 0 {
 		t.Fatalf("takeover did not stop the waypoint: sent=%v takeovers=%d", f.sent, f.takeovers)
 	}
@@ -117,7 +117,7 @@ func TestGuardHandsOverWhenTheUserMovesTheCursor(t *testing.T) {
 			f := newGuardFixture()
 			f.MoveCursor(150, 150)
 			f.sent = nil
-			f.cursor = image.Pt(151, 150)
+			f.cursor = image.Pt(170, 150) // a hand on the mouse
 			tt.act(f)
 			if len(f.sent) != 0 {
 				t.Errorf("sent = %v, want nothing", f.sent)
@@ -126,6 +126,21 @@ func TestGuardHandsOverWhenTheUserMovesTheCursor(t *testing.T) {
 				t.Errorf("takeovers = %d, want 1", f.takeovers)
 			}
 		})
+	}
+}
+
+// A pointer nudged by a pixel or two, by a sensitive mouse or the game, is
+// still the app's: the run goes on and the click goes out.
+func TestGuardToleratesASmallDrift(t *testing.T) {
+	f := newGuardFixture()
+	f.MoveCursor(150, 150)
+	f.cursor = image.Pt(152, 149)
+	if !f.ClickRight() || f.takeovers != 0 {
+		t.Fatalf("a 2 px drift stopped the click: takeovers=%d", f.takeovers)
+	}
+	f.cursor = image.Pt(150+takeoverSlack+1, 150)
+	if f.ClickRight() || f.takeovers != 1 {
+		t.Fatalf("a move past the slack did not hand over: takeovers=%d", f.takeovers)
 	}
 }
 

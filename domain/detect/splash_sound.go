@@ -16,16 +16,27 @@ import (
 // 0.45 s. Other players' bites sound the same but splash elsewhere, and spell
 // effects splash without the sound, so neither alone triggers it.
 // Not safe for concurrent use; call Feed and Hear from a single goroutine.
+//
+// A splash is a bright splash at the centre, or a clear change there for the
+// water's own level (centreMotion), which also catches the small splash of a
+// far bobber. When the game makes no sound at all, for example with its sound
+// switched off, the change at the centre alone reports the bite.
 type SplashSoundDetector struct {
 	logger *slog.Logger
 	scene  brightening
+	motion centreMotion
+	start  time.Time // the first frame since Reset
 	splash time.Time // last frame with a splash at the bobber
 	sound  onsets
 	fired  bool
 }
 
-// soundAfterSplash is how long after a splash the bite sound may start.
-const soundAfterSplash = 800 * time.Millisecond
+const (
+	// soundAfterSplash is how long after a splash the bite sound may start.
+	soundAfterSplash = 800 * time.Millisecond
+	// silentFor is how long the game must be silent before a splash alone counts.
+	silentFor = 3 * time.Second
+)
 
 // NewSplashSoundDetector returns a detector. A nil logger discards logs.
 func NewSplashSoundDetector(logger *slog.Logger) *SplashSoundDetector {
@@ -44,10 +55,23 @@ func (s *SplashSoundDetector) Feed(roi *image.RGBA, t time.Time) bool {
 	if roi == nil || s.fired {
 		return false
 	}
-	if b, ok := s.scene.measure(roi, t); ok && b.centreSplash() {
-		s.splash = t
+	if s.start.IsZero() {
+		s.start = t
 	}
-	return false
+	b, settled := s.scene.measure(roi, t)
+	m, moved := s.motion.observe(roi, t)
+	moved = moved && t.Sub(s.start) >= splashSettle // the same settle as the bright splash
+	if !(settled && b.centreSplash()) && !moved {
+		return false
+	}
+	s.splash = t
+	heard := s.sound.audible
+	if !moved || t.Sub(s.start) < silentFor || !heard.IsZero() && t.Sub(heard) < silentFor {
+		return false
+	}
+	s.fired = true
+	s.logger.Info("bite detected", "detector", "splash_sound", "without_sound", true, "change", m.change, "threshold", m.threshold)
+	return true
 }
 
 // Hear takes a packet of capture.CaptureAudio played at t and reports a bite
@@ -75,6 +99,7 @@ const (
 	soundHistory    = 80                     // 2 s of steps for the background level
 	soundRecent     = 4                      // the last 100 ms are not background yet
 	soundMinLevel   = 15                     // RMS of 16-bit samples; quieter is noise
+	soundAudible    = 1                      // any game sound; recorded fishing has a median of 6, a game with its sound off 0
 	soundOverGround = 3                      // an onset is this many times the background
 )
 
@@ -86,6 +111,7 @@ type onsets struct {
 	prevStep float64 // squares of the step before
 	levels   []float64
 	loud     bool
+	audible  time.Time // when the game last made any sound
 }
 
 // add takes a packet whose first sample played at t and reports the time of an onset inside it.
@@ -104,6 +130,9 @@ func (o *onsets) add(pcm []byte, t time.Time) (time.Time, bool) {
 		}
 		level := math.Sqrt((o.prevStep + o.sum) / float64(2*soundStep*capture.AudioChannels))
 		o.prevStep, o.sum, o.n = o.sum, 0, 0
+		if level >= soundAudible {
+			o.audible = t.Add(time.Duration(i) * time.Second / capture.AudioRate)
+		}
 		loud := o.isLoud(level)
 		if loud && !o.loud && !found {
 			at = t.Add(time.Duration(i) * time.Second / capture.AudioRate) // t is the packet's first sample
