@@ -21,6 +21,13 @@ type Locator interface {
 	Locate(frame *image.RGBA) (Match, bool)
 }
 
+// CastLocator starts a fresh search after a cast. Its first frame should show
+// the scene before the bobber lands.
+type CastLocator interface {
+	Locator
+	BeginCast()
+}
+
 // BiteDetector watches the region around a locked bobber. Call Reset when a new
 // cast starts, and Feed from one goroutine.
 type BiteDetector interface {

@@ -44,6 +44,10 @@ type candidate struct {
 // Locate searches the band above the player's character for the bobber's
 // colours. Score is the parts' contrast to the water, 1 at 100 CIELAB units.
 func (l *ColorLocator) Locate(frame *image.RGBA) (Match, bool) {
+	return l.locate(frame, image.Rectangle{})
+}
+
+func (l *ColorLocator) locate(frame *image.RGBA, exclude image.Rectangle) (Match, bool) {
 	area := searchArea(frame.Bounds())
 	water, ok := waterColor(frame, area)
 	if !ok {
@@ -53,12 +57,15 @@ func (l *ColorLocator) Locate(frame *image.RGBA) (Match, bool) {
 	for y := area.Min.Y; y < area.Max.Y; y++ {
 		row := frame.Pix[frame.PixOffset(area.Min.X, y):]
 		for i := range area.Dx() {
+			x := area.Min.X + i
+			if image.Pt(x, y).In(exclude) {
+				continue
+			}
 			p := row[i*4:]
 			r, g, b := int(p[0]), int(p[1]), int(p[2])
 			if r|g|b == 0 {
 				continue // recordings black out everything but the marker box
 			}
-			x := area.Min.X + i
 			if s := r - g - b; s >= colorRedMin {
 				classes[classRed] = append(classes[classRed], candidate{x: x, y: y, score: float64(s)})
 			}

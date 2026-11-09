@@ -166,6 +166,15 @@ func (r *Renderer) MarkerRect() image.Rectangle { return r.BobberRect().Inset(-2
 
 // Render returns a fresh frame for the phase.
 func (r *Renderer) Render(p Phase) *image.RGBA {
+	return r.render(p, true)
+}
+
+// RenderUnmarked renders the same scene without the addon's brackets.
+func (r *Renderer) RenderUnmarked(p Phase) *image.RGBA {
+	return r.render(p, false)
+}
+
+func (r *Renderer) render(p Phase, marked bool) *image.RGBA {
 	out := image.NewRGBA(r.bg.Bounds())
 	copy(out.Pix, r.bg.Pix)
 	if p == PhaseEmpty {
@@ -203,6 +212,8 @@ func (r *Renderer) Render(p Phase) *image.RGBA {
 			}
 		}
 	}
-	detect.DrawMarker(out, r.MarkerRect())
+	if marked {
+		detect.DrawMarker(out, r.MarkerRect())
+	}
 	return out
 }

@@ -66,6 +66,7 @@ type Span struct {
 // nil if no bite came.
 type Cast struct {
 	Span
+	CastMS *int64 `json:"cast_ms,omitempty"`
 	Bobber Rect   `json:"bobber"`
 	BiteMS *int64 `json:"bite_ms,omitempty"`
 }
@@ -126,6 +127,8 @@ func (l Labels) check() error {
 		switch {
 		case c.StartMS >= c.EndMS:
 			return fmt.Errorf("cast %d: start_ms must be before end_ms", i)
+		case c.CastMS != nil && (*c.CastMS < 0 || *c.CastMS > c.StartMS):
+			return fmt.Errorf("cast %d: cast_ms must be between zero and start_ms", i)
 		case c.Bobber.W <= 0 || c.Bobber.H <= 0:
 			return fmt.Errorf("cast %d: bobber needs a positive size", i)
 		case c.BiteMS != nil && (*c.BiteMS < c.StartMS || *c.BiteMS > c.EndMS):

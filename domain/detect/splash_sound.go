@@ -46,6 +46,8 @@ type SplashSoundDetector struct {
 	splash     time.Time  // its last frame
 	sound      onsets
 	fired      bool
+	history    *sprayHistory
+	templates  *biteTemplates
 
 	// Kept across casts for the run.
 	heardGame   bool // the game made some sound
@@ -90,10 +92,18 @@ func NewSplashSoundDetector(logger *slog.Logger) *SplashSoundDetector {
 func (s *SplashSoundDetector) Reset() {
 	run := SplashSoundDetector{
 		logger:      s.logger,
+		history:     s.history,
+		templates:   s.templates,
 		heardGame:   s.heardGame || !s.sound.audible.IsZero(),
 		heardBite:   s.heardBite,
 		unanswered:  s.unanswered,
 		noBiteSound: s.noBiteSound,
+	}
+	if run.history != nil {
+		*run.history = sprayHistory{}
+	}
+	if run.templates != nil {
+		run.templates.reset()
 	}
 	switch {
 	case s.fired:
@@ -121,6 +131,9 @@ func (s *SplashSoundDetector) Feed(roi *image.RGBA, t time.Time) bool {
 	b, settled := s.scene.measure(roi, t)
 	share := float64(b.centre) / float64(max(b.disc, 1))
 	splash := settled && b.centre > 0 && share >= s.level.threshold(t)
+	if s.history != nil {
+		splash = s.history.confirm(b, roi.Bounds().Dx()*roi.Bounds().Dy(), share, splash, t)
+	}
 	if settled {
 		s.level.add(t, share)
 	}
@@ -161,6 +174,9 @@ func (s *SplashSoundDetector) Hear(pcm []byte, t time.Time) bool {
 		return false
 	}
 	at, ok := s.sound.add(pcm, t)
+	if s.templates != nil {
+		at, ok = s.templates.add(pcm, t, s.splashFrom, s.splash)
+	}
 	if !ok || s.splash.IsZero() {
 		return false
 	}
@@ -171,6 +187,33 @@ func (s *SplashSoundDetector) Hear(pcm []byte, t time.Time) bool {
 		s.logger.Info("bite detected", "detector", "splash_sound", "sound_after_splash_ms", gap.Milliseconds())
 	}
 	return s.fired
+}
+
+// sprayHistory compares the centre with the rest of the crop and requires
+// a rising, centred response to survive two observations.
+type sprayHistory struct {
+	contrast  float64
+	candidate time.Time
+}
+
+func (h *sprayHistory) confirm(b brightened, pixels int, share float64, splash bool, t time.Time) bool {
+	ring := float64(b.all-b.centre) / float64(max(pixels-b.disc, 1))
+	contrast := share - ring
+	rise := contrast - h.contrast
+	h.contrast = contrast
+	if !splash || contrast < 0.06 {
+		h.candidate = time.Time{}
+		return false
+	}
+	if !h.candidate.IsZero() && t.Sub(h.candidate) <= 150*time.Millisecond {
+		h.candidate = t
+		return true
+	}
+	h.candidate = time.Time{}
+	if rise >= 0.04 {
+		h.candidate = t
+	}
+	return false
 }
 
 var _ SoundBiteDetector = (*SplashSoundDetector)(nil)

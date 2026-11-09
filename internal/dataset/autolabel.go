@@ -149,6 +149,7 @@ func labelCast(castMS, reelMS int64, click *playtrace.Position, info SessionInfo
 	box := image.Rect(at.X-half, at.Y-half, at.X+half, at.Y+half).Intersect(bounds)
 	return Cast{
 		Span:   Span{start, reelMS},
+		CastMS: &castMS,
 		Bobber: Rect{box.Min.X, box.Min.Y, box.Dx(), box.Dy()},
 		BiteMS: &bite,
 	}, ""

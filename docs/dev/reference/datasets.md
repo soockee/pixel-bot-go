@@ -18,7 +18,7 @@ Use `-record-full` for vision experiments. It targets 30 fps and saves the full 
 }
 ```
 
-A cast covers the time the bobber is on screen. Leave out `bite_ms` if no bite came. `empty` lists spans with no bobber.
+A cast covers the time the bobber is on screen. Leave out `bite_ms` if no bite came. Add `cast_ms` when the recorded input gives the cast time. Locator replay starts there, before landing. For older labels, `cast_track` starts two seconds before `start_ms` to obtain a reference frame. `empty` lists spans with no bobber. Cast-conditioned locators are idle between casts.
 
 `go run ./cmd/detecteval [-config file] [-locator names] [-bite names] [-json] dir...` compares techniques across all the datasets given and prints one column per technique. `-locator` and `-bite` take comma-separated names, and both default to `all`:
 
@@ -37,7 +37,7 @@ A detector that listens, such as `splash_sound`, also gets the session's `audio.
 
 | Label | Value |
 | ----- | ----- |
-| Cast span | From 2 s after the cast, once the bobber has landed, to the reel click |
+| Cast span | From 2 s after the cast, once the bobber has landed, to the reel click. `cast_ms` records the cast input time. |
 | `bobber` | A `-box` px square around the reel click |
 | `bite_ms` | The reel click minus `-reaction` |
 | `empty` | From 1 s after a reel to the next cast, if at least 1 s long |
