@@ -15,10 +15,10 @@ Go Fish updates itself: it checks GitHub at start and every hour, and **Update t
 ## What it does
 
 * Finds the bobber by the magenta brackets the Bobber Marker addon draws, then watches only that box at 30 fps.
-* Detects a bite from the splash, by motion or brightness, or from the game's splash sound.
+* Detects a bite from the splash at your bobber and the bite sound that follows it, and still works with the game's sound effects off.
 * Runs a state machine: cast, search, watch, reel, pause, and stops after a session limit or too many casts without a bite.
 * Stops when you click **Stop** in Go Fish.
-* Dry-run mode logs every key press and click instead of sending it, and needs neither Administrator nor an account.
+* Dry-run mode logs every key press and click instead of sending it, and needs no Administrator.
 * Records sessions (frames, input and sound) for comparing detectors offline.
 
 ## Develop
@@ -38,9 +38,9 @@ Pick **Fake Game** as the game window and press **Start fishing**; the log `pixe
 The player guide follows [Diataxis](https://diataxis.fr/):
 
 * [Get started](https://soockee.github.io/pixel-bot-go/tutorials/first-catch/): your first catch.
-* [How-to guides](https://soockee.github.io/pixel-bot-go/#how-to): install the addon, sign in, change settings, update, share a recording, fix problems.
+* [How-to guides](https://soockee.github.io/pixel-bot-go/#how-to): install the addon, change settings, update, fix problems.
 * [Reference](https://soockee.github.io/pixel-bot-go/#reference): settings, the Fishing tab, addon commands, files.
-* [Understand](https://soockee.github.io/pixel-bot-go/#explanation): how Go Fish works, and [what data sharing means](https://soockee.github.io/pixel-bot-go/explanation/data-sharing/).
+* [Understand](https://soockee.github.io/pixel-bot-go/#explanation): how Go Fish works, and [what Go Fish sends](https://soockee.github.io/pixel-bot-go/explanation/data-sharing/).
 
 ## License
 

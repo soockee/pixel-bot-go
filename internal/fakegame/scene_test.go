@@ -60,18 +60,18 @@ func TestBiteDetectorSeesSplashNotStatic(t *testing.T) {
 	r := NewRenderer(DefaultScenario(), tmpl)
 	br := r.BobberRect()
 	cx, cy := (br.Min.X+br.Max.X)/2, (br.Min.Y+br.Max.Y)/2
-	bd := detect.NewMotionBiteDetector(nil)
+	bd := detect.NewSplashSoundDetector(nil)
 	bd.Reset()
 	start := time.Now()
 	crop := func(p Phase) *image.RGBA { return cropROI(r.Render(p), cx, cy, 80) }
-	// The detector ignores the landing, so the bobber floats for 2 s first.
-	for i := 0; i < 40; i++ {
+	// The detector ignores the landing and needs 3 s of silence, so the bobber floats for 3.5 s first.
+	for i := 0; i < 70; i++ {
 		if bd.Feed(crop(PhaseBobber), start.Add(time.Duration(i)*50*time.Millisecond)) {
 			t.Fatalf("static frame %d triggered a bite", i)
 		}
 	}
 	hit := false
-	for i := 40; i < 43 && !hit; i++ {
+	for i := 70; i < 73 && !hit; i++ {
 		hit = bd.Feed(crop(PhaseSplash), start.Add(time.Duration(i)*50*time.Millisecond))
 	}
 	if !hit {

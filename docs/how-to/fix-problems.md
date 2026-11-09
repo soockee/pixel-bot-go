@@ -39,8 +39,9 @@ Go Fish only fishes while the game is the window in front. Click into the game.
 
 - Move the brackets so the bobber sits in the middle; see [Addon commands](../reference/addon-commands.md).
 - Fish where the water is calm and the bobber is easy to see, away from other players' bobbers.
+- With the game's sound effects off, Go Fish misses the first bite of each run while it learns that no bite sound comes, then reels on the splash alone. Turn sound effects on for fewer false reels near other players' spells.
 
 
 ## Still stuck
 
-Open an issue on [GitHub](https://github.com/soockee/pixel-bot-go/issues) and attach the file `pixel_bot_logs.json` from the Go Fish folder. It holds what Go Fish did, and your email if you are signed in, but no passwords.
+Open an issue on [GitHub](https://github.com/soockee/pixel-bot-go/issues) and attach the file `pixel_bot_logs.json` from the Go Fish folder. It holds what Go Fish did, but no passwords.

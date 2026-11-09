@@ -46,19 +46,6 @@ document.querySelector(".tabs")!.addEventListener("keydown", (e) => {
   $(`tab-${next}`).focus();
 });
 
-let signedIn = false;
-const signIn = $<HTMLButtonElement>("sign-in");
-signIn.addEventListener("click", () => {
-  if (signedIn) return void Service.SignOut();
-  signIn.disabled = true;
-  signIn.textContent = "Signing in…";
-  // Go shows why sign-in failed in the status bar.
-  void Service.SignIn().catch(() => undefined).finally(() => {
-    signIn.disabled = false;
-    signIn.textContent = signedIn ? "Sign out" : "Sign in with Google";
-  });
-});
-
 // Go shows the download's progress and any error in the status bar.
 $("update").addEventListener("click", () => void Service.Update().catch(() => undefined));
 
@@ -87,8 +74,8 @@ function render(s: State) {
     burst(themeById(theme), $("stage"));
   }
   reels = s.reels;
-  if (s.recorder !== recorderShown) {
-    recorderShown = s.recorder;
+  if (s.debug !== recorderShown) {
+    recorderShown = s.debug;
     show(wanted);
   }
   live(s);
@@ -99,15 +86,9 @@ function render(s: State) {
   settings.render(s);
   updates(s);
 
-  signedIn = s.account !== "";
-  $("account").hidden = !signedIn;
-  $("account").textContent = signedIn ? `${s.account} · ${s.role || "no role"}` : "";
-  signIn.hidden = !s.signIn;
-  if (!signIn.disabled) signIn.textContent = signedIn ? "Sign out" : "Sign in with Google";
-
   const update = $<HTMLButtonElement>("update");
   update.hidden = s.update === "";
-  update.disabled = s.updating || s.running || s.recording || s.uploading !== "";
+  update.disabled = s.updating || s.running || s.recording;
   update.textContent = s.updating ? `Updating to ${s.update}…` : `Update to ${s.update}`;
 
   $("status").textContent = s.status;

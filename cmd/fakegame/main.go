@@ -1,7 +1,8 @@
 // Command fakegame renders a local fishing scenario for end-to-end tests.
 // It shows a noisy background, a bobber, and scripted bites in a frameless
 // window, one scene pixel per screen pixel. Each phase change is printed to
-// stdout as a JSON line for correlation with the application logs.
+// stdout as a JSON line for correlation with the application logs, and so is
+// each bite sound it plays from its own process (scenario field sound).
 //
 // Usage: fakegame [-scenario file.json] [-title "Fake Game"]
 package main
@@ -13,9 +14,11 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"maps"
 	"math/rand"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -167,6 +170,20 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	// The game's sound, played from this process for the app's process loopback.
+	var spk *speaker
+	var clips []string
+	if sc.Sound != fakegame.SoundOff {
+		sounds, err := assets.BiteSoundPCM()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "fakegame: bite sounds:", err)
+			os.Exit(1)
+		}
+		clips = slices.Sorted(maps.Keys(sounds))
+		spk = newSpeaker(sounds, sc.Seed)
+	}
+	bites := rand.New(rand.NewSource(sc.Seed)) // apart from landing, so landings stay as they were
+	var soundAt time.Time                      // when the next bite sound starts, zero for none
 	biteID := 0
 	landing := rand.New(rand.NewSource(sc.Seed))
 	var traceErr error
@@ -174,6 +191,15 @@ func main() {
 	enc := json.NewEncoder(os.Stdout)
 	tick := func() bool {
 		phase, done := sc.PhaseAt(time.Since(start))
+		if !soundAt.IsZero() && !time.Now().Before(soundAt) {
+			soundAt = time.Time{}
+			clip := clips[bites.Intn(len(clips))]
+			spk.bite(clip)
+			_ = enc.Encode(map[string]any{"t": time.Now().UTC().Format(time.RFC3339Nano), "sound": clip})
+		}
+		if phase != current && phase == fakegame.PhaseSplash && sc.Sound == fakegame.SoundBite {
+			soundAt = time.Now().Add(time.Duration(200+bites.Intn(251)) * time.Millisecond) // as the game: 0.2 to 0.45 s after the splash
+		}
 		if phase != current {
 			if phase == fakegame.PhaseBobber && current != fakegame.PhaseSplash {
 				r.Land(landing) // a new cast

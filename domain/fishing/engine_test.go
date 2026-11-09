@@ -63,7 +63,7 @@ func newSceneEngine(t *testing.T, actions ActionCallbacks) (*Engine, *FishingFSM
 	frames.set(fakegame.PhaseBobber)
 	fsm := NewFSM(nil, cfg, actions)
 	detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
-		return detect.NewMarkerLocator(), detect.NewMotionBiteDetector(nil), nil
+		return detect.NewMarkerLocator(), deaf{detect.NewSplashSoundDetector(nil)}, nil
 	}
 	engine := NewEngine(frames, noSound, fsm, detectors, cfg, testLogger)
 	return engine, fsm, frames, r.BobberRect().Add(frames.origin)
@@ -102,7 +102,7 @@ func TestEngineReelsWhenTheSceneSplashes(t *testing.T) {
 			t.Fatalf("scene %v at %v, want a live area around the box %v", p.Scene.Bounds(), p.SceneBox, p.ROIBox)
 		}
 
-		time.Sleep(detect.LandingSettle) // the bite detector ignores the landing
+		time.Sleep(detect.SilentFor) // a silent game: the splash counts after this
 		frames.set(fakegame.PhaseSplash)
 		time.Sleep(200*time.Millisecond + reelClickDelay)
 
@@ -146,7 +146,7 @@ func TestInteractKeyReelRequiresAFreshMarkerAndReleasesOnFocusLoss(t *testing.T)
 				wantState(t, fsm, StateMonitoring)
 				wantActions(t, log)
 
-				time.Sleep(detect.LandingSettle) // the bite detector ignores the landing
+				time.Sleep(detect.SilentFor) // a silent game: the splash counts after this
 				frames.set(fakegame.PhaseSplash)
 				time.Sleep(frameInterval)
 				wantState(t, fsm, StateReeling)
@@ -252,7 +252,7 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 				fsm.ForceCast()
 				time.Sleep(500 * time.Millisecond)
 				wantState(t, fsm, StateMonitoring)
-				time.Sleep(detect.LandingSettle) // the bite detector ignores the landing
+				time.Sleep(detect.SilentFor) // a silent game: the splash counts after this
 				frames.set(fakegame.PhaseSplash)
 				time.Sleep(frameInterval + reelClickDelay)
 				if test.failReel {
@@ -332,7 +332,7 @@ func TestEngineSurvivesCaptureFailures(t *testing.T) {
 		fsm := NewFSM(nil, cfg, recordingActions(&actionLog{}))
 		defer fsm.Close()
 		detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
-			return nil, detect.NewMotionBiteDetector(nil), nil
+			return nil, deaf{detect.NewSplashSoundDetector(nil)}, nil
 		}
 		engine := NewEngine(frames, noSound, fsm, detectors, cfg, testLogger)
 
@@ -363,7 +363,7 @@ func TestEngineReelsWhenTheDetectorHearsABite(t *testing.T) {
 		defer fsm.Close()
 		bang := make(chan struct{})
 		engine.detectors = func(config.Config) (detect.Locator, detect.BiteDetector, error) {
-			return detect.NewMarkerLocator(), earDetector{detect.NewMotionBiteDetector(nil)}, nil
+			return detect.NewMarkerLocator(), earDetector{detect.NewSplashSoundDetector(nil)}, nil
 		}
 		engine.sound = func(ctx context.Context, emit func([]byte, time.Time) error) error {
 			quiet := []byte{0}
@@ -489,7 +489,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				fsm.ForceCast()
 				time.Sleep(500 * time.Millisecond)
 				wantState(t, fsm, StateMonitoring)
-				time.Sleep(detect.LandingSettle) // the bite detector ignores the landing
+				time.Sleep(detect.SilentFor) // a silent game: the splash counts after this
 				frames.set(fakegame.PhaseSplash)
 				time.Sleep(500 * time.Millisecond)
 				wantState(t, fsm, StateCooldown)
@@ -524,7 +524,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				}
 				// The returned bobber must be usable, not just visible.
 				time.Sleep(300 * time.Millisecond)
-				time.Sleep(detect.LandingSettle) // the bite detector ignores the landing
+				time.Sleep(detect.SilentFor) // a silent game: the splash counts after this
 				frames.set(fakegame.PhaseSplash)
 				time.Sleep(500 * time.Millisecond)
 				wantState(t, fsm, StateCooldown)
@@ -535,3 +535,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 		})
 	}
 }
+
+// deaf hides Hear, so the engine does not listen and the detector takes the
+// game as silent.
+type deaf struct{ detect.BiteDetector }

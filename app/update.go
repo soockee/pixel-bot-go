@@ -100,8 +100,6 @@ func (a *app) updateProblem() string {
 		return "stop the run before updating"
 	case st.Recording:
 		return "stop the recording before updating"
-	case st.Uploading != "":
-		return "wait for the upload to finish"
 	}
 	return ""
 }

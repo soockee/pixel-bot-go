@@ -10,7 +10,7 @@ Finding a small bobber in a busy picture of water is hard. So Go Fish doesn't tr
 
 ## Waiting for the bite
 
-Once the bobber is found, Go Fish only watches the small box inside the brackets, about thirty times a second. When a fish bites, the bobber dips and the water splashes, and the box suddenly changes. That is the signal to click.
+Once the bobber is found, Go Fish only watches the small box inside the brackets, about thirty times a second. When a fish bites, the bobber dips and the water splashes, and the box suddenly changes. A moment later the game plays the bite sound. Go Fish waits for both, so other players' bites and spells don't fool it. With the game's sound effects off, the splash alone is the signal.
 
 ## One cast at a time
 

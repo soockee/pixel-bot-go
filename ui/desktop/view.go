@@ -107,18 +107,6 @@ func (v *View) SetGameFound(found bool) { v.state.GameFound = found }
 // SetCastKeyChosen marks the Cast key setup step as done.
 func (v *View) SetCastKeyChosen() { v.state.CastKeyChosen = true }
 
-// SetAccount shows the signed-in account and what its role may do; an empty
-// email means signed out.
-func (v *View) SetAccount(email, role string, canFish, canUpload bool) {
-	v.state.Account, v.state.Role, v.state.CanFish, v.state.CanUpload = email, role, canFish, canUpload
-}
-
-// SetSignIn shows whether sign-in is configured.
-func (v *View) SetSignIn(configured bool) { v.state.SignIn = configured }
-
-// SetUploading shows the recording being uploaded, "" when none.
-func (v *View) SetUploading(name string) { v.state.Uploading = name }
-
 // SetUpdate shows the newer release on offer, "" when none, and whether it
 // is being installed.
 func (v *View) SetUpdate(tag string, updating bool) { v.state.Update, v.state.Updating = tag, updating }
@@ -140,9 +128,6 @@ func unix(t time.Time) int64 {
 	}
 	return t.Unix()
 }
-
-// SetRecorder shows or hides the Recorder.
-func (v *View) SetRecorder(shown bool) { v.state.Recorder = shown }
 
 // SetAddon shows where the addon goes and its status there; see State.Addon.
 func (v *View) SetAddon(dir, status string) { v.state.AddonDir, v.state.Addon = dir, status }

@@ -46,12 +46,23 @@ type Scenario struct {
 	// Spread lands each new bobber at a random spot up to this many pixels
 	// from BobberX, BobberY, so the pointer has new ways to go; 0 keeps it still.
 	Spread int `json:"bobber_spread"`
+	// Sound is what the game plays: SoundBite (the default) a quiet hum and a
+	// recorded bite sound 200 to 450 ms after each splash, SoundNoBite the hum
+	// only, as with sound effects off and music on, SoundOff nothing.
+	Sound string `json:"sound"`
 }
+
+// The Scenario.Sound values.
+const (
+	SoundBite   = "bite"
+	SoundNoBite = "no_bite"
+	SoundOff    = "off"
+)
 
 // DefaultScenario returns a looping cast: empty, bobber, bite, empty.
 func DefaultScenario() Scenario {
 	return Scenario{
-		Width: 480, Height: 320, BobberX: 200, BobberY: 120, Scale: 1.0, Seed: 1, Loop: true, SplashLum: 230,
+		Width: 480, Height: 320, BobberX: 200, BobberY: 120, Scale: 1.0, Seed: 1, Loop: true, SplashLum: 230, Sound: SoundBite,
 		Timeline: []Segment{
 			{PhaseEmpty, 2000}, {PhaseBobber, 4000}, {PhaseSplash, 600}, {PhaseEmpty, 3000},
 		},
@@ -67,6 +78,9 @@ func LoadScenario(path string) (Scenario, error) {
 	}
 	if err := json.Unmarshal(data, &sc); err != nil {
 		return sc, fmt.Errorf("parse scenario: %w", err)
+	}
+	if sc.Sound != SoundBite && sc.Sound != SoundNoBite && sc.Sound != SoundOff {
+		return sc, fmt.Errorf("scenario sound %q: want %s, %s or %s", sc.Sound, SoundBite, SoundNoBite, SoundOff)
 	}
 	if sc.Width <= 0 || sc.Height <= 0 || len(sc.Timeline) == 0 {
 		return sc, fmt.Errorf("scenario needs positive width/height and a timeline")

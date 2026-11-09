@@ -44,8 +44,7 @@ export function setupUpdates(): (s: State) => void {
     $("release-notes").hidden = !s.latest;
 
     const busy = s.running ? "Stop the run before updating."
-      : s.recording ? "Stop the recording before updating."
-      : s.uploading ? "Wait for the upload to finish before updating." : "";
+      : s.recording ? "Stop the recording before updating." : "";
     $("update-warning").hidden = !offered || !busy || s.updating;
     $("update-warning-text").textContent = busy;
 

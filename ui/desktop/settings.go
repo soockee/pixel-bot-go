@@ -39,7 +39,6 @@ type Settings struct {
 	BiteDetector           string  `json:"biteDetector"`
 	RecordDir              string  `json:"recordDir"`
 	RecordKeys             bool    `json:"recordKeys"`
-	ShareRecordings        bool    `json:"shareRecordings"`
 	ROISizePx              int     `json:"roiSizePx"`
 	CooldownSeconds        int     `json:"cooldownSeconds"`
 	MaxCastDurationSeconds int     `json:"maxCastDurationSeconds"`
@@ -63,7 +62,7 @@ func settingsOf(c *config.Config) Settings {
 		Schedule: c.Schedule, PlayMinMinutes: c.PlayMinMinutes, PlayMaxMinutes: c.PlayMaxMinutes,
 		BreakMinMinutes: c.BreakMinMinutes, BreakMaxMinutes: c.BreakMaxMinutes,
 		LogoutKey: c.LogoutKey,
-		Locator:   c.Locator, BiteDetector: c.BiteDetector, RecordDir: c.RecordDir, RecordKeys: c.RecordKeys, ShareRecordings: c.ShareRecordings,
+		Locator:   c.Locator, BiteDetector: c.BiteDetector, RecordDir: c.RecordDir, RecordKeys: c.RecordKeys,
 		ROISizePx: c.ROISizePx, CooldownSeconds: c.CooldownSeconds, MaxCastDurationSeconds: c.MaxCastDurationSeconds,
 	}
 }
@@ -134,7 +133,7 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	c.BreakMinMinutes, c.BreakMaxMinutes = s.BreakMinMinutes, s.BreakMaxMinutes
 	c.LogoutKey = s.LogoutKey
 	c.Locator, c.BiteDetector = s.Locator, s.BiteDetector
-	c.RecordDir, c.RecordKeys, c.ShareRecordings = strings.TrimSpace(s.RecordDir), s.RecordKeys, s.ShareRecordings
+	c.RecordDir, c.RecordKeys = strings.TrimSpace(s.RecordDir), s.RecordKeys
 	c.ROISizePx, c.CooldownSeconds, c.MaxCastDurationSeconds = s.ROISizePx, s.CooldownSeconds, s.MaxCastDurationSeconds
 	if err := c.Validate(); err != nil {
 		return c, err

@@ -1,6 +1,6 @@
 ---
 title: "Record and evaluate sessions"
-summary: "Record frames, input and sound from the game, upload them, and compare detectors on them offline."
+summary: "Record frames, input and sound from the game, and compare detectors on them offline."
 order: 4
 ---
 
@@ -18,10 +18,6 @@ For scripts and agents, the same recording runs without a window: `pixel-bot-go.
 The recorder stores client-area cursor positions, relative mouse counts, both wheel axes, and press and release events for left, right, middle, Mouse 4, and Mouse 5. It also records key down and up with virtual-key and scan codes, repeat status, and shortcuts such as Shift+B. Mouse capture requires the pointer over the selected client area. Keyboard capture follows the selected foreground window, including its chat or text fields. Keyboard capture is off unless requested. Keyboard input Windows marks as injected is skipped.
 
 The JSONL keeps the raw button transitions and adds one gesture per completed hold. A hold becomes a drag if it moves at least 6 client pixels or reaches at least 8 raw counts away from its start. Gesture rows include duration, endpoints, total raw travel, and maximum excursions. A right-button camera drag can be detected even with a stationary cursor. Holds cut off by a capture gap are marked interrupted. A final `session_end` row reports the event counts and whether the file finished cleanly. The recorder captures input and key bindings. Bite and cast annotations are separate.
-
-## Upload a recording
-
-Open a finished recording on the **Recorder** tab and click **Upload**. It needs a role with `recordings.upload`. The status bar counts the files; anything already uploaded is skipped, so start it again after a failure. Uploaded files cannot be replaced.
 
 ## View a recording
 

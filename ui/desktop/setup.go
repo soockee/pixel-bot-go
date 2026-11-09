@@ -16,7 +16,7 @@ type SetupStep struct {
 }
 
 // setupSteps decides what is still missing from what State already knows.
-// A dry run needs none of it: it sends no input, needs no account, and
+// A dry run needs none of it: it sends no input and
 // usually targets the fake game.
 func setupSteps(s State) (steps [setupSlots]SetupStep, done bool) {
 	if s.DryRun {

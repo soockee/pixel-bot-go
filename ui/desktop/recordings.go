@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -61,31 +60,22 @@ func (r *Recordings) Events(name string, offset int64) (recorder.EventPage, erro
 	return recorder.ReadEvents(dataset.InputPath(dir), offset)
 }
 
-var reviewFrameName = regexp.MustCompile(`^[0-9]{1,12}\.png$`)
-
-// ServeHTTP serves a local frame or audio for preview, without caching it.
+// ServeHTTP serves a recording's latest frame for preview, without caching it.
 func (r *Recordings) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	dir, err := r.path(strings.TrimPrefix(req.URL.Path, RecordingsPath))
 	if err != nil || !localDirectory(dir) {
 		http.NotFound(w, req)
 		return
 	}
-	query := req.URL.Query()
-	path, mime := "", "image/png"
-	if query.Get("audio") == "1" {
-		path, mime = dataset.AudioPath(dir), "audio/wav"
-	} else if frames := dataset.FramesPath(dir); localDirectory(frames) {
-		if name := query.Get("frame"); name == "" {
-			path = dataset.LatestFrame(frames)
-		} else if reviewFrameName.MatchString(name) {
-			path = filepath.Join(frames, name)
-		}
+	path := ""
+	if frames := dataset.FramesPath(dir); localDirectory(frames) {
+		path = dataset.LatestFrame(frames)
 	}
 	if info, err := os.Lstat(path); err != nil || !info.Mode().IsRegular() {
 		http.NotFound(w, req)
 		return
 	}
-	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "no-store")
 	http.ServeFile(w, req, path)
 }

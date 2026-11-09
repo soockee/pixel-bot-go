@@ -23,6 +23,7 @@ func TestLoadScenario(t *testing.T) {
 		"bad.json":     `{not json`,
 		"empty.json":   `{"timeline":[]}`,
 		"nowidth.json": `{"width":0,"timeline":[{"phase":"empty","ms":1}]}`,
+		"sound.json":   `{"sound":"loud"}`,
 	} {
 		if _, err := LoadScenario(write(name, body)); err == nil {
 			t.Errorf("%s: expected an error", name)

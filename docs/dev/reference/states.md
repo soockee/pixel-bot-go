@@ -11,7 +11,7 @@ order: 5
 | halt          | Idle                    | Enable capture → waiting_focus              |
 | waiting_focus | Await game window focus | Focus → searching                           |
 | searching     | Scan template scales    | Found → monitoring; timeout/force → casting |
-| monitoring    | Watch bobber motion     | Bite → reeling; lost or timeout → casting   |
+| monitoring    | Watch for a bite        | Bite → reeling; lost or timeout → casting   |
 | reeling       | Move, click after 300 ms | Click → cooldown                           |
 | cooldown      | Delay before next cast  | Timer → casting                             |
 | casting       | Send cast key           | Immediate internal → searching              |

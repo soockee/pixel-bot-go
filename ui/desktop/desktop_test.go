@@ -125,30 +125,6 @@ func TestESP32PortSettings(t *testing.T) {
 	}
 }
 
-func TestShareRecordingsShowsTheRecorder(t *testing.T) {
-	cfg := config.DefaultConfig()
-	view := NewView(NewFrames(), func(State) {})
-	loop := NewLoop(func() {})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go loop.Run(ctx, time.Hour)
-	s := NewService(loop, view, Commands{Running: func() bool { return false }}, nil, cfg,
-		filepath.Join(t.TempDir(), "config.json"), slog.New(slog.DiscardHandler))
-
-	values := settingsOf(cfg)
-	values.ShareRecordings = true
-	if _, err := s.SaveSettings(values); err != nil {
-		t.Fatal(err)
-	}
-	if !cfg.ShareRecordings || !s.State().Recorder {
-		t.Fatalf("saved %v, recorder shown %v; want both", cfg.ShareRecordings, s.State().Recorder)
-	}
-	values.ShareRecordings = false
-	if _, err := s.SaveSettings(values); err != nil || s.State().Recorder {
-		t.Fatalf("switched off: err %v, recorder shown %v", err, s.State().Recorder)
-	}
-}
-
 func TestSetThemeSavesKnownThemesOnly(t *testing.T) {
 	cfg := config.DefaultConfig()
 	view := NewView(NewFrames(), func(State) {})
@@ -304,22 +280,5 @@ func TestShrinkKeepsPreviewsSmall(t *testing.T) {
 	small := image.NewRGBA(image.Rect(0, 0, 560, 420))
 	if shrink(small, previewWidth) != small {
 		t.Error("a narrow capture was copied")
-	}
-}
-
-func TestUploadRefusesUnsafeNames(t *testing.T) {
-	var uploaded []string
-	s := &Service{recordings: NewRecordings(func() string { return "datasets" }),
-		cmds: Commands{Upload: func(dir, _ string, _, _ bool) error { uploaded = append(uploaded, dir); return nil }}}
-	for _, name := range []string{"", ".", "..", `..\x`, "a/b"} {
-		if err := s.Upload(name, "reviewed", true, false); err == nil {
-			t.Errorf("Upload(%q) accepted", name)
-		}
-	}
-	if err := s.Upload("20261108-012132", "reviewed", true, false); err != nil {
-		t.Fatal(err)
-	}
-	if want := filepath.Join("datasets", "20261108-012132"); len(uploaded) != 1 || uploaded[0] != want {
-		t.Errorf("uploaded %v, want [%s]", uploaded, want)
 	}
 }

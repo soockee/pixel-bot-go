@@ -77,7 +77,7 @@ func TestMotion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rng := rand.New(rand.NewPCG(1, 2))
-			at, fired := watch(NewMotionBiteDetector(nil), 7*s, func(at time.Duration) *image.RGBA {
+			at, fired := watch(&motionOnly{}, 7*s, func(at time.Duration) *image.RGBA {
 				splash, shift := tt.frame(at)
 				return pond(rng, tt.w, tt.h, splash, shift)
 			})
@@ -88,27 +88,6 @@ func TestMotion(t *testing.T) {
 				t.Errorf("fired at %v, want within 200 ms of the bite at 4s", at)
 			}
 		})
-	}
-}
-
-func TestMotionFiresOnceUntilReset(t *testing.T) {
-	rng := rand.New(rand.NewPCG(1, 2))
-	bite := func(at time.Duration) *image.RGBA {
-		if at >= 3*time.Second {
-			return pond(rng, 100, 90, 30, 0)
-		}
-		return pond(rng, 100, 90, 0, 0)
-	}
-	d := NewMotionBiteDetector(nil)
-	if _, fired := watch(d, 5*time.Second, bite); !fired {
-		t.Fatal("no bite")
-	}
-	if _, fired := watch(d, 5*time.Second, bite); fired {
-		t.Fatal("fired twice without a Reset")
-	}
-	d.Reset()
-	if _, fired := watch(d, 5*time.Second, bite); !fired {
-		t.Fatal("no bite after Reset")
 	}
 }
 
@@ -155,4 +134,14 @@ func TestSplashSoundWithoutGameSound(t *testing.T) {
 	if !fired || at < 4*time.Second || at > 4200*time.Millisecond {
 		t.Fatalf("fired = %v at %v, want the splash at 4s", fired, at)
 	}
+}
+
+// motionOnly reports what centreMotion sees, to test it on its own.
+type motionOnly struct{ c centreMotion }
+
+func (m *motionOnly) Reset() {}
+
+func (m *motionOnly) Feed(frame *image.RGBA, t time.Time) bool {
+	_, hit := m.c.observe(frame, t)
+	return hit
 }

@@ -10,7 +10,6 @@ Go Fish keeps everything in the folder it runs from.
 | --- | --- | --- |
 | `pixle_bot_config.json` | Your settings | Yes, Go Fish starts with the defaults |
 | `pixel_bot_logs.json` | What Go Fish did in its last run; replaced at each start | Yes |
-| `pixel_bot_account.bin` | Your saved sign-in, encrypted for your Windows user | Yes, you sign in again |
 | `datasets\` | Your recordings, if you made any | Yes, unless you still want to share them |
 | A file ending in `.old` | The previous version of Go Fish, right after an update | Removed by itself at the next start |
 

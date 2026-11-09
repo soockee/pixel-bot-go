@@ -2,9 +2,15 @@ package detect
 
 import (
 	"encoding/binary"
+	"fmt"
+	"image"
+	"image/color"
+	"math"
+	"math/rand/v2"
 	"testing"
 	"time"
 
+	"github.com/soocke/pixel-bot-go/assets"
 	"github.com/soocke/pixel-bot-go/domain/capture"
 )
 
@@ -82,5 +88,187 @@ func TestSplashSoundFiresOnceUntilReset(t *testing.T) {
 	d.Reset()
 	if _, fired := listen(d, 4*time.Second, 4300*time.Millisecond); !fired {
 		t.Error("no bite after Reset")
+	}
+}
+
+// water returns a calm 100x90 frame with an optional bright disc at (x, y).
+func water(x, y, radius int) *image.RGBA {
+	img := image.NewRGBA(image.Rect(0, 0, 100, 90))
+	for py := range 90 {
+		for px := range 100 {
+			c := color.RGBA{50, 60, 70, 255}
+			if (px-x)*(px-x)+(py-y)*(py-y) <= radius*radius {
+				c = color.RGBA{180, 190, 200, 255}
+			}
+			img.SetRGBA(px, py, c)
+		}
+	}
+	return img
+}
+
+// With sound effects off and music on, the game makes sound but no bite
+// sound: the first cast's splash goes unanswered, and from the next cast on
+// the splash alone reports the bite.
+func TestSplashSoundLearnsAGameWithoutBiteSound(t *testing.T) {
+	d := NewSplashSoundDetector(nil)
+	if _, fired := listen(d, 4*time.Second, -1); fired {
+		t.Fatal("fired on the first splash without a bite sound")
+	}
+	d.Reset()
+	at, fired := listen(d, 4*time.Second, -1)
+	if !fired || at != 4*time.Second {
+		t.Fatalf("fired = %v at %v, want the splash at 4s", fired, at)
+	}
+	d.Reset()
+	if _, fired := listen(d, -1, -1); fired {
+		t.Error("fired on calm water")
+	}
+}
+
+// A cast without a splash, such as one the bot stopped early, teaches nothing.
+func TestSplashSoundKeepsNeedingTheSoundAfterACalmCast(t *testing.T) {
+	d := NewSplashSoundDetector(nil)
+	listen(d, -1, -1)
+	d.Reset()
+	if _, fired := listen(d, 4*time.Second, -1); fired {
+		t.Fatal("fired on a splash alone after a calm cast")
+	}
+}
+
+// game plays the bite sound clip at gain from soundAt on, over a hum of
+// game sound at level hum, as 10 ms packets from time zero.
+type game struct {
+	clip    []byte
+	gain    float64
+	hum     float64
+	soundAt time.Duration
+	rng     *rand.Rand
+}
+
+func newGame(t *testing.T, name string, gain, hum float64, soundAt time.Duration) *game {
+	t.Helper()
+	sounds, err := assets.BiteSoundPCM()
+	if err != nil {
+		t.Fatal(err)
+	}
+	clip, ok := sounds[name]
+	if !ok {
+		t.Fatalf("no bite sound %s", name)
+	}
+	return &game{clip: clip, gain: gain, hum: hum, soundAt: soundAt, rng: rand.New(rand.NewPCG(1, 2))}
+}
+
+// packet returns the 10 ms of sound that start at.
+func (g *game) packet(at time.Duration) []byte {
+	const frames = capture.AudioRate / 100
+	first := int(at * capture.AudioRate / time.Second)
+	clipStart := int(g.soundAt * capture.AudioRate / time.Second)
+	pcm := make([]byte, frames*capture.AudioFrameBytes)
+	for k := range frames {
+		v := g.rng.NormFloat64() * g.hum
+		if j := first + k - clipStart; j >= 0 && j < len(g.clip)/capture.AudioFrameBytes {
+			v += float64(int16(binary.LittleEndian.Uint16(g.clip[j*capture.AudioFrameBytes:]))) * g.gain
+		}
+		s := uint16(int16(max(math.MinInt16, min(math.MaxInt16, v))))
+		binary.LittleEndian.PutUint16(pcm[k*4:], s)
+		binary.LittleEndian.PutUint16(pcm[k*4+2:], s)
+	}
+	return pcm
+}
+
+var biteSounds = []string{"FishingBobber_ver2_1.ogg", "FishingBobber_ver2_2.ogg", "FishingBobber_ver2_3.ogg"}
+
+// Each recorded bite sound is one onset, dated near where it starts, loud or
+// faint: its swells later on start no new sound.
+func TestBiteSoundsAreOneOnset(t *testing.T) {
+	levels := []struct{ gain, hum float64 }{{1, 0}, {1, 6}, {1, 30}, {0.1, 6}, {0.1, 30}, {0.01, 0}, {0.01, 6}}
+	for _, name := range biteSounds {
+		for _, l := range levels {
+			t.Run(fmt.Sprintf("%s gain %v hum %v", name, l.gain, l.hum), func(t *testing.T) {
+				g := newGame(t, name, l.gain, l.hum, 3*time.Second)
+				var o onsets
+				var heard []time.Duration
+				for at := time.Duration(0); at < 8*time.Second; at += 10 * time.Millisecond {
+					if onset, ok := o.add(g.packet(at), time.Unix(0, 0).Add(at)); ok {
+						heard = append(heard, onset.Sub(time.Unix(0, 0))-g.soundAt)
+					}
+				}
+				if len(heard) != 1 || heard[0] < 0 || heard[0] > 175*time.Millisecond {
+					t.Errorf("onsets %v after the sound started, want one within 175 ms", heard)
+				}
+			})
+		}
+	}
+}
+
+// listenGame plays 7 s of calm water with a splash frame at splashAt and the
+// game's sound, and returns when the detector fired.
+func listenGame(d *SplashSoundDetector, g *game, splashAt time.Duration) (time.Duration, bool) {
+	start := time.Unix(0, 0)
+	for t := time.Duration(0); t < 7*time.Second; t += 10 * time.Millisecond {
+		if t%(100*time.Millisecond) == 0 {
+			frame := water(0, 0, 0)
+			if t == splashAt {
+				frame = water(50, 45, 10)
+			}
+			if d.Feed(frame, start.Add(t)) {
+				return t, true
+			}
+		}
+		if d.Hear(g.packet(t), start.Add(t)) {
+			return t, true
+		}
+	}
+	return 0, false
+}
+
+func TestSplashSoundHearsRecordedBiteSounds(t *testing.T) {
+	const splash = 4 * time.Second
+	for _, name := range biteSounds {
+		for _, delay := range []time.Duration{200 * time.Millisecond, 450 * time.Millisecond} {
+			t.Run(fmt.Sprintf("%s %v after the splash", name, delay), func(t *testing.T) {
+				at, fired := listenGame(NewSplashSoundDetector(nil), newGame(t, name, 0.1, 6, splash+delay), splash)
+				if !fired || at < splash+delay || at > splash+delay+200*time.Millisecond {
+					t.Errorf("fired = %v at %v, want within 200 ms of the sound at %v", fired, at, splash+delay)
+				}
+			})
+		}
+		// Another player's bite sound began just before the splash; its swells
+		// must not pass for the player's own bite sound.
+		t.Run(name+" started before the splash", func(t *testing.T) {
+			if at, fired := listenGame(NewSplashSoundDetector(nil), newGame(t, name, 0.1, 6, splash-300*time.Millisecond), splash); fired {
+				t.Errorf("fired at %v on a sound that began before the splash", at)
+			}
+		})
+	}
+}
+
+// The splash shows for 600 ms, frames come at the app's 30 fps, and the sound
+// arrives 50 ms after the frames of the same moment, as the fake game showed.
+// The bite sound starts while the splash still shows.
+func TestSplashSoundHearsASoundThatStartsDuringTheSplash(t *testing.T) {
+	const splash, lag = 4 * time.Second, 50 * time.Millisecond
+	for _, name := range biteSounds {
+		t.Run(name, func(t *testing.T) {
+			d := NewSplashSoundDetector(nil)
+			g := newGame(t, name, 1, 9, splash+300*time.Millisecond)
+			start := time.Unix(0, 0)
+			nextFrame := time.Duration(0)
+			for at := time.Duration(0); at < 7*time.Second; at += 10 * time.Millisecond {
+				for ; nextFrame <= at; nextFrame += 33 * time.Millisecond {
+					frame := water(0, 0, 0)
+					if nextFrame >= splash && nextFrame < splash+600*time.Millisecond {
+						frame = water(50, 45, 10)
+					}
+					if d.Feed(frame, start.Add(nextFrame)) {
+						t.Fatalf("fired on the splash alone at %v", nextFrame)
+					}
+				}
+				if heard := at - lag; heard >= 0 && d.Hear(g.packet(heard), start.Add(heard)) {
+					return
+				}
+			}
+			t.Fatal("missed the bite sound that started during the splash")
+		})
 	}
 }
