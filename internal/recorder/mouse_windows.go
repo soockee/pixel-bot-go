@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"image"
 	"runtime"
-	"strings"
-	"syscall"
 	"time"
 	"unsafe"
 
@@ -19,10 +17,6 @@ import (
 var (
 	user32                   = windows.NewLazySystemDLL("user32.dll")
 	kernel32                 = windows.NewLazySystemDLL("kernel32.dll")
-	enumWindows              = user32.NewProc("EnumWindows")
-	isWindowVisible          = user32.NewProc("IsWindowVisible")
-	getWindowTextLength      = user32.NewProc("GetWindowTextLengthW")
-	getWindowText            = user32.NewProc("GetWindowTextW")
 	getWindowThreadProcessID = user32.NewProc("GetWindowThreadProcessId")
 	getForegroundWindow      = user32.NewProc("GetForegroundWindow")
 	setThreadDPI             = user32.NewProc("SetThreadDpiAwarenessContext")
@@ -89,44 +83,6 @@ func (s *segmentTracker) change(eligible bool, elapsed int64, emit func(inputEve
 		kind = "segment_start"
 	}
 	emit(inputEvent{Type: kind, ElapsedUS: elapsed, Segment: s.number})
-}
-
-func findTarget(title string) (windowTarget, error) {
-	title = strings.TrimSpace(title)
-	var found windowTarget
-	duplicates := false
-	callback := syscall.NewCallback(func(handle, _ uintptr) uintptr {
-		visible, _, _ := isWindowVisible.Call(handle)
-		if visible == 0 {
-			return 1
-		}
-		length, _, _ := getWindowTextLength.Call(handle)
-		if length == 0 {
-			return 1
-		}
-		text := make([]uint16, int(length)+1)
-		n, _, _ := getWindowText.Call(handle, uintptr(unsafe.Pointer(&text[0])), uintptr(len(text)))
-		if strings.TrimSpace(windows.UTF16ToString(text[:n])) != title {
-			return 1
-		}
-		if found.handle != 0 {
-			duplicates = true
-			return 0
-		}
-		found.handle = handle
-		getWindowThreadProcessID.Call(handle, uintptr(unsafe.Pointer(&found.pid)))
-		return 1
-	})
-	ok, _, callErr := enumWindows.Call(callback, 0)
-	switch {
-	case duplicates:
-		return windowTarget{}, fmt.Errorf("multiple visible windows have the title %q", title)
-	case ok == 0:
-		return windowTarget{}, fmt.Errorf("enumerate visible windows: %w", callErr)
-	case found.handle == 0 || found.pid == 0:
-		return windowTarget{}, fmt.Errorf("no visible window has the exact title %q", title)
-	}
-	return found, nil
 }
 
 func (w windowTarget) stillExists() bool {

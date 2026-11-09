@@ -26,6 +26,7 @@ type Settings struct {
 	ESP32Port              string  `json:"esp32Port"`
 	StopKey                string  `json:"stopKey"`
 	IdleKey                string  `json:"idleKey"`
+	RepositionKey          string  `json:"repositionKey"`
 	TargetPlayerKey        string  `json:"targetPlayerKey"`
 	MaxFailedCasts         int     `json:"maxFailedCasts"`
 	MaxSessionMinutes      int     `json:"maxSessionMinutes"`
@@ -60,7 +61,7 @@ func settingsOf(c *config.Config) Settings {
 		MinScale: c.MinScale, MaxScale: c.MaxScale, ScaleStep: c.ScaleStep, Threshold: c.Threshold,
 		Stride: c.Stride, Refine: c.Refine, CastKey: c.CastKey, StopKey: c.StopKey,
 		ReelMethod: c.ReelMethod, InteractKey: c.InteractKey, ESP32Port: c.ESP32Port,
-		IdleKey: c.IdleKey, TargetPlayerKey: c.TargetPlayerKey,
+		IdleKey: c.IdleKey, RepositionKey: c.RepositionKey, TargetPlayerKey: c.TargetPlayerKey,
 		MaxFailedCasts: c.MaxFailedCasts, MaxSessionMinutes: c.MaxSessionMinutes,
 		Schedule: c.Schedule, PlayMinMinutes: c.PlayMinMinutes, PlayMaxMinutes: c.PlayMaxMinutes,
 		BreakMinMinutes: c.BreakMinMinutes, BreakMaxMinutes: c.BreakMaxMinutes,
@@ -119,7 +120,7 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	if len(invalid) > 0 {
 		return c, errors.New("not saved, invalid: " + strings.Join(invalid, ", "))
 	}
-	if s.Schedule {
+	if s.Schedule || strings.TrimSpace(s.RepositionKey) != "" {
 		vk, ok := action.ParseVK(s.LogoutKey)
 		if !ok || sameKey(s.LogoutKey, s.CastKey) || sameKey(s.LogoutKey, s.StopKey) ||
 			s.ReelMethod == config.ReelInteractKey && sameKey(s.LogoutKey, s.InteractKey) {
@@ -133,7 +134,7 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	c.Stride, c.Refine, c.CastKey, c.StopKey = s.Stride, s.Refine, s.CastKey, s.StopKey
 	c.ReelMethod, c.InteractKey, c.ESP32Port = s.ReelMethod, s.InteractKey, port
 	c.MaxFailedCasts, c.MaxSessionMinutes = s.MaxFailedCasts, s.MaxSessionMinutes
-	c.IdleKey, c.TargetPlayerKey = s.IdleKey, s.TargetPlayerKey
+	c.IdleKey, c.RepositionKey, c.TargetPlayerKey = s.IdleKey, s.RepositionKey, s.TargetPlayerKey
 	c.Schedule = s.Schedule
 	c.PlayMinMinutes, c.PlayMaxMinutes = s.PlayMinMinutes, s.PlayMaxMinutes
 	c.BreakMinMinutes, c.BreakMaxMinutes = s.BreakMinMinutes, s.BreakMaxMinutes

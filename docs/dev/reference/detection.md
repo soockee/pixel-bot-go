@@ -21,7 +21,7 @@ For WoW: Forever (Interface 16001). It shows the brackets only while you channel
 | Item | Value |
 | ---- | ----- |
 | Look | Opaque magenta brackets, sized in screen pixels whatever the UI scale |
-| Position | Centred 40 px below the bobber's nameplate centre. `/bobbermarker y <pixels>` moves it (negative is down) and saves it in `BobberMarkerDB` |
+| Position | Base centre 40 px below the bobber's nameplate. Each cast adds an offset of up to 2 px per axis and keeps it through any reattach. `/bobbermarker y <pixels>` changes the base vertical offset (negative is down) in `BobberMarkerDB` |
 | Set once, the first time you fish | `SoftTargetInteract` 3, `SoftTargetIconGameObject` 1, `SoftTargetInteractOnlyInRange` 0, `SoftTargetInteractRange` 60 |
 | Set while you fish | `SoftTargetNameplateInteract` 1, then back to your value |
 | Keys | `Keys.lua` is written by `addon.Install` from the config, not carried: `BobberMarkerKeys = { cast, interact }` in the game's binding names (`addon.BindingKey`). The Interact key is set only for the `interact_key` reel method. `addon.State` compares it, so a changed key makes the addon outdated |

@@ -245,13 +245,13 @@ func TestShrinkKeepsPreviewsSmall(t *testing.T) {
 func TestUploadRefusesUnsafeNames(t *testing.T) {
 	var uploaded []string
 	s := &Service{recordings: NewRecordings(func() string { return "datasets" }),
-		cmds: Commands{Upload: func(dir string) error { uploaded = append(uploaded, dir); return nil }}}
+		cmds: Commands{Upload: func(dir, _ string, _, _ bool) error { uploaded = append(uploaded, dir); return nil }}}
 	for _, name := range []string{"", ".", "..", `..\x`, "a/b"} {
-		if err := s.Upload(name); err == nil {
+		if err := s.Upload(name, "reviewed", true, false); err == nil {
 			t.Errorf("Upload(%q) accepted", name)
 		}
 	}
-	if err := s.Upload("20261108-012132"); err != nil {
+	if err := s.Upload("20261108-012132", "reviewed", true, false); err != nil {
 		t.Fatal(err)
 	}
 	if want := filepath.Join("datasets", "20261108-012132"); len(uploaded) != 1 || uploaded[0] != want {

@@ -11,7 +11,7 @@ order: 3
 | `-list-screens`                 | Print the monitors as JSON (`screen`, `x`, `y`, `w`, `h`, `primary`) and exit               |
 | `-record <dir>`                 | With `-window`: record that window's client area into a new directory until Ctrl+C (whole frames every 10 s, the bobber's square at about 10 fps, see Detection datasets); opens no app window and sends no input |
 | `-window "<title>"`             | With `-record`: the window to record, plus your mouse and key input in it to `input.jsonl` and the sound of its process to `audio.wav` |
-| `-no-keys`                      | With `-record`: record only mouse input |
+| `-record-keys`                  | With `-record`: also capture keyboard input locally |
 | `-list-windows`                 | Print visible window titles and exit |
 | `-auto-window "<title>"`        | Preselect the target window title (must match the window title exactly, case-insensitive)   |
 | `-auto-start`                   | Start capture 0.5 s after launch; refused unless the `-auto-window` window is open |

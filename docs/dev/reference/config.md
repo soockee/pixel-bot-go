@@ -14,6 +14,7 @@ order: 2
 | ReelMethod (`reel_method`)  | How to interact with the bobber             | `right_click` by default, or `interact_key` with the marker locator |
 | InteractKey (`interact_key`) | Native Interact binding for key-based reeling, using the same supported keys as CastKey | Empty by default. Key-based reeling requires a binding distinct from Cast and Stop. |
 | ESP32Port (`esp32_port`) | Serial port for the ESP32 BLE keyboard, such as `COM3`, or `auto` | Empty uses Windows input. `auto` tries each USB serial port with the firmware handshake and uses the first that answers. Requires `interact_key` mode and keyboard bindings for both actions. |
+| RepositionKey (`reposition_key`) | Optional movement script after 45–55 acknowledged reels | Empty by default. `auto` uses WASD and can use horizontal camera drags in Windows right-click mode or with mouse-capable ESP32 firmware. A key name uses that binding. Requires the Logout key and both screen images. |
 | IdleKey (`idle_key`) | Optional one-shot between-catch action | Empty by default. Use an unused letter, digit or function key. |
 | TargetPlayerKey (`target_player_key`) | Optional addon binding that selects a friendly soft target | Empty by default. Use an unused letter, digit or function key and update the addon. |
 | StopKey (`stop_key`)        | Global hotkey that halts the run; accepts the same unmodified keys as CastKey | Hidden from other apps; read at start  |

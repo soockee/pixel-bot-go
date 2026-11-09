@@ -56,8 +56,9 @@ func (v *View) SetRecording(dir string) {
 func (v *View) SetSession(session, _ time.Duration) { v.state.SessionSeconds = int(session.Seconds()) }
 
 // SetRun shows the run's counts and the limits that stop it.
-func (v *View) SetRun(casts, reels, failedInRow, maxFailed, sessionLimit int) {
+func (v *View) SetRun(casts, reels, attempts, inputs, failedInRow, maxFailed, sessionLimit int) {
 	v.state.Casts, v.state.Reels, v.state.FailedInRow = casts, reels, failedInRow
+	v.state.ReelAttempts, v.state.ReelInputs = attempts, inputs
 	v.state.MaxFailed, v.state.SessionLimit = maxFailed, sessionLimit
 }
 

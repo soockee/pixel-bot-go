@@ -56,7 +56,7 @@ func recordingFiles(dir string) ([]file, error) {
 	var files []file
 	add := func(rel, contentType string) error {
 		local := filepath.Join(dir, filepath.FromSlash(rel))
-		info, err := os.Stat(local)
+		info, err := os.Lstat(local)
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil
@@ -73,7 +73,11 @@ func recordingFiles(dir string) ([]file, error) {
 			return nil, err
 		}
 	}
-	frames, err := os.ReadDir(filepath.Join(dir, "frames"))
+	framesDir := filepath.Join(dir, "frames")
+	if info, err := os.Lstat(framesDir); err == nil && !info.IsDir() {
+		return nil, fmt.Errorf("recording frames must be a local directory")
+	}
+	frames, err := os.ReadDir(framesDir)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
@@ -87,17 +91,8 @@ func recordingFiles(dir string) ([]file, error) {
 	return files, nil
 }
 
-// Upload sends the finished recording in dir, named by its folder, and calls
-// progress, one call at a time, with the files done so far. Files already uploaded count as done,
-// so a failed upload can simply be started again.
-func (s *Session) Upload(ctx context.Context, dir string, progress func(done, total int)) error {
-	files, err := recordingFiles(dir)
-	if err != nil {
-		return err
-	}
-	if len(files) == 0 {
-		return fmt.Errorf("%s has no recording files", filepath.Base(dir))
-	}
+// uploadFiles sends a previously reviewed manifest.
+func (s *Session) uploadFiles(ctx context.Context, session string, files []file, progress func(done, total int)) error {
 	// Workers finish files concurrently; the lock keeps progress calls one at
 	// a time and in order.
 	var mu sync.Mutex
@@ -110,7 +105,7 @@ func (s *Session) Upload(ctx context.Context, dir string, progress func(done, to
 	}
 	for start := 0; start < len(files); start += batchSize {
 		batch := files[start:min(start+batchSize, len(files))]
-		uploads, err := s.sign(ctx, filepath.Base(dir), batch)
+		uploads, err := s.sign(ctx, session, batch)
 		if err != nil {
 			return err
 		}

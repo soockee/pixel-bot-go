@@ -185,19 +185,21 @@ func TestFakeGameReplayFeedsDryRunAttemptsToScorer(t *testing.T) {
 			observer.Observe(r)
 		}
 		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
-			PressKey: func(vk byte) {
+			PressKey: func(vk byte) bool {
 				press(vk)
 				emit(replayCast, 0, replayDispatched)
+				return true
 			},
 			MoveCursor: move,
 			ParseVK:    func(string) (byte, bool) { return 0x72, true },
-			ClickRight: func() {
+			ClickRight: func() bool {
 				click()
 				emit(actionAttempt, 1, "")
 				// A dry-run callback is observable. A real server reply is not.
 				emit(actionReply, 1, replayDispatched)
 				emit(actionClose, 1, replayDispatched)
 				reeled = true
+				return true
 			},
 		})
 		defer fsm.Close()

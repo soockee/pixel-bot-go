@@ -11,7 +11,7 @@ import (
 
 // CheckActivityKeys rejects optional keys that could perform another Go Fish action.
 func CheckActivityKeys(cfg config.Config, parse func(string) (byte, bool)) error {
-	if cfg.IdleKey == "" && cfg.TargetPlayerKey == "" {
+	if cfg.IdleKey == "" && cfg.TargetPlayerKey == "" && cfg.RepositionKey == "" {
 		return nil
 	}
 	if parse == nil {
@@ -27,6 +27,7 @@ func CheckActivityKeys(cfg config.Config, parse func(string) (byte, bool)) error
 		{cfg.StopKey, "Stop", false},
 		{cfg.LogoutKey, "Logout", false},
 		{cfg.IdleKey, "Between-catch action", true},
+		{repositionBinding(cfg.RepositionKey), "Reposition key", true},
 		{cfg.TargetPlayerKey, "Target passing player", true},
 	} {
 		if binding.key == "" {
@@ -45,16 +46,32 @@ func CheckActivityKeys(cfg config.Config, parse func(string) (byte, bool)) error
 			used[vk] = binding.label
 		}
 	}
+	if cfg.RepositionKey == config.RepositionAuto {
+		for _, key := range "WASD" {
+			if vk, ok := parse(string(key)); ok {
+				if other, exists := used[vk]; exists {
+					return fmt.Errorf("automatic reposition uses %s, which is assigned to %s", string(key), other)
+				}
+			}
+		}
+	}
 	return nil
+}
+
+func repositionBinding(key string) string {
+	if key == config.RepositionAuto {
+		return ""
+	}
+	return key
 }
 
 func (f *FishingFSM) activity(key, name string) bool {
 	if key == "" || f.actions.ParseVK == nil {
-		return true
+		return false
 	}
 	vk, ok := f.actions.ParseVK(key)
 	if !ok {
-		return true
+		return false
 	}
 	if f.actions.CanAct != nil && !f.actions.CanAct() {
 		f.transition(StateWaitingFocus)
@@ -68,12 +85,12 @@ func (f *FishingFSM) activity(key, name string) bool {
 	} else if f.actions.HoldInteract != nil {
 		release := f.actions.HoldInteract(vk)
 		if release == nil {
-			return true
+			return false
 		}
 		time.Sleep(interactHold)
 		release()
-	} else {
-		f.actions.PressKey(vk)
+	} else if !f.actions.PressKey(vk) {
+		return false
 	}
 	f.logger.Info(name, "key", key)
 	return true

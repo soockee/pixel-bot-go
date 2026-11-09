@@ -13,6 +13,9 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as cloud$0 from "../../internal/cloud/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as recorder$0 from "../../internal/recorder/models.js";
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
@@ -83,6 +86,13 @@ export function Recordings(): $CancellablePromise<$models.Recording[] | null> {
  */
 export function ReleaseNotes(): $CancellablePromise<void> {
     return $Call.ByID(1571238081);
+}
+
+/**
+ * ReviewUpload inspects the local recording before any upload request.
+ */
+export function ReviewUpload(name: string): $CancellablePromise<cloud$0.RecordingReview> {
+    return $Call.ByID(1323622466, name);
 }
 
 /**
@@ -157,10 +167,10 @@ export function Update(): $CancellablePromise<void> {
 }
 
 /**
- * Upload sends recording name to the upload service and returns when done.
+ * Upload sends a key-free reviewed copy with the approved media.
  */
-export function Upload(name: string): $CancellablePromise<void> {
-    return $Call.ByID(1993239178, name);
+export function Upload(name: string, fingerprint: string, frames: boolean, audio: boolean): $CancellablePromise<void> {
+    return $Call.ByID(1993239178, name, fingerprint, frames, audio);
 }
 
 /**

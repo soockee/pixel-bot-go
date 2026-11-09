@@ -47,6 +47,7 @@ export interface Settings {
     "esp32Port": string;
     "stopKey": string;
     "idleKey": string;
+    "repositionKey": string;
     "targetPlayerKey": string;
     "maxFailedCasts": number;
     "maxSessionMinutes": number;
@@ -128,6 +129,8 @@ export interface State {
      * this run's casts
      */
     "casts": number;
+    "reelAttempts": number;
+    "reelInputs": number;
 
     /**
      * this run's reels, each a bite answered

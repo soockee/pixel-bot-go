@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"image"
 	"math/rand/v2"
-	"strings"
 	"time"
 
 	"github.com/soocke/pixel-bot-go/domain/action"
@@ -31,15 +30,16 @@ const (
 )
 
 type playSchedule struct {
-	phase     schedulePhase
-	until     time.Time
-	nextCheck time.Time
-	confirmed bool
-	logout    byte
-	world     *image.RGBA
-	character *image.RGBA
-	screen    func(wantWorld bool) bool
-	tap       func(vk byte, wantWorld bool) (sent bool, err error)
+	phase      schedulePhase
+	until      time.Time
+	nextCheck  time.Time
+	confirmed  bool
+	logoutOnly bool
+	logout     byte
+	world      *image.RGBA
+	character  *image.RGBA
+	screen     func(wantWorld bool) bool
+	tap        func(vk byte, wantWorld bool) (sent bool, err error)
 }
 
 func randomDuration(minMinutes, maxMinutes int) time.Duration {
@@ -48,40 +48,49 @@ func randomDuration(minMinutes, maxMinutes int) time.Duration {
 }
 
 func (a *app) beginSchedule() error {
+	schedule, err := a.prepareSchedule()
+	if err != nil {
+		return err
+	}
+	a.schedule = schedule
+	a.recoveryAllowed = true
+	a.setSchedulePhase(waitWorld, time.Now().Add(screenWait), "Schedule: focus the logged-in game")
+	return nil
+}
+
+func (a *app) prepareSchedule() (*playSchedule, error) {
 	c := a.container
 	cfg := *c.Config
 	if err := cfg.CheckSchedule(); err != nil {
-		return err
+		return nil, err
 	}
 	key, ok := action.ParseVK(cfg.LogoutKey)
 	if !ok {
-		return errors.New("set a valid Logout key")
+		return nil, errors.New("set a valid Logout key")
 	}
-	for _, other := range []string{cfg.CastKey, cfg.InteractKey, cfg.StopKey, cfg.IdleKey, cfg.TargetPlayerKey, c.View.State().StopKey} {
+	for _, other := range []string{cfg.CastKey, cfg.InteractKey, cfg.StopKey, cfg.IdleKey, cfg.RepositionKey, cfg.TargetPlayerKey, c.View.State().StopKey} {
 		if vk, ok := action.ParseVK(other); ok && key == vk {
-			return errors.New("the Logout key must differ from the other Go Fish keys")
+			return nil, errors.New("the Logout key must differ from the other Go Fish keys")
 		}
 	}
 	if cfg.ESP32Port != "" && !esp32.SupportsKey(key) {
-		return errors.New("ESP32 requires a keyboard binding for Logout")
+		return nil, errors.New("ESP32 requires a keyboard binding for Logout")
 	}
 	world, err := readSchedulePNG(cfg.InWorldPNG)
 	if err != nil {
-		return fmt.Errorf("in-game image: %w", err)
+		return nil, fmt.Errorf("in-game image: %w", err)
 	}
 	character, err := readSchedulePNG(cfg.CharacterPNG)
 	if err != nil {
-		return fmt.Errorf("character screen image: %w", err)
+		return nil, fmt.Errorf("character screen image: %w", err)
 	}
 	if containsScreenPatch(world, character) || containsScreenPatch(character, world) {
-		return errors.New("choose distinct controls for the two screen images")
+		return nil, errors.New("choose distinct controls for the two screen images")
 	}
-	a.schedule = &playSchedule{
+	return &playSchedule{
 		logout: key, world: world, character: character,
 		screen: a.scheduleScreen, tap: a.tapScheduledKey,
-	}
-	a.setSchedulePhase(waitWorld, time.Now().Add(screenWait), "Schedule: focus the logged-in game")
-	return nil
+	}, nil
 }
 
 func (a *app) setSchedulePhase(phase schedulePhase, until time.Time, status string) {
@@ -94,6 +103,7 @@ func (a *app) setSchedulePhase(phase schedulePhase, until time.Time, status stri
 
 func (a *app) stopSchedule(status string) {
 	a.schedule = nil
+	a.recoveryAllowed = false
 	c := a.container
 	c.CapturePresenter.Disable()
 	c.View.SetRunning(false)
@@ -102,13 +112,31 @@ func (a *app) stopSchedule(status string) {
 
 func (a *app) tickSchedule(now time.Time) {
 	stopped := a.scheduleStop.Swap(false)
-	s := a.schedule
-	if s == nil {
+	c := a.container
+	failedReposition := !c.Capture.Enabled() && c.FSM.TakeRepositionLogout()
+	if stopped || a.cloud != nil && !c.Config.DryRun && !a.can(cloud.PermFish) {
+		a.recoveryAllowed = false
+		if a.schedule != nil {
+			a.stopSchedule("Schedule stopped")
+		}
 		return
 	}
-	c := a.container
-	if stopped || a.cloud != nil && !c.Config.DryRun && !a.can(cloud.PermFish) {
-		a.stopSchedule("Schedule stopped")
+	if failedReposition && a.recoveryAllowed {
+		a.recoveryAllowed = false
+		if a.schedule == nil {
+			schedule, err := a.prepareSchedule()
+			if err != nil {
+				c.View.SetStatus(c.FSM.HaltReason() + ". Logout unavailable: " + err.Error())
+				return
+			}
+			a.schedule = schedule
+		}
+		a.schedule.logoutOnly = true
+		a.setSchedulePhase(sendLogout, now.Add(screenWait), c.FSM.HaltReason()+". Preparing to log out")
+		return
+	}
+	s := a.schedule
+	if s == nil {
 		return
 	}
 	c.View.SetRunning(true)
@@ -163,6 +191,10 @@ func (a *app) tickSchedule(now time.Time) {
 	case sendLogout:
 		a.scheduleKey(s.logout, true, waitCharacters, "Schedule: waiting for character selection")
 	case waitCharacters:
+		if s.logoutOnly {
+			a.stopSchedule(c.FSM.HaltReason() + ". Logged out")
+			return
+		}
 		end := now.Add(randomDuration(c.Config.BreakMinMinutes, c.Config.BreakMaxMinutes))
 		a.setSchedulePhase(takeBreak, end, "Logged-out break until "+end.Format("15:04"))
 	case sendLogin:
@@ -243,6 +275,6 @@ func (a *app) tapScheduledKey(vk byte, wantWorld bool) (bool, error) {
 }
 
 func (c *AppContainer) gameFocused() bool {
-	title, err := action.ForegroundWindowTitle()
-	return err == nil && title != "" && strings.EqualFold(title, strings.TrimSpace(c.Capture.Window()))
+	target := c.gameWindow.Load()
+	return target != nil && target.Focused()
 }

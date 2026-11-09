@@ -114,3 +114,40 @@ func TestScheduledBreakWaitsForBothGameScreens(t *testing.T) {
 		}
 	})
 }
+
+func TestRecoveryLogoutStopsAtCharacterSelection(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		cfg := config.DefaultConfig()
+		fsm := fishing.NewFSM(nil, cfg, fishing.ActionCallbacks{})
+		defer fsm.Close()
+		c := &AppContainer{Config: cfg, FSM: fsm, Capture: &model.CaptureModel{}, View: desktop.NewView(desktop.NewFrames(), func(desktop.State) {})}
+		c.CapturePresenter = presenter.NewCapturePresenter(c.Capture, schedulePipeline{}, fsm, c.View)
+		a := &app{container: c}
+		world := true
+		var keys []byte
+		a.schedule = &playSchedule{
+			logout: 'L', logoutOnly: true,
+			screen: func(wantWorld bool) bool { return world == wantWorld },
+			tap: func(vk byte, _ bool) (bool, error) {
+				keys = append(keys, vk)
+				return true, nil
+			},
+		}
+		a.setSchedulePhase(sendLogout, time.Now().Add(screenWait), "")
+		a.tickSchedule(time.Now())
+		if len(keys) != 0 {
+			t.Fatal("logged out without confirming the game twice")
+		}
+		time.Sleep(time.Second)
+		a.tickSchedule(time.Now())
+		world = false
+		a.tickSchedule(time.Now())
+		time.Sleep(time.Second)
+		a.tickSchedule(time.Now())
+		time.Sleep(time.Hour)
+		a.tickSchedule(time.Now())
+		if a.schedule != nil || c.Capture.Enabled() || !slices.Equal(keys, []byte{'L'}) {
+			t.Fatalf("recovery should log out once and stay stopped, keys = %v", keys)
+		}
+	})
+}

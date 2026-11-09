@@ -19,6 +19,7 @@ local BOX = 96;
 local ARM = 20;
 local THICKNESS = 3;
 local DEFAULT_Y = -40; -- the bobber sits this far below its nameplate's centre
+local OFFSET_RADIUS = 2;
 local COLOR = { 1, 0, 1 }; -- opaque magenta: exact over any background, and rare in the world
 
 local POLL = 0.1; -- seconds between checks while fishing
@@ -36,6 +37,7 @@ local PLATE = "SoftTargetNameplateInteract";
 
 local db;
 local fishing = false;
+local offsetX, offsetY = 0, 0;
 local plateBefore; -- your SoftTargetNameplateInteract while the marker had it on
 local anchor;      -- the nameplate the marker hangs on
 
@@ -169,7 +171,8 @@ local function Attach(plate)
 	end
 	Layout();
 	marker:ClearAllPoints();
-	marker:SetPoint("CENTER", plate, "CENTER", 0, db.y * PixelSize(marker));
+	local px = PixelSize(marker);
+	marker:SetPoint("CENTER", plate, "CENTER", offsetX * px, (db.y + offsetY) * px);
 	marker:Show();
 	anchor = plate;
 end
@@ -214,6 +217,11 @@ poller:SetScript("OnUpdate", function(_, elapsed)
 end);
 
 local function StartFishing()
+	if not fishing then
+		-- Reattaching the same cast's marker must keep the watched box steady.
+		offsetX = math.random(-OFFSET_RADIUS, OFFSET_RADIUS);
+		offsetY = math.random(-OFFSET_RADIUS, OFFSET_RADIUS);
+	end
 	fishing = true;
 	if not db.prepared and not InCombatLockdown() then
 		for name, value in pairs(NEEDED) do
@@ -445,7 +453,7 @@ SlashCmdList.BOBBERMARKER = function(input)
 			Attach(plate);
 		end
 	end
-	print(("|cffff00ffBobber Marker:|r the box is %d pixels from the nameplate's centre. Move it with /bobbermarker y <pixels>, negative is down (default %d)."):format(db.y, DEFAULT_Y));
+	print(("|cffff00ffBobber Marker:|r the base vertical offset from the nameplate's centre is %d pixels. Move it with /bobbermarker y <pixels>, negative is down (default %d)."):format(db.y, DEFAULT_Y));
 	for _, problem in ipairs(keyProblems) do
 		print("|cffff00ffBobber Marker:|r " .. problem);
 	end

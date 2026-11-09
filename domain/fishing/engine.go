@@ -298,11 +298,19 @@ func (r *run) search(frame capture.Frame, window image.Rectangle) {
 		r.target = match.Box.Add(frame.Origin)
 		r.targetWindow = window
 		target := evtTargetAcquiredAt{
-			x: frame.Origin.X + match.X, y: frame.Origin.Y + match.Y,
+			x: frame.Origin.X + match.X, y: frame.Origin.Y + match.Y, box: r.target,
 			valid: func() bool {
 				current, err := e.frames.Window()
 				return err == nil && current == window
 			},
+		}
+		// A miss may click just outside the marker, away from the window edge.
+		for _, x := range []int{r.target.Min.X - 4, r.target.Max.X + 3} {
+			aim := image.Pt(x, target.y)
+			if aim.In(window.Inset(8)) && !aim.In(r.target) {
+				target.missAim = &aim
+				break
+			}
 		}
 		if r.interact {
 			area := r.target.Inset(-8).Intersect(window)

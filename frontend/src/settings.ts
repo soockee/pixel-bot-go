@@ -29,6 +29,7 @@ const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] 
   {
     title: "Run",
     fields: [
+      { key: "repositionKey", label: "Reposition key", hint: "Enter auto for WASD and camera drags on supported input modes, or enter a bound movement key. Requires the Logout key and both screen images below. Clear to disable.", kind: "text" },
       { key: "maxSessionMinutes", label: "Session length", hint: "Stop at the first cast after this long", kind: "slider", min: 5, max: 240, step: 5, unit: "min" },
       { key: "maxFailedCasts", label: "Casts without a bite", hint: "Stop after this many casts in a row without a catch", kind: "slider", min: 1, max: 20, step: 1 },
       { key: "cooldownSeconds", label: "Pause after a catch", hint: "Wait before the next cast", kind: "slider", min: 1, max: 60, step: 1, unit: "s" },

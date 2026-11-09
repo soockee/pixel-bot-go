@@ -9,15 +9,15 @@ import (
 
 // CheckSchedule validates the settings needed to run a play and break cycle.
 func (c Config) CheckSchedule() error {
-	if !c.Schedule {
+	if !c.Schedule && c.RepositionKey == "" {
 		return nil
 	}
-	if c.PlayMinMinutes < 1 || c.PlayMaxMinutes < c.PlayMinMinutes || c.PlayMaxMinutes > 240 ||
-		c.BreakMinMinutes < 1 || c.BreakMaxMinutes < c.BreakMinMinutes || c.BreakMaxMinutes > 240 {
+	if c.Schedule && (c.PlayMinMinutes < 1 || c.PlayMaxMinutes < c.PlayMinMinutes || c.PlayMaxMinutes > 240 ||
+		c.BreakMinMinutes < 1 || c.BreakMaxMinutes < c.BreakMinMinutes || c.BreakMaxMinutes > 240) {
 		return errors.New("set ordered play and break ranges from 1 to 240 minutes")
 	}
 	if c.LogoutKey == "" || c.CharacterPNG == "" || c.InWorldPNG == "" {
-		return errors.New("set the Logout key and both screen images before enabling the schedule")
+		return errors.New("set the Logout key and both screen images for scheduled breaks or automatic logout after repositioning")
 	}
 	return nil
 }
@@ -27,6 +27,7 @@ func (c Config) CheckSchedule() error {
 const FilePath = "pixle_bot_config.json"
 
 const (
+	RepositionAuto  = "AUTO"         // use the built-in movement sequence
 	ReelRightClick  = "right_click"  // Reel by clicking the bobber.
 	ReelInteractKey = "interact_key" // Reel with the game's native Interact binding.
 )
@@ -66,6 +67,8 @@ type Config struct {
 	StopKey string `json:"stop_key"`
 	// IdleKey is an optional non-toggle game action between catches.
 	IdleKey string `json:"idle_key,omitempty"`
+	// RepositionKey nudges the character between catches, before a verification cast.
+	RepositionKey string `json:"reposition_key,omitempty"`
 	// TargetPlayerKey selects the nearby friendly player reported by the addon.
 	TargetPlayerKey string `json:"target_player_key,omitempty"`
 	// MaxFailedCasts halts the bot after this many casts in a row end without a reel.
@@ -140,7 +143,7 @@ func DefaultConfig() *Config {
 		Locator:                "marker",
 		BiteDetector:           "motion",
 		RecordDir:              "datasets",
-		RecordKeys:             true,
+		RecordKeys:             false,
 		ROISizePx:              80,
 		MaxCastDurationSeconds: 30,
 		CooldownSeconds:        8,
@@ -189,6 +192,7 @@ func (c *Config) Validate() error {
 		c.OverlayY = d.OverlayY
 	}
 	c.IdleKey = strings.ToUpper(strings.TrimSpace(c.IdleKey))
+	c.RepositionKey = strings.ToUpper(strings.TrimSpace(c.RepositionKey))
 	c.TargetPlayerKey = strings.ToUpper(strings.TrimSpace(c.TargetPlayerKey))
 	if c.StopKey == "" {
 		c.StopKey = d.StopKey

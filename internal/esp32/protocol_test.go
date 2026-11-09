@@ -232,3 +232,50 @@ func TestTimedTapNegotiatesOnceAndSupportsLegacyFirmware(t *testing.T) {
 		})
 	}
 }
+
+func TestCameraProtocol(t *testing.T) {
+	for _, tc := range []struct {
+		name, capability, reply string
+		supported, fail         bool
+	}{
+		{name: "mouse-capable firmware", capability: "MOUSE", reply: "OK", supported: true},
+		{name: "legacy firmware", capability: "ERR command"},
+		{name: "mouse report rejected", capability: "MOUSE", reply: "ERR BLE report", supported: true, fail: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			port := &scriptedPort{reply: strings.NewReader("GOFISH 1 READY\n" + tc.capability + "\n" + tc.reply + "\n")}
+			keyboard := openWith(port, nil)
+			if err := keyboard.Open("COM3"); err != nil {
+				t.Fatal(err)
+			}
+			defer keyboard.Close()
+			if err := keyboard.PrepareCamera(); err != nil {
+				t.Fatal(err)
+			}
+			if got := keyboard.CanDragCamera(); got != tc.supported {
+				t.Fatalf("camera available = %v, want %v", got, tc.supported)
+			}
+			if err := keyboard.DragCamera(25); err == nil {
+				t.Fatal("sent an out-of-range drag")
+			}
+			if err := keyboard.DragCamera(-12); (err != nil) != (tc.fail || !tc.supported) {
+				t.Fatalf("unexpected drag result: %v", err)
+			}
+			if tc.fail {
+				if keyboard.CanDragCamera() || !port.closed {
+					t.Fatal("failed drag left the port open")
+				}
+				if err := keyboard.DragCamera(-12); err == nil {
+					t.Fatal("retried a failed drag")
+				}
+			}
+			want := "HELLO\nMOUSE\n"
+			if tc.supported {
+				want += "DRAG -12\n"
+			}
+			if got := port.writes.String(); got != want {
+				t.Fatalf("serial writes = %q, want %q", got, want)
+			}
+		})
+	}
+}
