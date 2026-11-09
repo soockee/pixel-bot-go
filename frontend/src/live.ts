@@ -133,13 +133,8 @@ export function setupLive(): (state: State) => void {
     start.textContent = s.running ? words.stop : words.start;
     start.classList.toggle("primary", !s.running);
     start.classList.toggle("stop", s.running);
-    // Fishing needs a role that may fish; a dry run sends no input and needs none.
-    const allowed = s.running || s.dryRun || s.canFish;
-    start.disabled = s.recording || !allowed;
-    $("start-hint").hidden = allowed;
-    $("start-hint").textContent = s.account
-      ? "Your role may not fish. Ask the owner to give your account a role."
-      : "Sign in with Google to fish";
+    start.disabled = s.recording;
+    $("start-hint").hidden = true;
 
     $("reels").textContent = String(s.reels);
     $("reels-label").textContent = words.catches[s.reels === 1 ? 0 : 1];

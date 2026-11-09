@@ -35,8 +35,7 @@ func (a *app) can(permission string) bool {
 	return a.session != nil && a.session.Account.Can(permission)
 }
 
-// setSession shows s, or signed out when s is nil, and stops a real run the
-// account may no longer make. It runs on the loop.
+// setSession shows s, or signed out when s is nil. It runs on the loop.
 func (a *app) setSession(s *cloud.Session) {
 	a.session = s
 	view := a.container.View
@@ -44,10 +43,6 @@ func (a *app) setSession(s *cloud.Session) {
 		view.SetAccount("", "", false, false)
 	} else {
 		view.SetAccount(s.Account.Email, s.Account.Role, s.Account.Can(cloud.PermFish), s.Account.Can(cloud.PermUpload))
-	}
-	if a.container.Capture.Enabled() && !a.container.Config.DryRun && !a.can(cloud.PermFish) {
-		a.container.CapturePresenter.Disable()
-		view.SetStatus("Stopped: this account may not fish")
 	}
 }
 

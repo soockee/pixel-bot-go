@@ -4,11 +4,11 @@ import "fmt"
 
 // setupSlots is how many steps State carries. State is compared as a value to
 // decide what to send, so the steps are an array, not a slice.
-const setupSlots = 3
+const setupSlots = 2
 
 // SetupStep is one thing the bot needs before it can fish.
 type SetupStep struct {
-	ID     string `json:"id"` // "game", "addon" or "account"; "" for an unused slot
+	ID     string `json:"id"` // "game" or "addon"; "" for an unused slot
 	Title  string `json:"title"`
 	Done   bool   `json:"done"`
 	Detail string `json:"detail"` // what to do or what is wrong; a reminder when Done
@@ -45,16 +45,6 @@ func setupSteps(s State) (steps [setupSlots]SetupStep, done bool) {
 	}
 
 	steps[0], steps[1] = game, addon
-	if s.SignIn {
-		account := SetupStep{ID: "account", Title: "Account", Done: s.Account != "" && s.CanFish}
-		switch {
-		case s.Account == "":
-			account.Detail, account.Action = "Sign in with Google to fish.", "Sign in"
-		case !s.CanFish:
-			account.Detail = "Your account has no role that may fish. Ask the owner to give it one."
-		}
-		steps[2] = account
-	}
 
 	done = true
 	for _, step := range steps {

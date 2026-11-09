@@ -103,13 +103,13 @@ export function setupRecorder(isVisible: () => boolean): { onState: (s: State) =
     }
   }
 
-  // Upload shows for a finished recording; the role decides whether it works.
+  // Keep upload out of the way unless this account may upload recordings.
   function renderUpload() {
-    upload.hidden = !open || open === live || !state;
+    upload.hidden = !open || open === live || !state || !state.canUpload;
     if (!state) return;
     upload.disabled = !state.canUpload || state.uploading !== "";
     upload.textContent = state.uploading === open ? "Uploading…" : "Review upload";
-    upload.title = state.canUpload ? "Review this recording before uploading" : "Your role may not upload recordings";
+    upload.title = "Review this recording before uploading";
   }
 
   async function refreshList() {
