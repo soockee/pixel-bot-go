@@ -14,15 +14,15 @@ Once the bobber is found, Go Fish only watches the small box inside the brackets
 
 ## One cast at a time
 
-Each cast follows the same steps: cast, find the bobber, watch, click on a bite, pause, and cast again. If no fish bites in time, Go Fish casts again. If it can't find the bobber, it tries again on the next cast. See [What the Fishing tab shows](../reference/status.md).
+Each cast follows the same steps: cast, find the bobber, watch, reel in, pause, and cast again. If no fish bites in time, or it can't find the bobber, it simply casts again. See [What the Fishing tab shows](../reference/status.md).
 
 ## You stay in control
 
-- **Stop key.** F10 stops Go Fish instantly, from anywhere.
+- **Stop button.** Click **Stop** in Go Fish to end the run.
 - **Limits.** It stops by itself after the session length, or after a few casts in a row without a catch, so it never fishes on for hours after something went wrong.
 - **Only in the game.** It only presses keys and clicks while the game is the window in front. Switch to another window and it waits.
 - **Only what you see.** It looks at the game window and nothing else on your screen.
 
-## Why administrator
+## No administrator needed
 
-Windows doesn't let normal programs send key presses and clicks into a game that runs with more rights. Running Go Fish as administrator gives it the same rights as the game, nothing more.
+Go Fish runs with your normal Windows rights, like the game. Only if you start the game as administrator does Go Fish need the same, because Windows doesn't let a program press keys in a game that runs with more rights than it has.

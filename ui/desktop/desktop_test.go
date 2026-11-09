@@ -21,20 +21,16 @@ func TestPickWindow(t *testing.T) {
 	const wow = "World of Warcraft"
 	tests := []struct {
 		name    string
-		titles  []string
 		current string
 		chosen  bool
 		want    string
 	}{
-		{"defaults to the game", []string{"Claude", wow}, "", false, wow},
-		{"falls back to the first window", []string{"Claude", "Notes"}, "", false, "Claude"},
-		{"the game appears after a refresh", []string{"Claude", wow}, "Claude", false, wow},
-		{"keeps a window the user chose", []string{"Claude", wow}, "Claude", true, "Claude"},
-		{"keeps a chosen window that is not open", []string{wow}, "Fake Game", true, "Fake Game"},
+		{"defaults to the game", "", false, wow},
+		{"keeps a window the user chose", "Fake Game", true, "Fake Game"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := pickWindow(tt.titles, tt.current, tt.chosen); got != tt.want {
+			if got := pickWindow(tt.current, tt.chosen); got != tt.want {
 				t.Errorf("got %q, want %q", got, tt.want)
 			}
 		})
@@ -55,9 +51,9 @@ func TestSettingsApply(t *testing.T) {
 	}
 
 	bad := good
-	bad.StopKey, bad.Locator, bad.RecordDir = "Ctrl", "nope", " "
+	bad.CastKey, bad.Locator, bad.RecordDir = "Ctrl", "nope", " "
 	if _, err := bad.apply(base); err == nil ||
-		!strings.Contains(err.Error(), "Stop key, Locator, Recording folder") {
+		!strings.Contains(err.Error(), "Cast key, Locator, Recording folder") {
 		t.Errorf("invalid settings: err = %v", err)
 	}
 }
@@ -65,8 +61,14 @@ func TestSettingsApply(t *testing.T) {
 func TestInteractKeySettings(t *testing.T) {
 	base := config.DefaultConfig()
 	values := settingsOf(base)
+	values.InteractKey = "f"
+	saved, err := values.apply(*base)
+	if err != nil || saved.ReelMethod != config.ReelRightClick || saved.InteractKey != "f" {
+		t.Fatalf("saving Interact before switching methods = %+v, %v", saved, err)
+	}
+	values = settingsOf(&saved)
 	values.ReelMethod = config.ReelInteractKey
-	for _, key := range []string{"", "Ctrl", "F3", "F10"} {
+	for _, key := range []string{"", "Ctrl", "F3"} {
 		values.InteractKey = key
 		if _, err := values.apply(*base); err == nil {
 			t.Errorf("Interact key %q accepted", key)
@@ -76,6 +78,23 @@ func TestInteractKeySettings(t *testing.T) {
 	got, err := values.apply(*base)
 	if err != nil || got.ReelMethod != config.ReelInteractKey || got.InteractKey != "f" {
 		t.Fatalf("Interact settings = %+v, %v", got, err)
+	}
+}
+
+func TestLogoutKeySettings(t *testing.T) {
+	base := config.DefaultConfig()
+	values := settingsOf(base)
+	values.Schedule = true // the Logout key field only shows once breaks are on
+	if got, err := values.apply(*base); err != nil || !got.Schedule {
+		t.Fatalf("breaks on without a Logout key = %+v, %v", got, err)
+	}
+	values.LogoutKey = values.CastKey
+	if _, err := values.apply(*base); err == nil {
+		t.Error("a Logout key equal to the Cast key was accepted")
+	}
+	values.LogoutKey = "L"
+	if got, err := values.apply(*base); err != nil || got.LogoutKey != "L" {
+		t.Fatalf("Logout key L = %+v, %v", got, err)
 	}
 }
 
@@ -188,7 +207,7 @@ func TestSavingSettingsRechecksTheAddon(t *testing.T) {
 	if checks != 1 {
 		t.Fatalf("addon checked %d times after saving, want 1", checks)
 	}
-	values.StopKey = "nope"
+	values.CastKey = "nope"
 	if _, err := s.SaveSettings(values); err == nil || checks != 1 {
 		t.Fatalf("a rejected save: err %v, checks %d; want an error and no check", err, checks)
 	}

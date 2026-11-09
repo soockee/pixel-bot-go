@@ -28,4 +28,4 @@ order: 5
 | ForceCast                | Tests                | searching, monitoring, cooldown → casting |
 | Deadline                 | One state timer      | searching, monitoring → casting; reeling → click → cooldown; cooldown → casting |
 | EventFocusLost           | Focus watcher        | any active state → waiting_focus |
-| EventHalt                | Stop, hotkey, input guard | any → halt                 |
+| EventHalt                | Stop button, input guard  | any → halt                 |

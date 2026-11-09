@@ -8,17 +8,12 @@ import (
 	"strings"
 )
 
-// CheckSchedule validates the settings needed to run a play and break cycle.
+// CheckSchedule validates the play and break ranges. The Logout key is
+// checked when a run starts, so breaks can be switched on before it is set.
 func (c Config) CheckSchedule() error {
-	if !c.Schedule && !c.Reposition {
-		return nil
-	}
 	if c.Schedule && (c.PlayMinMinutes < 1 || c.PlayMaxMinutes < c.PlayMinMinutes || c.PlayMaxMinutes > 240 ||
 		c.BreakMinMinutes < 1 || c.BreakMaxMinutes < c.BreakMinMinutes || c.BreakMaxMinutes > 240) {
 		return errors.New("set ordered play and break ranges from 1 to 240 minutes")
-	}
-	if c.LogoutKey == "" {
-		return errors.New("set the Logout key for scheduled breaks or the logout after a failed reposition")
 	}
 	return nil
 }
@@ -63,8 +58,6 @@ type Config struct {
 	InteractKey string `json:"interact_key,omitempty"`
 	// ESP32Port enables the serial BLE keyboard backend when set.
 	ESP32Port string `json:"esp32_port,omitempty"`
-	// StopKey is the global hotkey that halts the bot. Read at startup.
-	StopKey string `json:"stop_key"`
 	// IdleMoves now and then wanders the cursor or nudges the camera between catches.
 	IdleMoves bool `json:"idle_moves,omitempty"`
 	// Reposition steps the character with WASD, or turns the camera with a
@@ -135,7 +128,6 @@ func DefaultConfig() *Config {
 		Refine:                 true,
 		CastKey:                "F3",
 		ReelMethod:             ReelRightClick,
-		StopKey:                "F10",
 		MaxFailedCasts:         5,
 		MaxSessionMinutes:      60,
 		PlayMinMinutes:         20,
@@ -194,9 +186,6 @@ func (c *Config) Validate() error {
 		c.OverlayY = d.OverlayY
 	}
 	c.TargetPlayerKey = strings.ToUpper(strings.TrimSpace(c.TargetPlayerKey))
-	if c.StopKey == "" {
-		c.StopKey = d.StopKey
-	}
 	if c.MaxFailedCasts <= 0 {
 		c.MaxFailedCasts = d.MaxFailedCasts
 	}

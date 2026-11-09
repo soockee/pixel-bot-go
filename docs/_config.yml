@@ -23,13 +23,9 @@ defaults:
 sections:
   - id: tutorials
     title: Get started
-    blurb: New to Go Fish? Set it up and land your first fish in about ten minutes.
   - id: how-to
     title: How-to guides
-    blurb: Short steps for one thing each, from installing the addon to sharing a recording.
   - id: reference
     title: Reference
-    blurb: Settings, what the Fishing tab shows, addon commands and the files Go Fish keeps.
   - id: explanation
     title: Understand
-    blurb: How Go Fish sees the bobber, how you stay in control, and what data sharing means.

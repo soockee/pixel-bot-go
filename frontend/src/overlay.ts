@@ -2,12 +2,11 @@
 // player never has to leave the game. Go places it and it takes no clicks,
 // except while the person places it: then it is only the pill, to be dragged.
 import { onState } from "./api";
-import { $, keyLabel } from "./dom";
+import { $ } from "./dom";
 import { themeById } from "./themes";
 
 const step = $("hud-step");
 const catches = $("hud-catches");
-const stop = $("hud-stop");
 const status = $("hud-status");
 const box = $("box");
 
@@ -27,7 +26,6 @@ onState((s) => {
   const words = themeById(s.theme).words;
   step.textContent = words.cycle[s.fsm]?.[1] ?? "Starting";
   catches.textContent = `${s.reels} ${words.catches[s.reels === 1 ? 0 : 1]}`;
-  stop.textContent = `${keyLabel(s.stopKey)} to stop`;
   status.hidden = s.status === "" || s.status === "Ready";
   status.textContent = s.status;
   // roiBox is in screen pixels on the game's client area, which the overlay

@@ -23,16 +23,20 @@ func NewView(frames *Frames, emit func(State)) *View {
 }
 
 // State returns the current state.
-func (v *View) State() State { return v.state }
+func (v *View) State() State {
+	s := v.state
+	s.Setup, s.SetupDone = setupSteps(s)
+	return s
+}
 
 // Flush sends the state if it changed since the last Flush.
 func (v *View) Flush() {
-	v.state.Setup, v.state.SetupDone = setupSteps(v.state)
-	if v.state == v.sent {
+	s := v.State()
+	if s == v.sent {
 		return
 	}
-	v.sent = v.state
-	v.emit(v.state)
+	v.sent = s
+	v.emit(s)
 }
 
 // SetStateLabel shows the fishing state name.
@@ -94,6 +98,9 @@ func (v *View) SetWindow(title string) { v.state.Window = title }
 // SetGameFound shows whether the selected window is open.
 func (v *View) SetGameFound(found bool) { v.state.GameFound = found }
 
+// SetCastKeyChosen marks the Cast key setup step as done.
+func (v *View) SetCastKeyChosen() { v.state.CastKeyChosen = true }
+
 // SetAccount shows the signed-in account and what its role may do; an empty
 // email means signed out.
 func (v *View) SetAccount(email, role string, canFish, canUpload bool) {
@@ -146,8 +153,8 @@ func (v *View) SetOverlay(x, y float64, moving bool) {
 func (v *View) SetVersion(version string) { v.state.Version = version }
 
 // SetInfo shows fixed run facts.
-func (v *View) SetInfo(dryRun, debug bool, stopKey string) {
-	v.state.DryRun, v.state.Debug, v.state.StopKey = dryRun, debug, stopKey
+func (v *View) SetInfo(dryRun, debug bool) {
+	v.state.DryRun, v.state.Debug = dryRun, debug
 }
 
 // SetTheme shows the window's look.

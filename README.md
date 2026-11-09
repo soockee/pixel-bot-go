@@ -6,10 +6,9 @@ Go Fish is a Windows app for studying visual event detection and response timing
 
 ## Install
 
-1. Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest). `CHECKSUMS.txt` beside it lists its SHA-256.
-2. Start the game, then start the exe as Administrator; Windows only lets it send input to the game that way.
-3. Under **Settings → Addon**, click **Install** to put the Bobber Marker addon into the game, and type `/reload` in the game.
-4. Sign in with Google, set your Fishing key under **Settings → Keys**, cast once in game, then press **Start fishing**.
+1. Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest) (`CHECKSUMS.txt` beside it lists its SHA-256). Start the game, then the exe. It needs Administrator only if the game runs as Administrator, since Windows blocks input into a process with more rights.
+2. In **Set up fishing** on the Fishing tab, confirm your cast key with **Use this key**, then click **Install addon** to put the Bobber Marker addon into the game, then type `/reload` in the game.
+3. Stand at the water and press **Start fishing**. Click **Stop** in Go Fish to end the run.
 
 Go Fish updates itself: it checks GitHub at start and every hour, and **Update to vX.Y.Z** in the top bar or **Settings → Updates** installs a new release after checking its checksum.
 
@@ -18,7 +17,7 @@ Go Fish updates itself: it checks GitHub at start and every hour, and **Update t
 * Finds the bobber by the magenta brackets the Bobber Marker addon draws, then watches only that box at 30 fps.
 * Detects a bite from the splash, by motion or brightness, or from the game's splash sound.
 * Runs a state machine: cast, search, watch, reel, pause, and stops after a session limit or too many casts without a bite.
-* Stops at once on the stop key (F10 by default), from anywhere.
+* Stops when you click **Stop** in Go Fish.
 * Dry-run mode logs every key press and click instead of sending it, and needs neither Administrator nor an account.
 * Records sessions (frames, input and sound) for comparing detectors offline.
 

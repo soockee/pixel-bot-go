@@ -1,45 +1,40 @@
 ---
-title: "Install the Bobber Marker addon"
-summary: "Go Fish installs the addon into the game for you with one click, and tells you when it needs an update."
+title: "Install the addon"
+summary: "Go Fish installs its Bobber Marker addon for you: click Install, then type /reload in the game."
 order: 1
 ---
 
-The Bobber Marker addon draws pink brackets around your own bobber while you fish, and nothing else. Without it Go Fish can't find the bobber. Go Fish carries the addon and installs it for you.
+Go Fish needs its small **Bobber Marker** addon in the game. It draws pink brackets around your bobber so Go Fish can find it, and it sets up your cast key. You don't download it: Go Fish brings it along.
 
-1. Start World of Warcraft: Forever, so Go Fish can find the game's folder.
-2. In Go Fish, open **Settings** and find **Addon**. It shows the game's AddOns folder.
-3. Click **Install**.
-4. In the game, type `/reload`, or restart it.
+1. Start the game first, then Go Fish.
+2. On the **Fishing** tab, **Set up fishing** first asks for your cast key. Keep it or pick another and click **Use this key**, then click **Install addon**.
+3. In the game, type `/reload` and press Enter.
 
-When **Addon** says **Up to date**, you're done. After a Go Fish update brings a newer addon, the button says **Update**; click it and `/reload` again.
+To check it, cast Fishing in the game. Pink brackets appear around your bobber.
 
-**"Start World of Warcraft: Forever"?** Go Fish finds the game through its window, or in the usual install folder `C:\Program Files (x86)\World of Warcraft\_forever_`. Start the game and click **Check again**.
+## When Go Fish says Update
 
-**"Windows refused to write"?** The game folder needs administrator rights. Start Go Fish with **Run as administrator** and click **Install** again.
+After Go Fish updates itself, or when you change a key in Settings, the addon needs to be updated too. **Set up fishing** comes back with an **Update addon** button. Click it and type `/reload` in the game again.
 
-## Check that it works
+You can also install and update the addon under **Settings → Addon**.
 
-Cast Fishing. Pink brackets appear around your bobber and disappear when you reel in.
+## If it doesn't work
 
-**No brackets?** On the character screen, check that **Bobber Marker** is ticked under **AddOns**. If you use NaowhForever, open its Glimmer settings and switch off the **Fishing Bobber** highlight; both addons use the same marker spot above the bobber.
+**"Start the game, so Go Fish can find its folder"**: Go Fish finds the game through its window. Start the game, then click **Check again**.
 
-**Bobber not in the middle of the brackets?** Move the box with `/bobbermarker y <pixels>`. Negative numbers move it down. `/bobbermarker` shows the current value. See [Addon commands](../reference/addon-commands.md).
+**"Windows refused to write"**: Close Go Fish and start it again with **Run as administrator**, then click **Install**.
+
+**No pink brackets when you cast**: On the character screen, click **AddOns** and make sure **Bobber Marker** is ticked. If you use NaowhForever, switch off its **Fishing Bobber** highlight; the two get in each other's way.
+
+**The bobber isn't in the middle of the brackets**: Type `/bobbermarker y -60` in the game to move the box down a little, or `-20` to move it up. See [Addon commands](../reference/addon-commands.md).
+
+**Your cast key does nothing**: Type `/bobbermarker` in the game; it says what went wrong. You can always bind the key yourself in the game's **Key Bindings** to the **Fishing** macro.
 
 ## What the addon changes in your game
 
-To put a marker on the bobber, the addon uses the game's soft targeting. The first time you fish it switches on **Enable Interact Key** and lets world objects get a nameplate, and those settings stay as you leave them afterwards. The bobber's nameplate is only on while you fish; then it goes back to how you had it. The addon sends nothing anywhere.
+- It makes a macro called **Fishing** and puts it on your cast key. Whatever was on that key before is replaced.
+- If you reel with the Interact key, it puts **Interact With Target** on that key.
+- If you take breaks or use Change spot, it makes a macro called **Logout** and puts it on your Logout key.
+- It switches on the game's **Interact Key** option and nameplates for objects, which it needs to find the bobber.
 
-## Your Cast and Interact keys
-
-When Go Fish installs the addon it also tells it your **Cast key** and, if you reel with the Interact key, your **Interact key** from Settings. Each time you log in, and when a fight ends, the addon sets them up in the game, so you don't have to:
-
-- It creates an account-wide macro called **Fishing** that casts Fishing, and binds your Cast key to it. If you already have a macro with that name, the addon changes it to cast Fishing.
-- It binds your Interact key to the game's **Interact With Target** action.
-
-It writes nothing to the chat. It never changes keys in combat, and it replaces whatever your Cast or Interact key was bound to before. If you change either key in Settings, **Addon** says **Outdated**: click **Update** and `/reload`.
-
-**A key does nothing?** Type `/bobbermarker` in the game. If the addon could not set a key up, it says why. Then open the game's **Key Bindings** and bind the key yourself: to the **Fishing** macro, or to **Interact With Target**.
-
-## Install it by hand
-
-If Go Fish can't reach the game folder, download the [Go Fish source as a ZIP](https://github.com/soockee/pixel-bot-go/archive/refs/heads/main.zip), unpack it, and copy `addon\BobberMarker` into `World of Warcraft\_forever_\Interface\AddOns\`. A hand install doesn't know your keys, so bind them yourself as above, or add a `Keys.lua` file next to `BobberMarker.lua` that holds `BobberMarkerKeys = { cast = "F3", interact = "F" };` with your keys.
+It never changes anything during a fight, and it sends nothing anywhere.

@@ -17,13 +17,12 @@ order: 2
 | Reposition (`reposition`) | Movement script after 45–55 acknowledged reels | Off by default. Presses W, A, S or D through `activity`, and drags the camera (`cameraDrag`) when the input mode owns the pointer: ESP32 with `MOUSE`, or Windows input in `right_click` mode. Requires the Logout key, which a failed sequence uses. Replaces `reposition_key`. |
 | IdleMoves (`idle_moves`) | Between-catch movement, one in 12 cooldowns | Off by default. A camera nudge (one in three, where `cameraDrag` allows) or a cursor wander along `wanderPath` from `CursorPos`. Replaces `idle_key`. |
 | TargetPlayerKey (`target_player_key`) | Optional addon binding that selects a friendly soft target | Empty by default. Any key the Cast key accepts that no other action uses; update the addon. |
-| StopKey (`stop_key`)        | Global hotkey that halts the run; accepts the same unmodified keys as CastKey | Hidden from other apps; read at start  |
 | MaxFailedCasts              | Casts in a row without a reel before halting | Default 5                             |
 | MaxSessionMinutes           | Run length; halts at the next cast after it | Default 60                             |
 | Schedule (`schedule`)      | Alternate scheduled play and logged-out breaks | Off by default |
 | PlayMinMinutes / PlayMaxMinutes (`play_min_minutes`, `play_max_minutes`) | Inclusive play duration bounds | 20 and 45 minutes by default |
 | BreakMinMinutes / BreakMaxMinutes (`break_min_minutes`, `break_max_minutes`) | Inclusive logged-out duration bounds | 5 and 15 minutes by default |
-| LogoutKey (`logout_key`) | Binding for a user-configured `/logout` macro | Required for scheduled breaks and Reposition. The screen is read from the addon's in-world blocks (`fishing.WorldSignalArea`, `fishing.InWorld`), which replace `character_png` and `in_world_png`. |
+| LogoutKey (`logout_key`) | Key the addon binds to its `Logout` macro (`/logout`), sent in `Keys.lua` while `schedule` or `reposition` is on | Checked when a run starts with breaks or Reposition, not on save, so the switch can go on first. The screen is read from the addon's in-world blocks (`fishing.WorldSignalArea`, `fishing.InWorld`), which replace `character_png` and `in_world_png`. |
 | Locator (`locator`)         | Technique that finds the bobber             | `marker` by default, or `color` (finds the bobber by its colours, without the addon, and is easily fooled); see `detect.LocatorNames` |
 | BiteDetector (`bite_detector`) | Technique that recognises a bite        | `motion` by default, `histogram` (colour histogram against the calm bobber), `splash`, or `splash_sound` (splash plus the bite sound; listens to the selected window's process) |
 | RecordDir (`record_dir`)    | Folder for new recordings                   | Default `datasets`                     |
@@ -34,4 +33,4 @@ order: 2
 | CloudURL (`cloud_url`)      | Upload service URL | Empty uses the one release builds carry; empty in both turns sign-in off |
 | OAuthClientID / OAuthClientSecret (`oauth_client_id`, `oauth_client_secret`) | Google Desktop OAuth client the app signs in with | Not confidential for desktop apps; empty client ID uses the release build's client; empty in both turns sign-in off |
 
-Set the cast key in **Settings → Keys**. It must differ from the Stop hotkey.
+Set the Cast key in the setup wizard or under **Settings → Fishing keys**.

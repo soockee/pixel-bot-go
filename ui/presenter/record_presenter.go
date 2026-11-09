@@ -1,9 +1,6 @@
 package presenter
 
-import (
-	"context"
-	"sync/atomic"
-)
+import "context"
 
 // RecordJob is a prepared recording.
 type RecordJob struct {
@@ -25,7 +22,6 @@ type RecordPresenter struct {
 	dir     string
 	cancel  context.CancelFunc // non-nil while recording
 	done    chan error
-	stop    atomic.Bool
 }
 
 // NewRecordPresenter returns a RecordPresenter. prepare validates the current
@@ -52,17 +48,10 @@ func (p *RecordPresenter) Toggle() {
 	p.view.SetStatus("Recording to " + job.Dir)
 }
 
-// RequestStop stops the recording from any goroutine, such as the stop hotkey.
-func (p *RecordPresenter) RequestStop() { p.stop.Store(true) }
-
-// Tick applies a stop request and reports a finished recording.
+// Tick reports a finished recording.
 func (p *RecordPresenter) Tick() {
-	stop := p.stop.Swap(false)
 	if p.cancel == nil {
 		return
-	}
-	if stop {
-		p.cancel()
 	}
 	select {
 	case err := <-p.done:

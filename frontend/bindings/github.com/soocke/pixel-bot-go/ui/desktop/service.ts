@@ -46,6 +46,13 @@ export function CheckUpdate(): $CancellablePromise<void> {
 }
 
 /**
+ * ChooseCastKey confirms the saved Cast key in setup, so the addon step comes next.
+ */
+export function ChooseCastKey(): $CancellablePromise<void> {
+    return $Call.ByID(576283656);
+}
+
+/**
  * ESP32Ports lists the COM ports to offer for the ESP32 keyboard. The saved
  * port stays in the list while its board is unplugged.
  */
@@ -182,9 +189,8 @@ export function Upload(name: string, fingerprint: string, frames: boolean, audio
 }
 
 /**
- * Windows lists the visible window titles and picks the target window: the
- * one the person chose, else the game, else the first one. A chosen window
- * stays in the list even when it is not open.
+ * Windows lists the visible window titles, including the selected title even
+ * when it is closed. The game is the default until the person picks a window.
  */
 export function Windows(): $CancellablePromise<string[] | null> {
     return $Call.ByID(3024571980);

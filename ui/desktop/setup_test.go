@@ -21,12 +21,16 @@ func TestSetupSteps(t *testing.T) {
 		wantAction string // its button
 		wantDetail string // part of its text
 	}{
-		{"nothing is running", State{Window: defaultWindow}, false, 0, "", "Start World of Warcraft"},
+		{"nothing is running", State{Window: defaultWindow}, false, 0, "", "Waiting for the WoW window"},
 		{"a chosen window is closed", State{Window: "Fake Game"}, false, 0, "", `"Fake Game" is not open`},
-		{"game folder unknown", State{Window: defaultWindow}, false, 1, "", "Start the game"},
-		{"addon missing", State{GameFound: true, Addon: "missing"}, false, 1, "Install", "sets up your Cast key"},
-		{"addon outdated", State{GameFound: true, Addon: "outdated"}, false, 1, "Update", "/reload"},
-		{"everything in place", ready, true, 1, "", "/reload"},
+		{"game folder unknown", State{Window: defaultWindow}, false, 2, "", "find the game folder"},
+		{"already open", State{Window: defaultWindow, GameFound: true}, false, 0, "", "Found the World of Warcraft window"},
+		{"cast key not chosen", State{GameFound: true, Addon: "missing"}, false, 1, "Use this key", "Keep F3"},
+		{"cast key chosen", State{GameFound: true, Addon: "missing", CastKeyChosen: true}, false, 1, "", "puts Fishing on this key"},
+		{"addon missing", State{GameFound: true, Addon: "missing", CastKeyChosen: true}, false, 2, "Install addon", "binds your Cast key"},
+		{"addon outdated", State{GameFound: true, Addon: "outdated"}, false, 2, "Update addon", "apply your keys"},
+		{"a current addon needs no key choice", ready, true, 1, "", "puts Fishing on this key"},
+		{"everything in place", ready, true, 2, "", "up to date"},
 		{"sign-in not required", withSignIn(ready, "", false), true, 0, "", ""},
 		{"account role not required", withSignIn(ready, "a@b.c", false), true, 0, "", ""},
 		{"a dry run needs none of it", State{DryRun: true}, true, 0, "", ""},
@@ -52,7 +56,7 @@ func withSignIn(s State, account string, canFish bool) State {
 
 func TestSetupDoesNotRequireAnAccount(t *testing.T) {
 	steps, done := setupSteps(State{GameFound: true, Addon: "current"})
-	if !done || len(steps) != 2 {
+	if !done || len(steps) != setupSlots {
 		t.Fatalf("setup must be complete without sign-in: %+v, done %v", steps, done)
 	}
 }

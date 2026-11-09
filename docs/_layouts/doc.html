@@ -28,7 +28,7 @@ layout: default
   <main class="page">
     <nav class="crumbs" aria-label="Breadcrumb"><a href="{{ '/' | relative_url }}">Docs</a><span>/</span><a href="{{ '/' | relative_url }}#{{ section.id }}">{{ section.title }}</a><span>/</span><span>{{ page.title }}</span></nav>
     <h1>{{ page.title }}</h1>
-    <p class="meta"><span class="badge">{{ section.title }}</span>{{ content | number_of_words | divided_by: 200 | plus: 1 }} min read<span>·</span><a href="https://github.com/{{ site.repository }}/blob/main/docs/{{ page.path }}">Edit on GitHub</a></p>
+    <p class="meta">{{ content | number_of_words | divided_by: 200 | plus: 1 }} min read<span>·</span><a href="https://github.com/{{ site.repository }}/blob/main/docs/{{ page.path }}">Edit on GitHub</a></p>
     <div class="in-short"><p class="label">In short</p><p>{{ page.summary }}</p></div>
     <details class="toc" id="toc" hidden><summary>On this page</summary><ol></ol></details>
     <article class="prose">

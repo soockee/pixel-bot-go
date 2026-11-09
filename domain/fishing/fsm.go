@@ -638,7 +638,7 @@ func (f *FishingFSM) finishReel() {
 		if f.cfg.ReelMethod == config.ReelInteractKey {
 			vk, ok := f.interactVK(f.cfg)
 			if !ok {
-				f.why("the Interact key is not set, or it matches the Cast or Stop key")
+				f.why("the Interact key is not set, or it matches the Cast key")
 				f.halt()
 				return
 			}
@@ -731,8 +731,7 @@ func (f *FishingFSM) tapKeyboard(vk byte, hold time.Duration) bool {
 func (f *FishingFSM) interactVK(cfg config.Config) (byte, bool) {
 	vk, ok := f.actions.ParseVK(cfg.InteractKey)
 	cast, castOK := f.actions.ParseVK(cfg.CastKey)
-	stop, stopOK := f.actions.ParseVK(cfg.StopKey)
-	return vk, ok && !(castOK && cast == vk) && !(stopOK && stop == vk)
+	return vk, ok && !(castOK && cast == vk)
 }
 
 func (f *FishingFSM) hasCurrentTarget() bool {

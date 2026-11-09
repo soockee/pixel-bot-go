@@ -25,7 +25,22 @@
 
   <main>
     <section class="view live" id="view-live" role="tabpanel" aria-labelledby="tab-live">
-      <div class="panel capture">
+      <section class="panel" id="setup" aria-labelledby="setup-title">
+        <header class="setup-head">
+          <h1 id="setup-title">Set up fishing</h1>
+          <p class="muted" id="setup-progress" role="status">Looking for WoW…</p>
+        </header>
+        <ol class="steps" id="setup-list"></ol>
+        <div id="setup-keys" hidden></div>
+        <div class="setup-actions">
+          <button class="button primary" id="setup-install" type="button" hidden></button>
+          <button class="button" id="setup-check" type="button">Check again</button>
+        </div>
+        <p id="setup-error" class="settings-status bad" role="alert" hidden></p>
+      </section>
+
+      <div class="panel capture" id="fishing-preview" hidden>
+        <p class="setup-reload" id="setup-reload" role="status" hidden>Bobber Marker is ready. Type <kbd>/reload</kbd> in WoW to apply the bindings, then start fishing.</p>
         <div class="stage" id="stage">
           <div class="frame" id="frame">
             <img id="capture-img" alt="Live capture of the fishing area">
@@ -41,14 +56,6 @@
       </div>
 
       <aside class="side">
-        <div class="panel" id="setup" hidden>
-          <div class="panel-head">
-            <h2>Get ready</h2>
-            <button class="button" id="setup-check" type="button">Check again</button>
-          </div>
-          <ol class="steps" id="setup-list"></ol>
-        </div>
-
         <div class="panel">
           <button class="button primary wide" id="start" type="button">Start fishing</button>
           <p class="muted small" id="start-hint" hidden></p>
@@ -205,7 +212,6 @@
     <span class="statusbar-end">
       <span class="muted" id="version"></span>
       <span id="dry-run" hidden>Dry run, input is logged only</span>
-      <span id="stop-hint"><kbd id="stop-key"></kbd> stops</span>
     </span>
   </footer>
   <dialog id="upload-review" aria-labelledby="upload-review-title">

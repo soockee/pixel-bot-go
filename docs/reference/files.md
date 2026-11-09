@@ -1,6 +1,6 @@
 ---
 title: "Files on your PC"
-summary: "What Go Fish keeps next to its exe, and what is safe to delete."
+summary: "What Go Fish keeps in its folder, and what is safe to delete."
 order: 4
 ---
 
@@ -12,6 +12,6 @@ Go Fish keeps everything in the folder it runs from.
 | `pixel_bot_logs.json` | What Go Fish did in its last run; replaced at each start | Yes |
 | `pixel_bot_account.bin` | Your saved sign-in, encrypted for your Windows user | Yes, you sign in again |
 | `datasets\` | Your recordings, if you made any | Yes, unless you still want to share them |
-| `pixel-bot-go.exe.old` | The previous version, right after an update | Removed by itself at the next start |
+| A file ending in `.old` | The previous version of Go Fish, right after an update | Removed by itself at the next start |
 
 Apart from these, Go Fish writes only the Bobber Marker addon into the game's `Interface\AddOns\BobberMarker` folder, when you click **Install**. It touches no other addon.

@@ -29,4 +29,4 @@ The large picture is what Go Fish sees of the game window. Once it has found the
 
 ## Status bar
 
-The bottom line shows the latest message, such as why a start was refused or how far an update has got, the version you have, and which key stops Go Fish.
+The bottom line shows the latest message, such as why a start was refused or how far an update has got, and the version you have.

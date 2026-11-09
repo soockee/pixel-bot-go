@@ -24,7 +24,6 @@ type Settings struct {
 	ReelMethod             string  `json:"reelMethod"`
 	InteractKey            string  `json:"interactKey"`
 	ESP32Port              string  `json:"esp32Port"`
-	StopKey                string  `json:"stopKey"`
 	IdleMoves              bool    `json:"idleMoves"`
 	Reposition             bool    `json:"reposition"`
 	TargetPlayerKey        string  `json:"targetPlayerKey"`
@@ -57,7 +56,7 @@ type SettingsForm struct {
 func settingsOf(c *config.Config) Settings {
 	return Settings{
 		MinScale: c.MinScale, MaxScale: c.MaxScale, ScaleStep: c.ScaleStep, Threshold: c.Threshold,
-		Stride: c.Stride, Refine: c.Refine, CastKey: c.CastKey, StopKey: c.StopKey,
+		Stride: c.Stride, Refine: c.Refine, CastKey: c.CastKey,
 		ReelMethod: c.ReelMethod, InteractKey: c.InteractKey, ESP32Port: c.ESP32Port,
 		IdleMoves: c.IdleMoves, Reposition: c.Reposition, TargetPlayerKey: c.TargetPlayerKey,
 		MaxFailedCasts: c.MaxFailedCasts, MaxSessionMinutes: c.MaxSessionMinutes,
@@ -80,19 +79,14 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	}
 	castVK, castOK := action.ParseVK(s.CastKey)
 	check(castOK, "Cast key")
-	_, stopOK := action.ParseVK(s.StopKey)
-	check(stopOK, "Stop key")
-	if sameKey(s.CastKey, s.StopKey) {
-		return c, errors.New("the Cast and Stop keys must be different")
-	}
 	check(s.ReelMethod == config.ReelRightClick || s.ReelMethod == config.ReelInteractKey, "Reel method")
 	interactVK, interactOK := action.ParseVK(s.InteractKey)
 	if s.ReelMethod == config.ReelInteractKey {
 		if !interactOK {
 			return c, errors.New("set the Interact key before enabling this reel method")
 		}
-		if sameKey(s.InteractKey, s.CastKey) || sameKey(s.InteractKey, s.StopKey) {
-			return c, errors.New("the Interact key must differ from the Cast and Stop keys")
+		if sameKey(s.InteractKey, s.CastKey) {
+			return c, errors.New("the Interact key must differ from the Cast key")
 		}
 		if s.Locator != "marker" {
 			return c, errors.New("Interact key requires the marker locator")
@@ -118,18 +112,20 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	if len(invalid) > 0 {
 		return c, errors.New("not saved, invalid: " + strings.Join(invalid, ", "))
 	}
-	if s.Schedule || s.Reposition {
+	// Breaks may be switched on before the Logout key is set; starting a run
+	// asks for it (config.CheckSchedule).
+	if s.LogoutKey != "" {
 		vk, ok := action.ParseVK(s.LogoutKey)
-		if !ok || sameKey(s.LogoutKey, s.CastKey) || sameKey(s.LogoutKey, s.StopKey) ||
+		if !ok || sameKey(s.LogoutKey, s.CastKey) ||
 			s.ReelMethod == config.ReelInteractKey && sameKey(s.LogoutKey, s.InteractKey) {
-			return c, errors.New("set a Logout key distinct from Cast, Interact and Stop")
+			return c, errors.New("the Logout key must differ from the Cast and Interact keys")
 		}
 		if port != "" && !esp32.SupportsKey(vk) {
 			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Logout")
 		}
 	}
 	c.MinScale, c.MaxScale, c.ScaleStep, c.Threshold = s.MinScale, s.MaxScale, s.ScaleStep, s.Threshold
-	c.Stride, c.Refine, c.CastKey, c.StopKey = s.Stride, s.Refine, s.CastKey, s.StopKey
+	c.Stride, c.Refine, c.CastKey = s.Stride, s.Refine, s.CastKey
 	c.ReelMethod, c.InteractKey, c.ESP32Port = s.ReelMethod, s.InteractKey, port
 	c.MaxFailedCasts, c.MaxSessionMinutes = s.MaxFailedCasts, s.MaxSessionMinutes
 	c.IdleMoves, c.Reposition, c.TargetPlayerKey = s.IdleMoves, s.Reposition, s.TargetPlayerKey

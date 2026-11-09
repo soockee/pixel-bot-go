@@ -42,7 +42,6 @@ type State struct {
 	ROI            int                   `json:"roi"`         // version of /frames/roi, the live box around the bobber; 0 means none
 	ROIBox         Rect                  `json:"roiBox"`      // where the ROI sits on the capture, in screen pixels
 	DryRun         bool                  `json:"dryRun"`
-	StopKey        string                `json:"stopKey"`
 	Theme          string                `json:"theme"`          // one of config.Themes
 	Debug          bool                  `json:"debug"`          // show the developer views
 	Recorder       bool                  `json:"recorder"`       // show the Recorder: debug mode or Share recordings
@@ -60,6 +59,7 @@ type State struct {
 	UpdateError    string                `json:"updateError"`    // why the last check failed, or why there is none
 	Checking       bool                  `json:"checking"`       // a check runs
 	GameFound      bool                  `json:"gameFound"`      // the selected window is open
+	CastKeyChosen  bool                  `json:"castKeyChosen"`  // the person confirmed the Cast key in setup this session
 	Setup          [setupSlots]SetupStep `json:"setup"`          // what the bot still needs, see setupSteps
 	SetupDone      bool                  `json:"setupDone"`      // nothing is missing, or this is a dry run
 	Addon          string                `json:"addon"`          // Bobber Marker in the game: "missing", "outdated", "current", or "" when the game was not found

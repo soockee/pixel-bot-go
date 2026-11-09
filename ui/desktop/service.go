@@ -72,20 +72,18 @@ func (s *Service) State() (state State) {
 	return state
 }
 
-// Windows lists the visible window titles and picks the target window: the
-// one the person chose, else the game, else the first one. A chosen window
-// stays in the list even when it is not open.
+// Windows lists the visible window titles, including the selected title even
+// when it is closed. The game is the default until the person picks a window.
 func (s *Service) Windows() []string {
 	titles := s.cmds.ListWindows()
-	if len(titles) == 0 {
-		titles = []string{"<none>"}
-	}
 	_ = s.do(func() {
-		current := pickWindow(titles, s.view.State().Window, s.picked)
+		current := pickWindow(s.view.State().Window, s.picked)
 		if !slices.Contains(titles, current) {
 			titles = append(titles, current)
 		}
-		s.cmds.SetWindow(current)
+		if current != s.view.State().Window && !s.cmds.Running() {
+			s.cmds.SetWindow(current)
+		}
 	})
 	return titles
 }
@@ -117,7 +115,7 @@ func (s *Service) CheckGame() {
 	titles := s.cmds.ListWindows()
 	_ = s.do(func() {
 		current := s.view.State().Window
-		if !s.picked && !s.cmds.Running() && current != defaultWindow && slices.Contains(titles, defaultWindow) {
+		if !s.picked && !s.cmds.Running() && current != defaultWindow {
 			s.cmds.SetWindow(defaultWindow)
 			current = defaultWindow
 		}
@@ -150,22 +148,6 @@ func (s *Service) SaveSettings(values Settings) (saved Settings, err error) {
 		}
 		var next config.Config
 		if next, err = values.apply(*s.cfg); err != nil {
-			return
-		}
-		if next.CastKey != s.cfg.CastKey && sameKey(next.CastKey, s.view.State().StopKey) {
-			err = errors.New("the Cast key matches the active Stop hotkey")
-			return
-		}
-		if next.ReelMethod == config.ReelInteractKey && sameKey(next.InteractKey, s.view.State().StopKey) {
-			err = errors.New("the Interact key matches the active Stop hotkey")
-			return
-		}
-		if (next.Schedule || next.Reposition) && sameKey(next.LogoutKey, s.view.State().StopKey) {
-			err = errors.New("the Logout key matches the active Stop hotkey")
-			return
-		}
-		if next.TargetPlayerKey != "" && sameKey(next.TargetPlayerKey, s.view.State().StopKey) {
-			err = errors.New("the Target passing player key matches the active Stop hotkey")
 			return
 		}
 		if err = next.Save(s.cfgPath); err != nil {
@@ -252,6 +234,9 @@ func (s *Service) CheckUpdate() error { return s.cmds.CheckUpdate() }
 // ReleaseNotes opens the latest release's page in the browser.
 func (s *Service) ReleaseNotes() { _ = s.do(s.cmds.ReleaseNotes) }
 
+// ChooseCastKey confirms the saved Cast key in setup, so the addon step comes next.
+func (s *Service) ChooseCastKey() { _ = s.do(s.view.SetCastKeyChosen) }
+
 // CheckAddon looks whether the Bobber Marker addon is installed and current.
 func (s *Service) CheckAddon() { _ = s.do(s.cmds.CheckAddon) }
 
@@ -285,17 +270,14 @@ func newSettingsForm(c *config.Config) SettingsForm {
 	return SettingsForm{Values: settingsOf(c), Locators: detect.LocatorNames(), BiteDetectors: detect.BiteDetectorNames()}
 }
 
-// defaultWindow is selected whenever it is open, until the person picks another.
+// defaultWindow is selected until the person picks another.
 const defaultWindow = "World of Warcraft"
 
 // pickWindow returns the window to select. A window the person picked stays
-// selected even if it is not open yet. titles is not empty.
-func pickWindow(titles []string, current string, picked bool) string {
-	switch {
-	case picked:
+// selected even if it is not open yet.
+func pickWindow(current string, picked bool) string {
+	if picked {
 		return current
-	case slices.Contains(titles, defaultWindow):
-		return defaultWindow
 	}
-	return titles[0]
+	return defaultWindow
 }
