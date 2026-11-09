@@ -18,12 +18,11 @@ const (
 // LocatorCounts and BiteCounts are raw results. They depend only on the frames,
 // labels and detectors, so two runs give identical counts.
 type LocatorCounts struct {
-	Casts           int     `json:"casts"`
-	Locks           int     `json:"locks"`
-	LocksOnBobber   int     `json:"locks_on_bobber"`
-	EmptyFrames     int     `json:"empty_frames"`
-	FalseLocks      int     `json:"false_locks"`
-	LockLatenciesMS []int64 `json:"lock_latencies_ms"`
+	Casts         int `json:"casts"`
+	Locks         int `json:"locks"`
+	LocksOnBobber int `json:"locks_on_bobber"`
+	EmptyFrames   int `json:"empty_frames"`
+	FalseLocks    int `json:"false_locks"`
 }
 
 // BiteCounts holds a bite detector's results.
@@ -53,20 +52,9 @@ func evaluateLocator(l detect.Locator, d *dataset.Dataset, c *LocatorCounts) ([]
 		searches = append(searches, time.Since(start))
 		return match, found
 	}
-	castLocator, usesCast := l.(detect.CastLocator)
 	for _, cast := range d.Labels.Casts {
 		c.Casts++
-		span := cast.Span
-		if cast.CastMS != nil {
-			span.StartMS = *cast.CastMS
-		}
-		if usesCast {
-			castLocator.BeginCast()
-			if cast.CastMS == nil {
-				span.StartMS = max(0, span.StartMS-dataset.LandingMS)
-			}
-		}
-		for _, f := range d.FramesIn(span) {
+		for _, f := range d.FramesIn(cast.Span) {
 			img, err := f.Load()
 			if err != nil {
 				return searches, err
@@ -76,14 +64,10 @@ func evaluateLocator(l detect.Locator, d *dataset.Dataset, c *LocatorCounts) ([]
 				c.Locks++
 				if image.Pt(match.X, match.Y).In(cast.Bobber.Image()) {
 					c.LocksOnBobber++
-					c.LockLatenciesMS = append(c.LockLatenciesMS, f.MS-span.StartMS)
 				}
 				break
 			}
 		}
-	}
-	if usesCast {
-		return searches, nil // A cast-conditioned locator does not search between casts.
 	}
 	for _, span := range d.Labels.Empty {
 		for _, f := range d.FramesIn(span) {
@@ -117,9 +101,6 @@ func watchAreas(d *dataset.Dataset, roiSize int) ([]watch, error) {
 	prevReel := int64(-1)
 	for i, cast := range d.Labels.Casts {
 		from := max(cast.StartMS-dataset.LandingMS, prevReel+1) // a cast cannot start before the last reel
-		if cast.CastMS != nil {
-			from = max(*cast.CastMS, prevReel+1)
-		}
 		prevReel = cast.EndMS
 		b := cast.Bobber.Image()
 		half := roiSize / 2

@@ -75,11 +75,10 @@ func TestAutoLabelPairsCastsAndReels(t *testing.T) {
 		t.Errorf("skipped = %v", skipped)
 	}
 	biteA, biteB := int64(11600), int64(29600)
-	castA, castB := int64(5000), int64(20000)
 	want := Labels{
 		Casts: []Cast{
-			{Span: Span{7000, 12000}, CastMS: &castA, Bobber: Rect{30, 10, 40, 40}, BiteMS: &biteA},
-			{Span: Span{22000, 30000}, CastMS: &castB, Bobber: Rect{40, 20, 40, 40}, BiteMS: &biteB},
+			{Span: Span{7000, 12000}, Bobber: Rect{30, 10, 40, 40}, BiteMS: &biteA},
+			{Span: Span{22000, 30000}, Bobber: Rect{40, 20, 40, 40}, BiteMS: &biteB},
 		},
 		Empty: []Span{{0, 5000}, {13000, 20000}},
 	}

@@ -575,18 +575,7 @@ end
 
 SLASH_BOBBERMARKER1 = "/bobbermarker";
 SlashCmdList.BOBBERMARKER = function(input)
-	input = input or "";
-	local pixels = input:match("^%s*pixels%s+(%a+)%s*$");
-	if pixels == "on" or pixels == "off" then
-		local alpha = pixels == "on" and 1 or 0;
-		marker:SetAlpha(alpha);
-		playerSignal:SetAlpha(alpha);
-		worldSignal:SetAlpha(alpha);
-		outcomeSignal:SetAlpha(alpha);
-		print("|cffff00ffBobber Marker:|r addon pixels " .. pixels);
-		return;
-	end
-	local value = tonumber(input:match("^%s*y%s+(%-?%d+)%s*$"));
+	local value = tonumber((input or ""):match("^%s*y%s+(%-?%d+)%s*$"));
 	if value then
 		db.y = value;
 		if anchor then

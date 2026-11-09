@@ -45,7 +45,6 @@ func main() {
 	record := flag.String("record", "", "record the -window game into this new directory until Ctrl+C; sends no input")
 	window := flag.String("window", "", "with -record: the window to record, its picture plus your mouse and key input and its sound")
 	recordKeys := flag.Bool("record-keys", false, "with -record: also record keyboard input")
-	recordFull := flag.Bool("record-full", false, "with -record: keep every whole frame, targeting 30 fps")
 	noKeys := flag.Bool("no-keys", false, "with -record: omit keyboard input")
 	listWindows := flag.Bool("list-windows", false, "print visible window titles and exit")
 	autoWindow := flag.String("auto-window", "", "preselect the target window title (headless runs)")
@@ -74,7 +73,7 @@ func main() {
 	if *record != "" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
-		err := recordSession(ctx, recorder.Session{Dir: *record, Window: *window, Label: *traceSession, Keys: *recordKeys && !*noKeys, FullFrames: *recordFull, Status: os.Stderr})
+		err := recordSession(ctx, recorder.Session{Dir: *record, Window: *window, Label: *traceSession, Keys: *recordKeys && !*noKeys, Status: os.Stderr})
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "recorder:", err)
 			os.Exit(1)

@@ -117,16 +117,8 @@ func TestCompareRunsEveryTechniqueAndRepeats(t *testing.T) {
 	first := evaluate(t, "all", "all", dir)
 
 	for _, name := range detect.LocatorNames() {
-		got := first.Locators[name]
-		if name == "cast_track" {
-			if got.Casts != 2 || got.EmptyFrames != 0 {
-				t.Errorf("locator %s: got %+v", name, got)
-			}
-			continue
-		}
 		want := LocatorCounts{Casts: 2, Locks: 2, LocksOnBobber: 2, EmptyFrames: 4}
-		got.LockLatenciesMS = nil
-		if !reflect.DeepEqual(got, want) {
+		if got := first.Locators[name]; got != want {
 			t.Errorf("locator %s: got %+v, want %+v", name, got, want)
 		}
 	}

@@ -21,15 +21,14 @@ import (
 
 // Session describes one recording.
 type Session struct {
-	Dir        string                       // new dataset directory
-	Frames     dataset.FrameSource          // screen capture
-	Target     *framecapture.WindowIdentity // exact selection from the desktop or CLI
-	Window     string                       // exact title of the window to record input and sound from; empty records frames only
-	Live       bool                         // flush the input trace often, so a viewer can follow it
-	Label      string                       // shared with other traces from this playtest
-	Keys       bool                         // record keys as well as the mouse
-	FullFrames bool                         // keep the whole window at the live detector's cadence
-	Status     io.Writer                    // progress messages
+	Dir    string                       // new dataset directory
+	Frames dataset.FrameSource          // screen capture
+	Target *framecapture.WindowIdentity // exact selection from the desktop or CLI
+	Window string                       // exact title of the window to record input and sound from; empty records frames only
+	Live   bool                         // flush the input trace often, so a viewer can follow it
+	Label  string                       // shared with other traces from this playtest
+	Keys   bool                         // record keys as well as the mouse
+	Status io.Writer                    // progress messages
 	// OnStart, when set, gets the start time frame names and the input trace count from.
 	OnStart func(start time.Time)
 }
@@ -76,7 +75,7 @@ func (s Session) Run(parent context.Context) error {
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		defer cancel()
-		frames, frameErr = dataset.Record(ctx, s.Frames, detect.NewMarkerLocator(), s.Dir, start, s.FullFrames)
+		frames, frameErr = dataset.Record(ctx, s.Frames, detect.NewMarkerLocator(), s.Dir, start)
 	})
 	if s.Window != "" {
 		wg.Go(func() {

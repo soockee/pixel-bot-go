@@ -171,7 +171,6 @@ type run struct {
 	window                 capture.Frame            // the last capture of the whole game window
 	lastSearch             time.Time
 	searches               int
-	locatorCast            int32
 	monitoring             bool
 	interact               bool
 	lastErr                string
@@ -299,12 +298,6 @@ func (r *run) search(frame capture.Frame, window image.Rectangle) {
 	}
 	r.lastSearch = time.Now()
 	e := r.engine
-	if locator, ok := r.locator.(detect.CastLocator); ok {
-		if cast := e.fsm.stats.casts.Load(); cast != r.locatorCast {
-			locator.BeginCast()
-			r.locatorCast = cast
-		}
-	}
 	match, found := r.locator.Locate(frame.Image)
 	r.searches++
 	if !found {
