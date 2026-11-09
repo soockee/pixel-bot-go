@@ -97,6 +97,7 @@ func (s *liveTrace) cursorWaypoint(p image.Point, area image.Rectangle) {
 		Position: &playtrace.Position{X: int32(p.X - area.Min.X), Y: int32(p.Y - area.Min.Y),
 			Width: int32(area.Dx()), Height: int32(area.Dy())},
 	})
+	_ = s.output.Flush() // fakegame -follow draws the pointer as it moves
 }
 
 func (s *liveTrace) record(now int64, id int, action string, attempt int, outcome string) {

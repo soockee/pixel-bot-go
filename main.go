@@ -105,7 +105,7 @@ func main() {
 		}
 	}
 	var cursor cursormotion.Planner
-	cursorProfile := "direct"
+	cursorProfile := "default" // cursormotion.DefaultPath
 	if *cursorPath != "" {
 		model, err := cursormotion.Load(*cursorPath)
 		if err != nil {

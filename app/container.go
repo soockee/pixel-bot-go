@@ -83,9 +83,14 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 				callbacks.ObserveReelTiming = c.trace.reelTiming
 			}
 		}
-		if trace.Cursor != nil {
-			callbacks.Cursor = c.dryCursor(trace.Cursor, inFront, callbacks.MoveCursor)
+		// A dry run plans the pointer like a live run, with the recorded
+		// profile or the default path, so the fake game shows real movement.
+		plan := trace.Cursor
+		if plan == nil {
+			plan = cursormotion.DefaultPath
 		}
+		callbacks.Cursor = c.dryCursor(plan, inFront, callbacks.MoveCursor)
+		callbacks.Approach = cursormotion.ApproachPoint
 	} else {
 		callbacks.ReelRoll = rand.IntN
 		callbacks.RepositionRoll = rand.IntN

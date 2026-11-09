@@ -26,6 +26,7 @@ type sessionReachAudit struct {
 	DirectInstantMoves int          `json:"direct_instant_moves"`
 	Human              reachAudit   `json:"human"`
 	Fitted             []reachAudit `json:"fitted_by_seed"`
+	Default            []reachAudit `json:"default_by_trial"` // the path live runs use without a profile
 }
 
 func auditFittedReaches(examples []cursorExample, plan cursormotion.Planner) reachAudit {
