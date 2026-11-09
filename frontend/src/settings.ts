@@ -2,12 +2,13 @@
 // are set by pressing them, numbers with sliders, techniques with dropdowns.
 import { Service, type Settings, type SettingsForm, type State } from "./api";
 import { $, h, keyLabel } from "./dom";
+import { playSound, sounds, themes } from "./themes";
 
 type Key = keyof Settings;
 type Value = Settings[Key];
 
 type Field = { key: Key; label: string; hint: string } & (
-  | { kind: "key" | "switch" | "text" | "locator" | "biteDetector" | "reelMethod" }
+  | { kind: "key" | "switch" | "text" | "port" | "locator" | "biteDetector" | "reelMethod" }
   | { kind: "slider"; min: number; max: number; step: number; unit?: string }
 );
 
@@ -20,7 +21,7 @@ const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] 
       { key: "castKey", label: "Cast key", hint: "Click to set the key or mouse side button you use to cast Fishing in game.", kind: "key" },
       { key: "reelMethod", label: "Reel method", hint: "Right-click the bobber, or use the game's Interact key without moving the cursor.", kind: "reelMethod" },
       { key: "interactKey", label: "Interact key", hint: "Set the same binding as in the game before selecting Interact key as your reel method.", kind: "key" },
-      { key: "esp32Port", label: "ESP32 port", hint: "With Interact key selected, enter auto to find the paired board, or its COM port. Clear to use Windows input.", kind: "text" },
+      { key: "esp32Port", label: "ESP32 port", hint: "Pick Auto to find the paired board, or its COM port, to send keys, cursor moves and right clicks through it. Off uses Windows input.", kind: "port" },
       { key: "targetPlayerKey", label: "Target passing player", hint: "Optional unused key, such as F8. Update Bobber Marker after setting it. Clear to disable.", kind: "text" },
       { key: "idleKey", label: "Between-catch action", hint: "Optional key for a one-shot game action. Clear to disable.", kind: "text" },
       { key: "stopKey", label: "Stop key", hint: "Stops fishing from anywhere, applies after a restart", kind: "key" },
@@ -256,6 +257,34 @@ export function setupSettings(): (s: State) => void {
     };
   }
 
+  // The ports are listed again on each open: the board may be plugged in since.
+  function portControl(): Control {
+    const select = document.createElement("select");
+    let value = "";
+    async function load() {
+      const ports = (await Service.ESP32Ports()) ?? [];
+      select.replaceChildren(new Option("Off, use Windows input", ""), new Option("Auto, find the board", "AUTO"), ...ports.map((p) => new Option(p, p)));
+      select.value = value;
+    }
+    select.addEventListener("mousedown", () => void load());
+    select.addEventListener("change", () => {
+      value = select.value;
+      save();
+    });
+    void load();
+    return {
+      el: select,
+      input: select,
+      get: () => select.value,
+      set: (v) => {
+        value = String(v);
+        if (![...select.options].some((o) => o.value === value)) select.add(new Option(value, value));
+        select.value = value;
+      },
+      enable: (on) => { select.disabled = !on; },
+    };
+  }
+
   function textControl(): Control {
     const input = document.createElement("input");
     input.type = "text";
@@ -275,6 +304,7 @@ export function setupSettings(): (s: State) => void {
       case "slider": return sliderControl(f);
       case "switch": return switchControl();
       case "text": return textControl();
+      case "port": return portControl();
       case "reelMethod": return selectControl(["right_click", "interact_key"], { right_click: "Right click", interact_key: "Interact key" });
       case "locator": return selectControl(data.locators ?? []);
       case "biteDetector": return selectControl(data.biteDetectors ?? []);
@@ -293,10 +323,35 @@ export function setupSettings(): (s: State) => void {
     return r;
   }
 
-  const dark = document.createElement("input");
-  dark.type = "checkbox";
-  dark.className = "switch";
-  dark.addEventListener("change", () => void Service.SetDark(dark.checked));
+  // Each theme is a card with its icon; picking one plays its catch sound.
+  const picker = h("div", "", "theme-picker");
+  picker.setAttribute("role", "radiogroup");
+  picker.setAttribute("aria-label", "Theme");
+  const choices = themes.map((t) => {
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "theme";
+    input.value = t.id;
+    input.addEventListener("change", () => {
+      void Service.SetTheme(t.id);
+      playSound(t);
+    });
+    const icon = document.createElement("img");
+    icon.src = `/themes/${t.id}.svg`;
+    icon.alt = "";
+    const card = h("label", "", "theme-card");
+    card.dataset.preview = t.id;
+    const text = h("span", "", "theme-text");
+    text.append(h("strong", t.name), h("span", t.blurb, "hint"));
+    card.append(input, icon, text);
+    picker.append(card);
+    return input;
+  });
+  const sound = document.createElement("input");
+  sound.type = "checkbox";
+  sound.className = "switch";
+  sound.checked = sounds.on();
+  sound.addEventListener("change", () => sounds.set(sound.checked));
 
   function lock() {
     for (const c of controls.values()) c.enable(!running);
@@ -321,7 +376,7 @@ export function setupSettings(): (s: State) => void {
       return fs;
     });
     const look = h("fieldset");
-    look.append(h("legend", "Appearance"), row("setting-dark", "Dark theme", "Graphite surfaces, easier on the eyes at night", dark, dark));
+    look.append(h("legend", "Theme"), picker, row("setting-sounds", "Theme sounds", "Each theme greets a catch with its own sound", sound, sound));
     form.replaceChildren(message, ...sections.slice(0, 2), look, ...sections.slice(2));
     lock();
   }
@@ -330,7 +385,7 @@ export function setupSettings(): (s: State) => void {
   void build();
 
   return (s) => {
-    dark.checked = s.dark;
+    for (const c of choices) c.checked = c.value === s.theme;
     if (s.debug !== shown.debug || s.recorder !== shown.recorder) {
       shown = { debug: s.debug, recorder: s.recorder };
       for (const g of gated) g.fs.hidden = !shown[g.show];

@@ -188,11 +188,13 @@ func TestEngineStaysQuietOnAStaticBobber(t *testing.T) {
 
 func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 	for _, test := range []struct {
-		name     string
-		failReel bool
+		name       string
+		failReel   bool
+		rightClick bool
 	}{
 		{name: "both acknowledged"},
 		{name: "reel failed", failReel: true},
+		{name: "right click", rightClick: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
@@ -231,6 +233,10 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 				}
 				engine, fsm, frames, _ := newSceneEngine(t, actions)
 				engine.cfg.ReelMethod, engine.cfg.InteractKey, engine.cfg.ESP32Port = config.ReelInteractKey, "F", "COM3"
+				if test.rightClick {
+					// The app routes this move and click to the board through action.Guard.
+					engine.cfg.ReelMethod, engine.cfg.InteractKey = config.ReelRightClick, ""
+				}
 				defer fsm.Close()
 				startEngine(t, engine)
 				defer engine.Stop()
@@ -254,7 +260,11 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 					}
 				}
 				engine.Stop()
-				wantActions(t, log, "open", "cast", "reel", "close")
+				if test.rightClick {
+					wantActions(t, log, "open", "cast", "move", "move", "click", "close")
+				} else {
+					wantActions(t, log, "open", "cast", "reel", "close")
+				}
 			})
 		})
 	}

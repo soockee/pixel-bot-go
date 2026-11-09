@@ -603,6 +603,9 @@ func (f *FishingFSM) startReel() {
 	if elapsed := f.reelTiming.AfterDetection; elapsed > 0 {
 		f.reelDelay = max(0, elapsed-time.Since(f.detectorAt))
 	}
+	if f.hardwareKeyboard() && f.cfg.ReelMethod != config.ReelInteractKey {
+		f.reelTiming.Hold = 0 // the ESP32 right click owns its press and release
+	}
 	if n := len(f.cursorSteps); n > 0 {
 		f.reelDelay = max(f.reelDelay, time.Until(f.cursorStart.Add(f.cursorSteps[n-1].After)))
 	}

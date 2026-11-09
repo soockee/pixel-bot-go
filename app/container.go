@@ -90,12 +90,18 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		callbacks.ReelRoll = rand.IntN
 		callbacks.RepositionRoll = rand.IntN
 		var keyboard esp32.Keyboard
+		// hardware routes the guard's pointer input to the board for the run.
+		var hardware atomic.Bool
 		callbacks.OpenKeyboard = func(run config.Config) (func(), error) {
 			port, err := esp32.PortName(run.ESP32Port)
 			if err != nil {
 				return nil, err
 			}
-			for _, key := range []string{run.CastKey, run.InteractKey} {
+			keys := []string{run.CastKey}
+			if run.ReelMethod == config.ReelInteractKey {
+				keys = append(keys, run.InteractKey)
+			}
+			for _, key := range keys {
 				vk, valid := action.ParseVK(key)
 				if !valid || !esp32.SupportsKey(vk) {
 					return nil, errors.New("ESP32 requires keyboard bindings for Cast and Interact")
@@ -114,8 +120,41 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 					return nil, err
 				}
 			}
-			logger.Info("ESP32 keyboard ready", "port", keyboard.Name(), "camera", keyboard.CanDragCamera())
-			return keyboard.Close, nil
+			if run.ReelMethod != config.ReelInteractKey {
+				if err := keyboard.PreparePointer(); err != nil {
+					return nil, err
+				}
+				if !keyboard.CanPoint() {
+					keyboard.Close()
+					return nil, errors.New("flash the current ESP32 firmware to reel with a right click")
+				}
+			}
+			logger.Info("ESP32 keyboard ready", "port", keyboard.Name(), "camera", keyboard.CanDragCamera(), "pointer", keyboard.CanPoint())
+			hardware.Store(true)
+			return func() {
+				hardware.Store(false)
+				keyboard.Close()
+			}, nil
+		}
+		move := func(x, y int) bool {
+			if !hardware.Load() {
+				return action.MoveCursor(x, y)
+			}
+			if err := keyboard.MoveTo(image.Pt(x, y), action.CursorPos); err != nil {
+				logger.Error("ESP32 pointer move failed", "error", err)
+				return false
+			}
+			return true
+		}
+		click := func() bool {
+			if !hardware.Load() {
+				return action.ClickRight()
+			}
+			if err := keyboard.ClickRight(); err != nil {
+				logger.Error("ESP32 right click failed", "error", err)
+				return false
+			}
+			return true
 		}
 		callbacks.TapKeyboard = func(vk byte, hold time.Duration) error {
 			usage, ok := esp32.ForegroundUsage(vk)
@@ -131,7 +170,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			Logger: logger, InFront: inFront, Area: c.gameArea, CursorPos: action.CursorPos,
 			// The guard runs on the FSM goroutine, which must not wait on its own queue.
 			OnTakeover: func() { go c.FSM.EventHaltBecause("the mouse was moved") },
-			Press:      action.PressKey, Move: action.MoveCursor, Click: action.ClickRight,
+			Press:      action.PressKey, Move: move, Click: click,
 			BeginHold: action.BeginRightHold, BeginKeyHold: action.BeginKeyHold,
 		}
 		callbacks.PressKey, callbacks.MoveCursor, callbacks.ClickRight = guard.PressKey, guard.MoveCursor, guard.ClickRight

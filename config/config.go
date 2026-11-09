@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -111,8 +112,8 @@ type Config struct {
 	// CooldownSeconds defines how long to wait after reeling before attempting the next cast.
 	CooldownSeconds int `json:"cooldown_seconds"`
 
-	// DarkMode persists user preference for dark theme across sessions.
-	DarkMode bool `json:"dark_mode"`
+	// Theme is the window's look, one of Themes.
+	Theme string `json:"theme"`
 
 	// OverlayX and OverlayY place the overlay's status pill on the game window,
 	// each as a share of the free space: 0 puts it against the left or top edge,
@@ -121,6 +122,9 @@ type Config struct {
 	OverlayX float64 `json:"overlay_x"`
 	OverlayY float64 `json:"overlay_y"`
 }
+
+// Themes are the window's looks; the first is the default.
+var Themes = []string{"graphite", "tavern", "arcane", "frost", "fel", "tide"}
 
 // DefaultConfig returns a Config populated with standard defaults.
 func DefaultConfig() *Config {
@@ -147,16 +151,16 @@ func DefaultConfig() *Config {
 		ROISizePx:              80,
 		MaxCastDurationSeconds: 30,
 		CooldownSeconds:        8,
-		DarkMode:               true,
+		Theme:                  Themes[0],
 		OverlayX:               0.5,
 		OverlayY:               0.01,
 	}
 }
 
-// Validate clamps/normalizes values to safe ranges.
 // RecorderShown reports whether the window offers the Recorder.
 func (c *Config) RecorderShown() bool { return c.Debug || c.ShareRecordings }
 
+// Validate clamps/normalizes values to safe ranges.
 func (c *Config) Validate() error {
 	d := DefaultConfig()
 	if c.MinScale <= 0 {
@@ -231,6 +235,9 @@ func (c *Config) Validate() error {
 	c.MaxCastDurationSeconds = min(max(c.MaxCastDurationSeconds, 5), 180)
 	c.CooldownSeconds = min(max(c.CooldownSeconds, 1), 60)
 	c.Screen = max(c.Screen, 0)
+	if !slices.Contains(Themes, c.Theme) {
+		c.Theme = d.Theme
+	}
 	return nil
 }
 

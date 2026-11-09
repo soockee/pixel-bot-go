@@ -7,6 +7,7 @@ import { setupLive } from "./live";
 import { setupMoveOverlay } from "./move-overlay";
 import { setupRecorder } from "./recorder";
 import { setupSettings } from "./settings";
+import { burst, playSound, themeById } from "./themes";
 import { setupWizard } from "./setup";
 import { setupUpdates } from "./updates";
 
@@ -69,14 +70,24 @@ const moveOverlay = setupMoveOverlay();
 const settings = setupSettings();
 const updates = setupUpdates();
 let theme = "";
+let reels = -1; // -1 until the first state, so opening the window celebrates nothing
 
 onState((s: State) => {
-  const nextTheme = s.dark ? "dark" : "light";
-  if (nextTheme !== theme) {
-    theme = nextTheme;
+  if (s.theme !== theme) {
+    theme = s.theme;
     document.documentElement.dataset.theme = theme;
+    $<HTMLImageElement>("brand-icon").src = `/themes/${theme}.svg`;
+    const words = themeById(theme).words;
+    for (const t of tabs) $(`tab-${t}`).textContent = words.tabs[t];
     recorder.shown(); // canvases read the theme colours
   }
+  // Themes react to the fishing step, for example a glow while watching.
+  document.body.dataset.fsm = s.running ? s.fsm : "";
+  if (reels >= 0 && s.reels > reels) {
+    playSound(themeById(theme));
+    burst(themeById(theme), $("stage"));
+  }
+  reels = s.reels;
   if (s.recorder !== recorderShown) {
     recorderShown = s.recorder;
     show(wanted);

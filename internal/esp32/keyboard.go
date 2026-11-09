@@ -1,10 +1,12 @@
-// Package esp32 sends bounded keyboard taps and camera drags to the Go Fish BLE firmware.
+// Package esp32 sends bounded keyboard taps, camera drags, pointer moves and
+// right clicks to the Go Fish BLE firmware.
 package esp32
 
 import (
 	"bufio"
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"os"
 	"slices"
@@ -42,14 +44,15 @@ func SupportsKey(vk byte) bool {
 
 // Keyboard owns one port for the duration of a fishing run.
 type Keyboard struct {
-	mu     sync.Mutex
-	port   serial.Port
-	reader *bufio.Reader
-	timed  bool
-	camera bool
-	name   string                                          // the port in use, which AutoPort resolves
-	open   func(string, *serial.Mode) (serial.Port, error) // nil opens the real port; tests replace it
-	list   func() ([]string, error)                        // nil lists the USB serial ports; tests replace it
+	mu      sync.Mutex
+	port    serial.Port
+	reader  *bufio.Reader
+	timed   bool
+	camera  bool
+	pointer bool                                            // MOVE and CLICK, for the right-click reel
+	name    string                                          // the port in use, which AutoPort resolves
+	open    func(string, *serial.Mode) (serial.Port, error) // nil opens the real port; tests replace it
+	list    func() ([]string, error)                        // nil lists the USB serial ports; tests replace it
 }
 
 // A board that was just reset prints boot noise for about a second and then
@@ -216,6 +219,103 @@ func (k *Keyboard) prepareCapability(command string, supported *bool) error {
 	return nil
 }
 
+// PreparePointer probes for pointer moves and right clicks without sending input.
+func (k *Keyboard) PreparePointer() error {
+	return k.prepareCapability("POINTER", &k.pointer)
+}
+
+// CanPoint reports whether the open port advertised pointer support.
+func (k *Keyboard) CanPoint() bool {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.pointer
+}
+
+// ClickRight presses and releases the right mouse button, with the same
+// failure contract as Tap.
+func (k *Keyboard) ClickRight() error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.port == nil || !k.pointer {
+		return errors.New("ESP32 pointer support is unavailable")
+	}
+	return k.sendAction("CLICK", "right click")
+}
+
+// maxMoveSteps bounds MoveTo; a path within the game window needs about ten.
+const maxMoveSteps = 40
+
+// MoveTo steers the pointer onto target with relative mouse reports. Windows
+// scales each report by its pointer speed and acceleration, so every step reads
+// the real position from pos and divides the rest of the way by the gain the
+// previous step showed.
+func (k *Keyboard) MoveTo(target image.Point, pos func() (x, y int, ok bool)) error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.port == nil || !k.pointer {
+		return errors.New("ESP32 pointer support is unavailable")
+	}
+	gain := [2]float64{1, 1}
+	for range maxMoveSteps {
+		x, y, ok := pos()
+		if !ok {
+			return errors.New("cursor position unavailable")
+		}
+		rest := [2]int{target.X - x, target.Y - y}
+		if rest == [2]int{} {
+			return nil
+		}
+		var step [2]int
+		for i := range step {
+			step[i] = reportStep(rest[i], gain[i])
+		}
+		if err := k.sendAction(fmt.Sprintf("MOVE %d %d", step[0], step[1]), "pointer move"); err != nil {
+			return err
+		}
+		nx, ny := settle(x, y, pos)
+		moved := [2]int{nx - x, ny - y}
+		for i := range gain {
+			if step[i] != 0 && moved[i] != 0 && (moved[i] > 0) == (step[i] > 0) {
+				gain[i] = min(max(float64(moved[i])/float64(step[i]), 0.25), 4)
+			}
+		}
+	}
+	return errors.New("ESP32 pointer did not reach the target")
+}
+
+// reportStep is the report value expected to cover rest pixels, at least one
+// and at most 127 counts.
+func reportStep(rest int, gain float64) int {
+	if rest == 0 {
+		return 0
+	}
+	step := int(float64(rest)/gain + 0.5*float64(sign(rest)))
+	if step == 0 {
+		step = sign(rest)
+	}
+	return min(max(step, -127), 127)
+}
+
+func sign(n int) int {
+	if n < 0 {
+		return -1
+	}
+	return 1
+}
+
+// settle waits until Windows applies the report that was just acknowledged,
+// which lags the reply by up to one Bluetooth connection interval.
+func settle(x, y int, pos func() (int, int, bool)) (int, int) {
+	deadline := time.Now().Add(50 * time.Millisecond)
+	for {
+		nx, ny, ok := pos()
+		if ok && (nx != x || ny != y) || time.Now().After(deadline) {
+			return nx, ny
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 // CanDragCamera reports whether the open port advertised mouse support.
 func (k *Keyboard) CanDragCamera() bool {
 	k.mu.Lock()
@@ -300,7 +400,7 @@ func (k *Keyboard) closePort() {
 	if k.port != nil {
 		_ = k.port.Close()
 		k.port, k.reader, k.name = nil, nil, ""
-		k.timed, k.camera = false, false
+		k.timed, k.camera, k.pointer = false, false, false
 	}
 }
 

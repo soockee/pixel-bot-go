@@ -13,7 +13,7 @@ Open the **Settings** tab. Every change saves at once. Settings are locked while
 
 To reel with the game's native Interact binding, enable **Interact Key** in the game and try reeling manually at your fishing spot. In Go Fish, set **Interact key** to the same binding, then choose **Interact key** under **Reel method**. Go Fish still uses Bobber Marker to identify the bobber and checks for the marker again before pressing the key. If your cast is beyond the game's interaction range, choose **Right click**.
 
-To use an ESP32 for both Cast and Interact, flash the [ESP32 firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe), pair **Go Fish ESP32 Probe** in Windows Bluetooth settings, and keep its USB cable connected. Choose keyboard bindings for Cast and Interact, select the **Interact key** reel method, then enter `auto` under **ESP32 port**. Go Fish asks each USB serial port for the Go Fish firmware and uses the one that answers; if you have several boards, or it finds none, enter the board's COM port such as `COM3` instead. A board that was just plugged in or reset can take a few seconds to find your PC over Bluetooth, and Go Fish waits for it. A failed tap stops the run. Clear the port to use Windows input again.
+To use an ESP32, flash the [ESP32 firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe), pair **Go Fish ESP32 Probe** in Windows Bluetooth settings, and keep its USB cable connected. Choose a keyboard binding for Cast, and for Interact if you use the **Interact key** reel method. The **Right click** reel method also works: the board moves the cursor and clicks. Then pick **Auto** under **ESP32 port**. Go Fish asks each USB serial port for the Go Fish firmware and uses the one that answers; if you have several boards, or it finds none, pick the board's COM port such as `COM3` instead. A board that was just plugged in or reset can take a few seconds to find your PC over Bluetooth, and Go Fish waits for it. A failed tap or click stops the run. Pick **Off** to use Windows input again.
 
 ## Scheduled breaks
 
@@ -43,6 +43,13 @@ Go Fish keeps the place, as a share of the game window, so it holds when you cha
 
 ## Appearance
 
-- **Dark theme**: switch between dark and light.
+- **Theme**: pick one of six looks. Each changes more than colours: the words on the buttons and tabs, the layout, the window and taskbar icon, and what happens when you land a fish.
+  - **Graphite**: the plain dark panel. Quiet.
+  - **Tavern Ledger**: parchment and brass like a quest log. Catches rain gold coins.
+  - **Arcane Grimoire**: violet runes turn around the picture and speed up while it watches for a bite.
+  - **Frostwater**: light and calm with falling snow. While it watches, everything but the water fades back.
+  - **Felfire Forge**: black and green, loud and sharp, with the controls on the left.
+  - **Tidecaller**: bright beach colours, waves and bubbles, with the tabs at the bottom.
+- **Theme sounds**: turn the catch sound off or on.
 
 All settings with their defaults are listed under [Settings](../reference/settings.md).

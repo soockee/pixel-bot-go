@@ -3,7 +3,7 @@
 // except while the person places it: then it is only the pill, to be dragged.
 import { onState } from "./api";
 import { $, keyLabel } from "./dom";
-import { cycle } from "./live";
+import { themeById } from "./themes";
 
 const step = $("hud-step");
 const catches = $("hud-catches");
@@ -24,8 +24,9 @@ onState((s) => {
     return;
   }
   if (!s.running) return;
-  step.textContent = cycle.find(([key]) => key === s.fsm)?.[2] ?? "Starting";
-  catches.textContent = `${s.reels} ${s.reels === 1 ? "reel sent" : "reels sent"}`;
+  const words = themeById(s.theme).words;
+  step.textContent = words.cycle[s.fsm]?.[1] ?? "Starting";
+  catches.textContent = `${s.reels} ${words.catches[s.reels === 1 ? 0 : 1]}`;
   stop.textContent = `${keyLabel(s.stopKey)} to stop`;
   status.hidden = s.status === "" || s.status === "Ready";
   status.textContent = s.status;

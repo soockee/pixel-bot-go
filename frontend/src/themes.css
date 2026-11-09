@@ -1,0 +1,674 @@
+/* Themes. Graphite is style.css itself; each theme here re-sets the tokens and
+   then changes shape, type, layout and motion, and reacts to the fishing step
+   through body[data-fsm]. Catch bursts (.particle, from themes.ts) get their
+   piece and flight here. */
+
+:is(.panel, .updates, .settings-form fieldset) { position: relative; }
+
+/* ───────────────────────── Tavern Ledger ───────────────────────── */
+
+:root[data-theme="tavern"] {
+  --bg: #e7d8b8;
+  --surface: #f3e6c8;
+  --raised: #faf0d8;
+  --sunken: #dbc69c;
+  --line: rgba(74, 46, 20, 0.2);
+  --line-strong: rgba(74, 46, 20, 0.38);
+  --text: #2c1b0c;
+  --text-2: #5b4026;
+  --text-3: #86684a;
+  --accent: #8c2f1b;
+  --accent-ink: #fbefd6;
+  --accent-text: #8c2f1b;
+  --accent-soft: rgba(140, 47, 27, 0.12);
+  --gold: #b8892f;
+  --leather: #3a2212;
+  --marker: #b4249f;
+  --good: #3f6b2a;
+  --bad: #9e2a1a;
+  --heat-lo: 196, 170, 120;
+  --heat-hi: 90, 40, 10;
+  --shadow: 0 2px 8px rgba(60, 35, 10, 0.18);
+  --font: "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --display: Gabriola, "Palatino Linotype", serif;
+  --r-control: 3px;
+  --r-panel: 4px;
+  --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3'/%3E%3CfeColorMatrix values='0 0 0 0 .36 0 0 0 0 .22 0 0 0 0 .08 0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  color-scheme: light;
+}
+[data-theme="tavern"] body {
+  font-size: 14px;
+  background: var(--noise), radial-gradient(ellipse at center, #f1e4c4 30%, #c9b083 100%);
+}
+[data-theme="tavern"] :is(.topbar, .statusbar) {
+  background: var(--noise), linear-gradient(180deg, #4a2c17, var(--leather));
+  color: #ecd9a8;
+  border-color: var(--gold);
+}
+[data-theme="tavern"] .topbar { border-bottom: 3px double var(--gold); }
+[data-theme="tavern"] .statusbar { border-top: 3px double var(--gold); color: #cdb488; }
+[data-theme="tavern"] .statusbar :is(.muted, #dry-run) { color: #f3d98f; }
+[data-theme="tavern"] .brand { font: 400 26px/1 var(--display); color: #f3d98f; }
+[data-theme="tavern"] .brand-icon { width: 30px; height: 30px; }
+[data-theme="tavern"] .tabs { background: transparent; gap: 2px; align-self: end; padding: 0; }
+[data-theme="tavern"] .tabs button {
+  height: 34px;
+  border-radius: 4px 4px 0 0;
+  color: #d9c08a;
+  font-variant: small-caps;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+}
+[data-theme="tavern"] .tabs button:hover { color: #fff3cf; }
+[data-theme="tavern"] .tabs button[aria-selected="true"] {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: inset 0 2px 0 var(--gold);
+}
+[data-theme="tavern"] .topbar-end .muted { color: #cdb488; }
+[data-theme="tavern"] :is(.panel, .updates, .settings-form fieldset) {
+  background: var(--noise), var(--surface);
+  border: 3px double var(--line-strong);
+}
+/* A thin brass rule inside every page of the ledger. */
+[data-theme="tavern"] :is(.panel, .updates, .settings-form fieldset)::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid rgba(184, 137, 47, 0.55);
+  pointer-events: none;
+}
+[data-theme="tavern"] :is(h1, h2, .settings-form legend) {
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+  color: #6b2814;
+}
+[data-theme="tavern"] h2 { font-size: 16px; }
+[data-theme="tavern"] .settings-form legend { font-size: 18px; }
+[data-theme="tavern"] .button {
+  background: linear-gradient(180deg, #fbf1db, #e8d5ad);
+  box-shadow: 0 2px 0 rgba(74, 46, 20, 0.35);
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+}
+[data-theme="tavern"] .button.primary {
+  background: linear-gradient(180deg, #a83c22, #7a2412);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 2px 0 #4b160a;
+  font-size: 16px;
+}
+[data-theme="tavern"] .button.stop { background: linear-gradient(180deg, #4a2c17, var(--leather)); color: #f3d98f; }
+[data-theme="tavern"] .stage {
+  border: 6px solid #5a3317;
+  border-radius: 2px;
+  background: radial-gradient(ellipse, #3b2614, #170d05);
+  box-shadow: 0 0 0 2px var(--gold), inset 0 0 40px rgba(0, 0, 0, 0.6);
+}
+[data-theme="tavern"] .empty { color: #d9c08a; font: italic 400 22px/1.3 var(--display); }
+[data-theme="tavern"] .caption { background: var(--noise), var(--surface); font-style: italic; }
+/* The quest log counts its steps in roman numerals. */
+[data-theme="tavern"] .track { counter-reset: step; }
+[data-theme="tavern"] .track li { counter-increment: step; font-size: 14px; border-top-width: 1px; }
+[data-theme="tavern"] .track li::before { content: counter(step, upper-roman) ". "; color: var(--gold); }
+[data-theme="tavern"] .track li.current { border-top: 3px solid var(--accent); color: var(--accent); font-style: italic; }
+[data-theme="tavern"] .big { font: 400 64px/0.8 var(--display); color: var(--accent); }
+[data-theme="tavern"] .bar { height: 6px; border: 1px solid var(--line-strong); background: var(--raised); }
+[data-theme="tavern"] .bar i { background: linear-gradient(90deg, #8a5c14, var(--gold)); }
+[data-theme="tavern"] body[data-fsm="monitoring"] .stage { animation: tavern-candle 2.6s ease-in-out infinite; }
+@keyframes tavern-candle {
+  0%, 100% { box-shadow: 0 0 0 2px var(--gold), inset 0 0 40px rgba(0, 0, 0, 0.6), 0 0 18px rgba(240, 170, 60, 0.25); }
+  40% { box-shadow: 0 0 0 2px var(--gold), inset 0 0 36px rgba(0, 0, 0, 0.55), 0 0 28px rgba(240, 170, 60, 0.45); }
+  70% { box-shadow: 0 0 0 2px var(--gold), inset 0 0 42px rgba(0, 0, 0, 0.6), 0 0 14px rgba(240, 170, 60, 0.2); }
+}
+/* Catches rain gold coins. */
+[data-theme="tavern"] .particle { top: -30px; animation: tavern-coin 1.6s cubic-bezier(0.4, 0, 1, 1) forwards; }
+[data-theme="tavern"] .particle::before {
+  content: "";
+  display: block;
+  width: calc(20px * var(--size));
+  height: calc(20px * var(--size));
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff3c0, #e0b04a 45%, #8a5c14);
+  box-shadow: inset 0 0 0 2px #a8781f, 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+@keyframes tavern-coin {
+  from { transform: translate(0, 0) rotateY(0); }
+  to { transform: translate(var(--drift), 110vh) rotateY(calc(var(--spin) * 3)); }
+}
+
+/* ───────────────────────── Arcane Grimoire ───────────────────────── */
+
+:root[data-theme="arcane"] {
+  --bg: #0d0618;
+  --surface: #1a0e30;
+  --raised: #261645;
+  --sunken: #08030f;
+  --line: rgba(196, 150, 255, 0.14);
+  --line-strong: rgba(196, 150, 255, 0.3);
+  --text: #efe6ff;
+  --text-2: #b9a6dc;
+  --text-3: #7f6ba3;
+  --accent: #b46bff;
+  --accent-ink: #12051f;
+  --accent-text: #d2a8ff;
+  --accent-soft: rgba(180, 107, 255, 0.16);
+  --marker: #ff5cf0;
+  --good: #6fe3c1;
+  --bad: #ff6b8a;
+  --heat-lo: 80, 40, 140;
+  --heat-hi: 230, 190, 255;
+  --shadow: 0 0 24px rgba(140, 70, 255, 0.12);
+  --font: Constantia, "Palatino Linotype", serif;
+  --display: Gabriola, Constantia, serif;
+  --r-control: 10px;
+  --r-panel: 16px;
+  color-scheme: dark;
+}
+[data-theme="arcane"] body {
+  background:
+    radial-gradient(ellipse at 50% -20%, #3d1b73 0%, transparent 60%),
+    radial-gradient(ellipse at 110% 110%, #26104f 0%, transparent 50%),
+    var(--bg);
+}
+/* A slow twinkling starfield behind everything. */
+[data-theme="arcane"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1px 1px at 20px 30px, #fff, transparent),
+    radial-gradient(1px 1px at 120px 80px, #e3c8ff, transparent),
+    radial-gradient(1.5px 1.5px at 200px 160px, #fff, transparent),
+    radial-gradient(1px 1px at 60px 190px, #cfa8ff, transparent);
+  background-size: 240px 220px;
+  animation: arcane-twinkle 5s ease-in-out infinite alternate;
+}
+@keyframes arcane-twinkle { from { opacity: 0.35; } to { opacity: 0.9; } }
+[data-theme="arcane"] :is(.topbar, .statusbar) {
+  background: rgba(20, 8, 40, 0.7);
+  border-color: var(--line-strong);
+}
+[data-theme="arcane"] .brand { font: 400 26px/1 var(--display); color: var(--accent-text); text-shadow: 0 0 12px var(--accent); }
+[data-theme="arcane"] .brand-icon { width: 28px; height: 28px; filter: drop-shadow(0 0 6px var(--accent)); }
+[data-theme="arcane"] .tabs { background: rgba(8, 3, 15, 0.6); border-radius: 999px; box-shadow: inset 0 0 0 1px var(--line-strong); }
+[data-theme="arcane"] .tabs button { border-radius: 999px; }
+[data-theme="arcane"] .tabs button[aria-selected="true"] {
+  background: radial-gradient(circle at 50% 0%, #4d2690, #2a1250);
+  box-shadow: 0 0 14px rgba(180, 107, 255, 0.45), inset 0 0 0 1px rgba(210, 168, 255, 0.5);
+  color: #fff;
+}
+[data-theme="arcane"] :is(.panel, .updates, .settings-form fieldset) {
+  background: linear-gradient(180deg, rgba(48, 24, 88, 0.78), rgba(22, 10, 42, 0.9));
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4), 0 0 28px rgba(140, 70, 255, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+[data-theme="arcane"] :is(h1, h2, .settings-form legend) {
+  font-family: var(--display);
+  font-weight: 400;
+  color: var(--accent-text);
+  text-shadow: 0 0 10px rgba(180, 107, 255, 0.6);
+}
+[data-theme="arcane"] h2 { font-size: 21px; line-height: 1; }
+[data-theme="arcane"] h1 { font-size: 28px; }
+[data-theme="arcane"] .settings-form legend { font-size: 24px; }
+[data-theme="arcane"] .button { background: rgba(38, 22, 69, 0.9); }
+[data-theme="arcane"] .button.primary {
+  background: radial-gradient(circle at 50% 0%, #e2b8ff, #9147ff 55%, #5a1fb8);
+  color: #fff;
+  text-shadow: 0 0 6px rgba(60, 0, 120, 0.8);
+  border-radius: 999px;
+  animation: arcane-pulse 2.4s ease-in-out infinite;
+}
+@keyframes arcane-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(180, 107, 255, 0.4); }
+  50% { box-shadow: 0 0 26px rgba(200, 140, 255, 0.85); }
+}
+[data-theme="arcane"] .button.stop { border-radius: 999px; background: #efe6ff; color: #2a1250; }
+/* The capture is a scrying glass inside two turning rune rings. */
+[data-theme="arcane"] .stage {
+  border-radius: 20px;
+  background: radial-gradient(circle, #241046 0%, #0a0414 75%);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+[data-theme="arcane"] .stage::before,
+[data-theme="arcane"] .stage::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(86%, 86vh);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 2px dashed rgba(196, 150, 255, 0.28);
+  pointer-events: none;
+  transition: border-color 600ms;
+  animation: arcane-spin 60s linear infinite;
+}
+[data-theme="arcane"] .stage::after {
+  width: min(70%, 70vh);
+  border: 6px dotted rgba(196, 150, 255, 0.18);
+  animation-direction: reverse;
+  animation-duration: 90s;
+}
+@keyframes arcane-spin {
+  from { transform: translate(-50%, -50%) rotate(0); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+[data-theme="arcane"] .frame { z-index: 1; }
+[data-theme="arcane"] .frame img { border-radius: 6px; }
+[data-theme="arcane"] .empty { font: 400 24px/1.2 var(--display); color: var(--accent-text); }
+[data-theme="arcane"] body[data-fsm="monitoring"] .stage::before { animation-duration: 6s; border-color: rgba(220, 175, 255, 0.7); }
+[data-theme="arcane"] body[data-fsm="monitoring"] .stage::after { animation-duration: 9s; border-color: rgba(220, 175, 255, 0.45); }
+[data-theme="arcane"] body[data-fsm="monitoring"] .stage { animation: arcane-scry 1.8s ease-in-out infinite; }
+@keyframes arcane-scry {
+  0%, 100% { box-shadow: inset 0 0 0 1px var(--line-strong), inset 0 0 30px rgba(180, 107, 255, 0.2); }
+  50% { box-shadow: inset 0 0 0 1px var(--accent), inset 0 0 70px rgba(180, 107, 255, 0.5); }
+}
+[data-theme="arcane"] .caption { border-radius: 999px; background: rgba(26, 14, 48, 0.85); z-index: 2; }
+/* The cycle reads as a line of rune stones. */
+[data-theme="arcane"] .track li { border-top: 0; padding-top: 0; text-align: center; font-size: 13px; }
+[data-theme="arcane"] .track li::before { content: "◇"; display: block; font-size: 18px; line-height: 1.3; color: var(--text-3); }
+[data-theme="arcane"] .track li.current { color: #fff; }
+[data-theme="arcane"] .track li.current::before { content: "◆"; color: var(--accent-text); text-shadow: 0 0 10px var(--accent), 0 0 20px var(--accent); }
+[data-theme="arcane"] .big { font: 400 72px/0.8 var(--display); color: #f3e6ff; text-shadow: 0 0 18px var(--accent), 0 0 36px rgba(180, 107, 255, 0.5); }
+[data-theme="arcane"] .bar { height: 6px; border-radius: 3px; }
+[data-theme="arcane"] .bar i { background: linear-gradient(90deg, #6a2bd6, #e2b8ff); box-shadow: 0 0 10px var(--accent); }
+/* Catches loose sparks that spin upward. */
+[data-theme="arcane"] .particle { animation: arcane-spark 1.5s ease-out forwards; }
+[data-theme="arcane"] .particle::before {
+  content: "✦";
+  display: block;
+  color: #f0dcff;
+  font-size: calc(24px * var(--size));
+  text-shadow: 0 0 10px #b46bff, 0 0 20px #b46bff;
+}
+@keyframes arcane-spark {
+  from { transform: scale(0.2); opacity: 0; }
+  20% { opacity: 1; }
+  to { transform: translate(var(--drift), -240px) rotate(var(--spin)) scale(1); opacity: 0; }
+}
+
+/* ───────────────────────── Frostwater ───────────────────────── */
+
+:root[data-theme="frost"] {
+  --bg: #e8f3fb;
+  --surface: rgba(255, 255, 255, 0.6);
+  --raised: rgba(255, 255, 255, 0.85);
+  --sunken: rgba(205, 228, 244, 0.75);
+  --line: rgba(40, 90, 140, 0.12);
+  --line-strong: rgba(40, 90, 140, 0.24);
+  --text: #10314f;
+  --text-2: #3f6383;
+  --text-3: #7d9ab3;
+  --accent: #2f8fd8;
+  --accent-ink: #ffffff;
+  --accent-text: #1f6fb0;
+  --accent-soft: rgba(47, 143, 216, 0.14);
+  --marker: #d43bd4;
+  --good: #2c8f73;
+  --bad: #c94a5a;
+  --heat-lo: 170, 205, 230;
+  --heat-hi: 16, 70, 130;
+  --shadow: 0 8px 32px rgba(30, 80, 130, 0.12);
+  --font: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --r-control: 14px;
+  --r-panel: 22px;
+  color-scheme: light;
+}
+[data-theme="frost"] body {
+  font-weight: 350;
+  letter-spacing: 0.01em;
+  background: linear-gradient(170deg, #f7fbff 0%, #dcecf8 55%, #c4dcef 100%);
+}
+/* Two layers of snow drifting down at different speeds. */
+[data-theme="frost"] body::before,
+[data-theme="frost"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2px 2px at 30px 40px, #fff, transparent),
+    radial-gradient(3px 3px at 150px 120px, rgba(255, 255, 255, 0.9), transparent),
+    radial-gradient(2px 2px at 90px 210px, #fff, transparent);
+  background-size: 220px 260px;
+  animation: frost-snow 28s linear infinite;
+}
+[data-theme="frost"] body::after { background-size: 340px 380px; opacity: 0.7; animation-duration: 46s; }
+@keyframes frost-snow { to { background-position: 60px 760px; } }
+[data-theme="frost"] :is(.topbar, .statusbar) { background: rgba(255, 255, 255, 0.35); backdrop-filter: blur(10px); border-color: rgba(255, 255, 255, 0.8); }
+[data-theme="frost"] .brand { font-weight: 300; font-size: 17px; letter-spacing: 0.08em; }
+[data-theme="frost"] .tabs { background: transparent; gap: 12px; }
+[data-theme="frost"] .tabs button { border-radius: 0; font-weight: 300; font-size: 14px; padding: 0 4px; }
+[data-theme="frost"] .tabs button[aria-selected="true"] { background: transparent; box-shadow: inset 0 -2px 0 var(--accent); color: var(--accent-text); }
+[data-theme="frost"] .view { padding: 24px; }
+[data-theme="frost"] .live { grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; }
+[data-theme="frost"] .side { gap: 20px; }
+[data-theme="frost"] :is(.panel, .updates, .settings-form fieldset) {
+  padding: 20px;
+  background: var(--surface);
+  backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: var(--shadow), inset 0 1px 0 #fff;
+}
+[data-theme="frost"] :is(h1, h2, .settings-form legend) { font-weight: 300; }
+[data-theme="frost"] h2 { font-size: 16px; }
+[data-theme="frost"] .button { border-radius: 999px; background: rgba(255, 255, 255, 0.8); }
+[data-theme="frost"] .button.primary {
+  background: linear-gradient(180deg, #62b6f1, #2f8fd8);
+  box-shadow: 0 6px 18px rgba(47, 143, 216, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+[data-theme="frost"] .button.wide { height: 44px; }
+[data-theme="frost"] .button.stop { background: #10314f; color: #e8f3fb; }
+/* Dark water under a rim of frost; the frost creeps in while the hands thaw. */
+[data-theme="frost"] .stage { border-radius: 16px; background: linear-gradient(#123456, #0a1d31); }
+[data-theme="frost"] .stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 50px 8px rgba(235, 247, 255, 0.55);
+  transition: box-shadow 1.6s ease;
+}
+[data-theme="frost"] body[data-fsm="cooldown"] .stage::after { box-shadow: inset 0 0 140px 50px rgba(240, 250, 255, 0.85); }
+/* Hush: while it watches for a bite, everything but the water steps back. */
+[data-theme="frost"] .side, [data-theme="frost"] .track { transition: opacity 1.2s ease, filter 1.2s ease; }
+[data-theme="frost"] body[data-fsm="monitoring"] :is(.side, .track) { opacity: 0.45; filter: blur(0.5px); }
+[data-theme="frost"] .empty { color: #cfe6f7; font-weight: 300; font-size: 18px; letter-spacing: 0.04em; }
+[data-theme="frost"] .caption { background: rgba(255, 255, 255, 0.75); backdrop-filter: blur(8px); border-radius: 999px; }
+[data-theme="frost"] .track li { border-top-width: 1px; font-weight: 300; font-size: 13px; color: var(--text-2); }
+[data-theme="frost"] .track li.current { border-top: 3px solid var(--accent); color: var(--accent-text); font-weight: 400; }
+[data-theme="frost"] .big { font: 200 80px/0.9 var(--font); color: var(--accent-text); }
+[data-theme="frost"] .bar { height: 3px; }
+[data-theme="frost"] .bar i { background: linear-gradient(90deg, #9fd3f7, var(--accent)); }
+/* Catches shake loose a few snowflakes. */
+[data-theme="frost"] .particle { animation: frost-flake 3.2s ease-out forwards; }
+[data-theme="frost"] .particle::before {
+  content: "❄";
+  display: block;
+  color: #fff;
+  font-size: calc(22px * var(--size));
+  text-shadow: 0 0 6px rgba(120, 180, 230, 0.9);
+}
+@keyframes frost-flake {
+  from { transform: translate(0, -120px) rotate(0); opacity: 0; }
+  15% { opacity: 1; }
+  to { transform: translate(var(--drift), 220px) rotate(var(--spin)); opacity: 0; }
+}
+
+/* ───────────────────────── Felfire Forge ───────────────────────── */
+
+:root[data-theme="fel"] {
+  --bg: #070907;
+  --surface: #0f130e;
+  --raised: #182016;
+  --sunken: #040504;
+  --line: rgba(125, 255, 58, 0.12);
+  --line-strong: rgba(125, 255, 58, 0.3);
+  --text: #e6ffd6;
+  --text-2: #9fbf8e;
+  --text-3: #5f7a52;
+  --accent: #7dff3a;
+  --accent-ink: #071003;
+  --accent-text: #8dff4c;
+  --accent-soft: rgba(125, 255, 58, 0.12);
+  --marker: #ff3df2;
+  --good: #7dff3a;
+  --bad: #ff4d2e;
+  --heat-lo: 30, 70, 20;
+  --heat-hi: 190, 255, 140;
+  --shadow: none;
+  --font: Bahnschrift, "Segoe UI", sans-serif;
+  --r-control: 0;
+  --r-panel: 0;
+  --chamfer: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  color-scheme: dark;
+}
+[data-theme="fel"] body {
+  font-stretch: 87.5%;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 130%, rgba(70, 160, 20, 0.38), transparent 60%),
+    var(--bg);
+}
+/* Embers rise off the forge floor. */
+[data-theme="fel"] body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2px 2px at 40px 300px, #9dff5a, transparent),
+    radial-gradient(1.5px 1.5px at 180px 120px, #c8ff8a, transparent),
+    radial-gradient(2px 2px at 260px 220px, #7dff3a, transparent);
+  background-size: 320px 360px;
+  animation: fel-embers 9s linear infinite;
+  opacity: 0.6;
+}
+@keyframes fel-embers { to { background-position: -40px -720px; } }
+[data-theme="fel"] :is(h1, h2, .settings-form legend, .tabs button, .button, .track li, .brand) {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+[data-theme="fel"] :is(.topbar, .statusbar) { background: #0a0d09; border-color: var(--line-strong); }
+[data-theme="fel"] .topbar { grid-template-columns: auto 1fr auto; box-shadow: 0 1px 0 rgba(125, 255, 58, 0.2), 0 8px 24px -12px rgba(125, 255, 58, 0.35); }
+[data-theme="fel"] .tabs { justify-self: start; background: transparent; gap: 2px; }
+[data-theme="fel"] .brand { font-weight: 700; color: var(--accent); }
+[data-theme="fel"] .tabs button { border-radius: 0; font-weight: 600; font-size: 12px; }
+[data-theme="fel"] .tabs button[aria-selected="true"] {
+  background: var(--raised);
+  color: var(--accent);
+  box-shadow: inset 0 -2px 0 var(--accent), 0 8px 16px -10px var(--accent);
+}
+/* The controls stand on the left in the forge. */
+[data-theme="fel"] .live { grid-template-columns: 296px minmax(0, 1fr); }
+[data-theme="fel"] .live .side { order: -1; }
+[data-theme="fel"] :is(.panel, .updates, .settings-form fieldset) {
+  clip-path: var(--chamfer);
+  background: linear-gradient(180deg, #141b12, #0b0f0a);
+  border: 1px solid var(--line-strong);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+[data-theme="fel"] :is(h1, h2, .settings-form legend) { font-weight: 700; color: var(--accent-text); }
+[data-theme="fel"] h2 { font-size: 12px; }
+[data-theme="fel"] .button { font-weight: 600; font-size: 12px; }
+[data-theme="fel"] .button.primary {
+  background: var(--accent);
+  clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%);
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  animation: fel-flicker 3.2s steps(1) infinite;
+}
+@keyframes fel-flicker {
+  0%, 100% { filter: brightness(1); }
+  47% { filter: brightness(1.35) drop-shadow(0 0 6px #7dff3a); }
+  49% { filter: brightness(0.8); }
+  51% { filter: brightness(1.25); }
+}
+[data-theme="fel"] .button.primary:hover { filter: brightness(1.2); }
+[data-theme="fel"] .button.stop { background: var(--bad); color: #fff; clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%); font-weight: 800; }
+[data-theme="fel"] .button.wide { height: 44px; }
+[data-theme="fel"] .stage { border-radius: 0; box-shadow: inset 0 0 0 1px var(--line-strong), inset 0 -40px 60px -30px rgba(125, 255, 58, 0.25); }
+[data-theme="fel"] .stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px);
+}
+[data-theme="fel"] body[data-fsm="monitoring"] .stage { animation: fel-stalk 1.2s ease-in-out infinite; }
+@keyframes fel-stalk {
+  50% { box-shadow: inset 0 0 0 2px var(--accent), inset 0 -60px 80px -30px rgba(125, 255, 58, 0.45); }
+}
+[data-theme="fel"] body[data-fsm="reeling"] .stage { animation: fel-rip 0.18s steps(2) 4; }
+@keyframes fel-rip {
+  50% { box-shadow: inset 0 0 0 4px var(--accent), inset 0 0 120px rgba(125, 255, 58, 0.6); transform: translateX(3px); }
+}
+[data-theme="fel"] .empty { color: var(--accent-text); text-transform: uppercase; letter-spacing: 0.2em; font-weight: 700; }
+[data-theme="fel"] .caption { border-radius: 0; clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); padding: 0 18px; }
+[data-theme="fel"] .track { gap: 2px; }
+[data-theme="fel"] .track li { border-top: 0; padding: 6px 4px; background: var(--sunken); text-align: center; font-size: 11px; font-weight: 600; }
+[data-theme="fel"] .track li.current { background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 16px rgba(125, 255, 58, 0.5); }
+[data-theme="fel"] .big { font: 800 72px/0.85 var(--font); color: var(--accent); text-shadow: 0 0 20px rgba(125, 255, 58, 0.6); }
+[data-theme="fel"] .bar { height: 8px; border-radius: 0; }
+[data-theme="fel"] .bar i { background: repeating-linear-gradient(-45deg, var(--accent) 0 6px, #46b31a 6px 12px); }
+[data-theme="fel"] .bar i.warn { background: repeating-linear-gradient(-45deg, var(--bad) 0 6px, #a32a14 6px 12px); }
+[data-theme="fel"] input.switch, [data-theme="fel"] input.switch::after { border-radius: 0; }
+[data-theme="fel"] input.switch:not(:checked) { background: #2c332a; }
+[data-theme="fel"] input.switch:not(:checked)::after { background: var(--text-3); }
+/* Catches spit green embers. */
+[data-theme="fel"] .particle { animation: fel-ember 1.1s cubic-bezier(0.2, 0.6, 0.4, 1) forwards; }
+[data-theme="fel"] .particle::before {
+  content: "";
+  display: block;
+  width: calc(7px * var(--size));
+  height: calc(7px * var(--size));
+  border-radius: 50%;
+  background: #d6ff9e;
+  box-shadow: 0 0 10px 3px #7dff3a;
+}
+@keyframes fel-ember {
+  from { transform: translate(0, 40px) scale(1.4); opacity: 1; }
+  to { transform: translate(var(--drift), -280px) scale(0.3); opacity: 0; }
+}
+
+/* ───────────────────────── Tidecaller ───────────────────────── */
+
+:root[data-theme="tide"] {
+  --bg: #fff4dc;
+  --surface: #ffffff;
+  --raised: #fff9ec;
+  --sunken: #e1f5f6;
+  --line: rgba(10, 79, 99, 0.12);
+  --line-strong: rgba(10, 79, 99, 0.25);
+  --text: #0a3d4c;
+  --text-2: #3d6b78;
+  --text-3: #7a9aa3;
+  --accent: #ff7a3d;
+  --accent-ink: #ffffff;
+  --accent-text: #d9541a;
+  --accent-soft: rgba(255, 122, 61, 0.15);
+  --ink: #0a4f63;
+  --marker: #e03ce0;
+  --good: #1aa37a;
+  --bad: #e5484d;
+  --heat-lo: 160, 220, 225;
+  --heat-hi: 10, 90, 110;
+  --shadow: 0 5px 0 var(--ink);
+  --font: "Trebuchet MS", "Segoe UI", sans-serif;
+  --display: "Segoe Print", "Trebuchet MS", sans-serif;
+  --r-control: 14px;
+  --r-panel: 26px;
+  --bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  color-scheme: light;
+}
+/* The tabs sit at the bottom, like a dock under your thumb. */
+[data-theme="tide"] body {
+  grid-template-rows: minmax(0, 1fr) 64px 28px;
+  background: linear-gradient(180deg, #ffe7b0 0%, #fff4dc 45%, #d3f2ef 100%);
+}
+[data-theme="tide"] main { grid-row: 1; }
+[data-theme="tide"] .topbar { grid-row: 2; border-bottom: 0; border-top: 2px solid var(--ink); background: #fffaf0; }
+[data-theme="tide"] .statusbar { grid-row: 3; background: var(--ink); color: #bfe9ee; border: 0; }
+[data-theme="tide"] .statusbar .muted { color: #bfe9ee; }
+[data-theme="tide"] .brand { font: 700 18px/1 var(--display); color: var(--ink); }
+[data-theme="tide"] .brand-icon { width: 30px; height: 30px; }
+[data-theme="tide"] .tabs { background: var(--ink); border-radius: 999px; padding: 5px; }
+[data-theme="tide"] .tabs button { height: 34px; border-radius: 999px; color: #bfe9ee; font-weight: 700; padding: 0 20px; }
+[data-theme="tide"] .tabs button:hover { color: #fff; }
+[data-theme="tide"] .tabs button[aria-selected="true"] {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: none;
+  animation: tide-pop 0.4s var(--bounce);
+}
+@keyframes tide-pop { from { transform: scale(0.8); } }
+[data-theme="tide"] :is(.panel, .updates, .settings-form fieldset) {
+  border: 2px solid var(--ink);
+  box-shadow: var(--shadow);
+  margin-bottom: 5px;
+}
+[data-theme="tide"] :is(h1, h2, .settings-form legend) { font-family: var(--display); font-weight: 700; color: var(--ink); }
+[data-theme="tide"] h2 { font-size: 15px; }
+[data-theme="tide"] .button {
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  box-shadow: 0 3px 0 var(--ink);
+  font-weight: 700;
+  transition: transform 120ms var(--bounce), box-shadow 120ms;
+}
+[data-theme="tide"] .button:active { transform: translateY(3px); box-shadow: 0 0 0 var(--ink); }
+[data-theme="tide"] .button.primary { border: 2px solid var(--ink); background: var(--accent); font-size: 16px; }
+[data-theme="tide"] .button.primary:hover { background: #ff8c55; transform: translateY(-1px) rotate(-1deg); }
+[data-theme="tide"] .button.stop { background: var(--ink); color: #fff; }
+[data-theme="tide"] .button.wide { height: 46px; }
+[data-theme="tide"] :is(select, input[type="text"], input[type="number"]) { border: 2px solid var(--line-strong); }
+/* The capture floats in the sea, waves rolling along its foot. */
+[data-theme="tide"] .stage { border-radius: 20px; background: linear-gradient(#8adbe3, #1a8ea3); }
+[data-theme="tide"] .stage::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 44px;
+  pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='44'%3E%3Cpath d='M0 22q40-18 80 0t80 0v22H0z' fill='%23ffffff' fill-opacity='.4'/%3E%3C/svg%3E") repeat-x;
+  background-size: 160px 44px;
+  animation: tide-waves 7s linear infinite;
+}
+@keyframes tide-waves { to { background-position: 160px 0; } }
+[data-theme="tide"] body[data-fsm="monitoring"] .stage::after { animation-duration: 2.5s; }
+[data-theme="tide"] body[data-fsm="monitoring"] .caption { animation: tide-bob 1.6s ease-in-out infinite; }
+@keyframes tide-bob { 50% { translate: 0 -5px; } }
+[data-theme="tide"] .empty { color: #fff; font: 700 20px/1.3 var(--display); text-shadow: 0 2px 0 rgba(10, 79, 99, 0.4); }
+[data-theme="tide"] .caption { border-radius: 999px; border: 2px solid var(--ink); background: #fff; z-index: 2; }
+[data-theme="tide"] .track { gap: 6px; }
+[data-theme="tide"] .track li { border-top: 0; padding: 6px 4px; border-radius: 999px; background: var(--sunken); text-align: center; font-weight: 700; color: var(--text-2); }
+[data-theme="tide"] .track li.current { background: var(--ink); color: #fff; animation: tide-pop 0.4s var(--bounce); }
+[data-theme="tide"] .big { font: 700 60px/1 var(--display); color: var(--accent); text-shadow: 0 3px 0 var(--ink); }
+[data-theme="tide"] .bar { height: 10px; border-radius: 999px; border: 2px solid var(--ink); background: #fff; }
+[data-theme="tide"] .bar i {
+  background: repeating-linear-gradient(-45deg, var(--accent) 0 8px, #ff9a66 8px 16px);
+  background-size: 200% 100%;
+}
+[data-theme="tide"] input.switch:checked { background: var(--accent); }
+/* Catches blow bubbles that wobble up. */
+[data-theme="tide"] .particle { animation: tide-bubble 1.9s ease-out forwards; }
+[data-theme="tide"] .particle::before {
+  content: "";
+  display: block;
+  width: calc(18px * var(--size));
+  height: calc(18px * var(--size));
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.95) 0 15%, rgba(255, 255, 255, 0.15) 40%);
+}
+@keyframes tide-bubble {
+  from { transform: translate(0, 60px) scale(0.3); opacity: 0; }
+  20% { opacity: 1; }
+  50% { transform: translate(calc(var(--drift) * 0.3 + 14px), -80px) scale(1); }
+  75% { transform: translate(calc(var(--drift) * 0.6 - 14px), -170px) scale(1); opacity: 1; }
+  to { transform: translate(var(--drift), -240px) scale(1.2); opacity: 0; }
+}
+
+/* Theme previews in the picker wear their own colours. */
+.theme-card[data-preview="graphite"] { --p-bg: #18191b; --p-fg: #e8eaed; --p-ac: #f0a63a; font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif; }
+.theme-card[data-preview="tavern"] { --p-bg: #f3e6c8; --p-fg: #2c1b0c; --p-ac: #8c2f1b; font-family: "Palatino Linotype", serif; }
+.theme-card[data-preview="arcane"] { --p-bg: #1a0e30; --p-fg: #efe6ff; --p-ac: #b46bff; font-family: Constantia, serif; }
+.theme-card[data-preview="frost"] { --p-bg: #eef7fd; --p-fg: #10314f; --p-ac: #2f8fd8; font-family: "Segoe UI Variable Display", "Segoe UI", sans-serif; font-weight: 300; }
+.theme-card[data-preview="fel"] { --p-bg: #0f130e; --p-fg: #e6ffd6; --p-ac: #7dff3a; font-family: Bahnschrift, sans-serif; }
+.theme-card[data-preview="tide"] { --p-bg: #fff4dc; --p-fg: #0a3d4c; --p-ac: #ff7a3d; font-family: "Trebuchet MS", sans-serif; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme] *, [data-theme] *::before, [data-theme] *::after, [data-theme] body::before, [data-theme] body::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -13,7 +13,7 @@ order: 2
 | CastKey (`cast_key`)        | Unmodified key that casts: F1 to F12, a letter, a top-row digit, `Mouse4` or `Mouse5` | An unknown key halts the run           |
 | ReelMethod (`reel_method`)  | How to interact with the bobber             | `right_click` by default, or `interact_key` with the marker locator |
 | InteractKey (`interact_key`) | Native Interact binding for key-based reeling, using the same supported keys as CastKey | Empty by default. Key-based reeling requires a binding distinct from Cast and Stop. |
-| ESP32Port (`esp32_port`) | Serial port for the ESP32 BLE keyboard, such as `COM3`, or `auto` | Empty uses Windows input. `auto` tries each USB serial port with the firmware handshake and uses the first that answers. Requires `interact_key` mode and keyboard bindings for both actions. |
+| ESP32Port (`esp32_port`) | Serial port for the ESP32 BLE keyboard and mouse, such as `COM3`, or `auto` | Empty uses Windows input. `auto` tries each USB serial port with the firmware handshake and uses the first that answers. Keys go through the board as HID taps, and `right_click` mode moves the pointer (relative reports, closed loop on `GetCursorPos`) and clicks through it, which needs firmware that answers `POINTER`. Cast, and Interact in `interact_key` mode, need keyboard bindings. |
 | RepositionKey (`reposition_key`) | Optional movement script after 45–55 acknowledged reels | Empty by default. `auto` uses WASD and can use horizontal camera drags in Windows right-click mode or with mouse-capable ESP32 firmware. A key name uses that binding. Requires the Logout key and both screen images. |
 | IdleKey (`idle_key`) | Optional one-shot between-catch action | Empty by default. Use an unused letter, digit or function key. |
 | TargetPlayerKey (`target_player_key`) | Optional addon binding that selects a friendly soft target | Empty by default. Use an unused letter, digit or function key and update the addon. |
@@ -31,6 +31,7 @@ order: 2
 | RecordKeys (`record_keys`)  | Record keys as well as the mouse            | Default true                           |
 | OverlayX / OverlayY (`overlay_x`, `overlay_y`) | Where the overlay pill sits on the game window, each a share of the free space: 0 is the left or top edge, 1 the right or bottom edge | Default 0.5 and 0.01, the top centre; outside 0 to 1 resets to the default. Written by Settings → Overlay → Move overlay (`app/overlay.go`); not a settings form field. The pill is 380 by 44 px in both overlay modes (`app/overlay_place.go`, `frontend/src/overlay.css`) |
 | ShareRecordings (`share_recordings`) | Shows the Recorder tab and the Recording settings without debug mode | Default false; Settings → Data sharing |
+| Theme (`theme`)             | Window look, one of `config.Themes`: `graphite`, `tavern`, `arcane`, `frost`, `fel`, `tide` | Default `graphite`; unknown values fall back to it. Replaces `dark_mode`. Settings → Theme |
 | CloudURL (`cloud_url`)      | Upload service URL | Empty uses the one release builds carry; empty in both turns sign-in off |
 | OAuthClientID / OAuthClientSecret (`oauth_client_id`, `oauth_client_secret`) | Google Desktop OAuth client the app signs in with | Not confidential for desktop apps; empty client ID uses the release build's client; empty in both turns sign-in off |
 

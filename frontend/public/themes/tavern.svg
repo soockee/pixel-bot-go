@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <radialGradient id="wood" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#b9834a"/><stop offset="1" stop-color="#5a3317"/></radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff0b8"/><stop offset=".45" stop-color="#e3b24c"/><stop offset="1" stop-color="#8a5c14"/></linearGradient>
+    <clipPath id="face"><circle cx="128" cy="128" r="96"/></clipPath>
+  </defs>
+  <circle cx="128" cy="128" r="122" fill="#2b190a"/>
+  <circle cx="128" cy="128" r="114" fill="url(#gold)"/>
+  <circle cx="128" cy="128" r="96" fill="url(#wood)"/>
+  <g clip-path="url(#face)" stroke="#3a200b" stroke-opacity=".5" stroke-width="4"><path d="M20 84h216M20 128h216M20 172h216"/></g>
+  <g fill="#3a200b"><circle cx="128" cy="21" r="6"/><circle cx="235" cy="128" r="6"/><circle cx="128" cy="235" r="6"/><circle cx="21" cy="128" r="6"/><circle cx="52" cy="52" r="6"/><circle cx="204" cy="52" r="6"/><circle cx="204" cy="204" r="6"/><circle cx="52" cy="204" r="6"/></g>
+  <path d="M62 128c24-34 76-42 112-10l26-20-7 30 7 30-26-20c-36 32-88 24-112-10z" fill="url(#gold)" stroke="#2b190a" stroke-width="6" stroke-linejoin="round"/>
+  <path d="M112 106q10 22 0 44" fill="none" stroke="#2b190a" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="88" cy="121" r="7" fill="#2b190a"/>
+</svg>

@@ -9,7 +9,7 @@ order: 1
 | Cast key | F3 | The key or mouse side button Go Fish presses to cast Fishing. Must match the game. |
 | Reel method | Right click | Right-click the marked bobber, or use the game's native Interact binding without moving the cursor. |
 | Interact key | Unset | The binding used when the reel method is Interact key. It must differ from the Cast and Stop keys. |
-| ESP32 port | Unset | `auto` to find the paired BLE keyboard on its USB cable, or its COM port such as `COM3`. Requires the Interact key reel method and keyboard bindings for Cast and Interact. |
+| ESP32 port | Off | **Auto** to find the paired board on its USB cable, or its COM port such as `COM3`. Cast and Interact go through it as key presses, and the Right click reel method moves the cursor and clicks through it. Cast and Interact need keyboard bindings. |
 | Reposition key | Unset | Enter `auto` for short WASD movements or enter a game key bound to a small step or turn. Go Fish checks the next cast after moving. Set the Logout key and both screen images first. |
 | Between-catch action | Unset | Occasionally presses a configured one-shot game action after a catch. Use an unused key and bind the desired action in the game. |
 | Target passing player | Unset | Selects a nearby friendly player offered by the game's soft targeting and continues fishing. |
@@ -24,7 +24,8 @@ order: 1
 | Pause after a catch | 8 s | Wait before the next cast. 1 to 60 seconds. |
 | Cast length | 30 s | Cast again when nothing bites within this time. 5 to 180 seconds. |
 | Move overlay | Top centre | A button, not a setting you type: drag the pill that shows a run over the game, then click **Done** to keep its place. See [Change keys and limits](../how-to/settings.md#move-the-overlay). |
-| Dark theme | on | Dark or light colours. |
+| Theme | Graphite | The window's look, words, icon and catch sound: Graphite, Tavern Ledger, Arcane Grimoire, Frostwater, Felfire Forge or Tidecaller. |
+| Theme sounds | on | Plays the theme's sound on each catch. Kept on this computer only. |
 | Share recordings | off | Shows the Recorder tab, to record yourself fishing and send it in. See [Record and share a session](../how-to/share-recordings.md). |
 
 With **Reposition key** enabled, Go Fish moves after 45–55 acknowledged reels. In

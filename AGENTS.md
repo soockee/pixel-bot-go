@@ -15,6 +15,7 @@ Go Fish is a Windows Go application for visual event and response experiments. I
 (cd frontend && npm ci && npm run build)   # frontend, embedded by go build; needed once and after frontend changes
 (cd frontend && npm run bindings)   # regenerate frontend/bindings after changing ui/desktop types or Service methods (needs wails3 CLI v3.1.0)
 go build -o pixel-bot-go.exe .      # build (console program; releases and run.ps1 add -ldflags '-H=windowsgui', so no terminal opens)
+./scripts/theme-icons.ps1            # after changing frontend/public/themes/*.svg: renders app/icons/*.png and the exe icon (rsrc_windows_amd64.syso, needs Edge and wails3)
 go test ./...                       # run all tests
 go vet ./...                        # static checks
 gofmt -l .                          # must print nothing
@@ -64,6 +65,7 @@ There is no Makefile. Without a frontend build the window is empty (`frontend/di
 - Follow `.github/instructions/go.instructions.md` (idiomatic Go, early returns, documented exports, no emoji, English comments, exactly one `package` line per file when editing).
 - Tests are table-friendly `_test.go` files beside the code (`fsm_test.go`, `engine_test.go`, `bite_detector_test.go`, presenter/model tests). Add or update tests for FSM, detector and presenter changes; run `go test ./...` before finishing.
 - Windows-specific code goes in `*_windows.go` files.
+- Themes: Go keeps the ids (`config.Themes`) and the choice; `frontend/src/themes.ts` holds each theme's words, catch sound and burst, `frontend/src/themes.css` its look (it reacts to the fishing step through `body[data-fsm]`), `frontend/public/themes/<id>.svg` its icon. A new theme touches all four plus `scripts/theme-icons.ps1` output.
 - Config changes: update `Config`, `DefaultConfig`, `Validate`, and `docs/dev/reference/config.md` together, plus `docs/reference/settings.md` when the setting is on the Settings tab.
 - Docs follow Diataxis. `docs/tutorials`, `docs/how-to`, `docs/reference` and `docs/explanation` are the player guide, plain language with nothing technical, published by GitHub Pages (Jekyll: `_config.yml`, `_layouts/`, `assets/`) at https://soockee.github.io/pixel-bot-go/. Each page has `title`, `summary` (shown as "In short") and `order` front matter. `docs/dev/` holds the technical docs in the same four folders and is not published. Put new content on the matching page or add one; keep the player guide's data sharing page true when what the app sends changes.
 

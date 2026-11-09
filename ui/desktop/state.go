@@ -43,7 +43,7 @@ type State struct {
 	ROIBox         Rect                  `json:"roiBox"`      // where the ROI sits on the capture, in screen pixels
 	DryRun         bool                  `json:"dryRun"`
 	StopKey        string                `json:"stopKey"`
-	Dark           bool                  `json:"dark"`
+	Theme          string                `json:"theme"`          // one of config.Themes
 	Debug          bool                  `json:"debug"`          // show the developer views
 	Recorder       bool                  `json:"recorder"`       // show the Recorder: debug mode or Share recordings
 	SignIn         bool                  `json:"signIn"`         // sign-in is configured; without it fishing needs no role

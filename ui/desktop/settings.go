@@ -107,11 +107,11 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 		return c, err
 	}
 	if port != "" {
-		if s.ReelMethod != config.ReelInteractKey {
-			return c, errors.New("ESP32 requires the Interact key reel method")
+		if !esp32.SupportsKey(castVK) {
+			return c, errors.New("ESP32 requires a keyboard binding for Cast")
 		}
-		if !esp32.SupportsKey(castVK) || !esp32.SupportsKey(interactVK) {
-			return c, errors.New("ESP32 requires keyboard bindings for Cast and Interact")
+		if s.ReelMethod == config.ReelInteractKey && !esp32.SupportsKey(interactVK) {
+			return c, errors.New("ESP32 requires a keyboard binding for Interact")
 		}
 	}
 	check(slices.Contains(detect.LocatorNames(), s.Locator), "Locator")

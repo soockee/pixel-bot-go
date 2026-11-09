@@ -53,12 +53,12 @@ func TestValidateClamps(t *testing.T) {
 }
 
 func TestValidateFallsBackToTheDefaults(t *testing.T) {
-	c := &Config{Threshold: 7}
+	c := &Config{Threshold: 7, Theme: "dark"}
 	if err := c.Validate(); err != nil {
 		t.Fatal(err)
 	}
 	d := DefaultConfig()
-	if c.MinScale != d.MinScale || c.ScaleStep != d.ScaleStep || c.Threshold != d.Threshold || c.Stride != d.Stride {
+	if c.MinScale != d.MinScale || c.ScaleStep != d.ScaleStep || c.Threshold != d.Threshold || c.Stride != d.Stride || c.Theme != d.Theme {
 		t.Errorf("got %+v, want the defaults", c)
 	}
 	if c.MaxScale < c.MinScale {
