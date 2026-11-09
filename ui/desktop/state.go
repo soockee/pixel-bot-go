@@ -49,7 +49,7 @@ type State struct {
 	SignIn         bool                  `json:"signIn"`         // sign-in is configured; without it fishing needs no role
 	Account        string                `json:"account"`        // signed-in Google email, or ""
 	Role           string                `json:"role"`           // the account's role, "" when nobody gave it one
-	CanFish        bool                  `json:"canFish"`        // the role may start a run (dry runs need no role)
+	CanFish        bool                  `json:"canFish"`        // reported role permission; fishing does not depend on it
 	CanUpload      bool                  `json:"canUpload"`      // the role may upload recordings
 	Uploading      string                `json:"uploading"`      // recording being uploaded, or ""
 	Update         string                `json:"update"`         // newer release tag on offer, or ""

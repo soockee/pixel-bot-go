@@ -1,6 +1,6 @@
 ---
 title: "Sign in"
-summary: "Sign in with your Google account; the role the owner gives it decides whether you may fish and share recordings."
+summary: "Sign in with your Google account to share recordings. Fishing does not require an account."
 order: 2
 ---
 
@@ -10,18 +10,18 @@ order: 2
 
 The top bar now shows your email and your role, for example `you@gmail.com · angler`.
 
-## No role?
-
-A new account has no role, and **Start fishing** stays disabled. Ask the owner to give your account a role, then click **Sign out** and sign in again.
+## Account roles
 
 | Role | May |
 | --- | --- |
-| angler | fish |
+| angler | fishing is available without signing in; this role alone does not allow uploads |
 | uploader | share recordings |
 | owner | everything |
 
+Signing in is optional for fishing. Uploading recordings still requires the `recordings.upload` permission.
+
 ## Staying signed in
 
-Go Fish remembers your sign-in, so you only do this once per PC. The saved sign-in is encrypted so only your Windows user can read it. **Sign out** forgets it, and stops fishing if it is running.
+Go Fish remembers your sign-in, so you only do this once per PC. The saved sign-in is encrypted so only your Windows user can read it. **Sign out** forgets it. Fishing continues because it does not depend on your account.
 
 Read [Accounts and data sharing](../explanation/data-sharing.md) for what your sign-in is used for.

@@ -27,9 +27,8 @@ func TestSetupSteps(t *testing.T) {
 		{"addon missing", State{GameFound: true, Addon: "missing"}, false, 1, "Install", "sets up your Cast key"},
 		{"addon outdated", State{GameFound: true, Addon: "outdated"}, false, 1, "Update", "/reload"},
 		{"everything in place", ready, true, 1, "", "/reload"},
-		{"sign-in needed", withSignIn(ready, "", false), false, 2, "Sign in", "Sign in with Google"},
-		{"account has no role", withSignIn(ready, "a@b.c", false), false, 2, "", "no role"},
-		{"account may fish", withSignIn(ready, "a@b.c", true), true, 2, "", ""},
+		{"sign-in not required", withSignIn(ready, "", false), true, 0, "", ""},
+		{"account role not required", withSignIn(ready, "a@b.c", false), true, 0, "", ""},
 		{"a dry run needs none of it", State{DryRun: true}, true, 0, "", ""},
 	}
 	for _, tc := range cases {
@@ -51,10 +50,10 @@ func withSignIn(s State, account string, canFish bool) State {
 	return s
 }
 
-func TestSetupHidesTheAccountStepWithoutSignIn(t *testing.T) {
+func TestSetupDoesNotRequireAnAccount(t *testing.T) {
 	steps, done := setupSteps(State{GameFound: true, Addon: "current"})
-	if !done || steps[2].ID != "" {
-		t.Fatalf("without sign-in the account step must be an empty slot and setup done: %+v, done %v", steps, done)
+	if !done || len(steps) != 2 {
+		t.Fatalf("setup must be complete without sign-in: %+v, done %v", steps, done)
 	}
 }
 

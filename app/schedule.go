@@ -7,7 +7,6 @@ import (
 
 	"github.com/soocke/pixel-bot-go/domain/action"
 	"github.com/soocke/pixel-bot-go/domain/fishing"
-	"github.com/soocke/pixel-bot-go/internal/cloud"
 	"github.com/soocke/pixel-bot-go/internal/esp32"
 )
 
@@ -96,7 +95,7 @@ func (a *app) tickSchedule(now time.Time) {
 	stopped := a.scheduleStop.Swap(false)
 	c := a.container
 	failedReposition := !c.Capture.Enabled() && c.FSM.TakeRepositionLogout()
-	if stopped || a.cloud != nil && !c.Config.DryRun && !a.can(cloud.PermFish) {
+	if stopped {
 		a.recoveryAllowed = false
 		if a.schedule != nil {
 			a.stopSchedule("Schedule stopped")

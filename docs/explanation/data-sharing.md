@@ -41,4 +41,4 @@ Recordings are real examples of bobbers and bites in different places, light and
 
 ## Your account and role
 
-Signing in tells Go Fish who you are, so the owner can decide who may fish and who may share recordings. Go Fish asks Google only for your email address. Your role is kept on Go Fish's server; your PC keeps only an encrypted sign-in so you don't have to sign in every time. **Sign out** deletes it.
+Signing in tells Go Fish who you are so the service can check whether you may share recordings. Fishing does not require an account. Go Fish asks Google only for your email address. Your role is kept on Go Fish's server; your PC keeps only an encrypted sign-in so you don't have to sign in every time. **Sign out** deletes it.

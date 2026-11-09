@@ -238,13 +238,6 @@ func (a *app) toggleCapture() {
 			c.View.SetStatus("Stop recording before starting a run")
 			return
 		}
-		// A dry run sends no input, so tests and agents need no account; without
-		// a configured sign-in there are no roles to check.
-		if !c.Config.DryRun && a.cloud != nil && !a.can(cloud.PermFish) {
-			a.logger.Warn("start refused: the account may not fish", "signed_in", a.session != nil)
-			c.View.SetStatus("Sign in with an account whose role may fish")
-			return
-		}
 		if err := c.bindGameWindow(); err != nil {
 			c.View.SetStatus("Cannot start: " + err.Error())
 			return
