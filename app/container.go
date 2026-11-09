@@ -380,8 +380,11 @@ func (c *AppContainer) startProblem() string {
 // prepareRecording builds a recording of the game window in a new timestamped
 // folder.
 func (c *AppContainer) prepareRecording() (presenter.RecordJob, error) {
-	if err := c.bindGameWindow(); err != nil {
-		return presenter.RecordJob{}, err
+	// A run already holds the game window; a recording beside it uses the same.
+	if c.FSM.Current() == fishing.StateHalt || c.gameWindow.Load() == nil {
+		if err := c.bindGameWindow(); err != nil {
+			return presenter.RecordJob{}, err
+		}
 	}
 	if problem := c.startProblem(); problem != "" {
 		return presenter.RecordJob{}, errors.New(problem)

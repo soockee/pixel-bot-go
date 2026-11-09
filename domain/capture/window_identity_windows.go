@@ -14,6 +14,8 @@ var (
 	procGetWindow     = user32.NewProc("GetWindow")
 	procGetWindowRect = user32.NewProc("GetWindowRect")
 	procWindowVisible = user32.NewProc("IsWindowVisible")
+	// GetWindowDisplayAffinity tells a window kept out of screen captures, such as Go Fish's overlay.
+	procDisplayAffinity = user32.NewProc("GetWindowDisplayAffinity")
 )
 
 // ErrFrameUnavailable marks a recording frame skipped to protect privacy.
@@ -97,6 +99,9 @@ func (w WindowIdentity) RecordingClear(area image.Rectangle) bool {
 		if visible == 0 {
 			continue
 		}
+		if excludedFromCapture(hwnd) {
+			continue // captures never show it, so it hides nothing of the game
+		}
 		var rect struct{ Left, Top, Right, Bottom int32 }
 		ok, _, _ := procGetWindowRect.Call(hwnd, uintptr(unsafe.Pointer(&rect)))
 		if ok == 0 || area.Overlaps(image.Rect(int(rect.Left), int(rect.Top), int(rect.Right), int(rect.Bottom))) {
@@ -104,4 +109,13 @@ func (w WindowIdentity) RecordingClear(area image.Rectangle) bool {
 		}
 	}
 	return false
+}
+
+// excludedFromCapture reports whether hwnd is kept out of screen captures
+// (WDA_EXCLUDEFROMCAPTURE), like Go Fish's overlay over the game.
+func excludedFromCapture(hwnd uintptr) bool {
+	const excludeFromCapture = 0x11
+	var affinity uint32
+	ok, _, _ := procDisplayAffinity.Call(hwnd, uintptr(unsafe.Pointer(&affinity)))
+	return ok != 0 && affinity == excludeFromCapture
 }

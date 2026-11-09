@@ -198,13 +198,52 @@ local function ShowOutcome(code)
 end
 
 -- The game's messages for a fish that got away and for a reel with nothing on
--- the hook, as the game names them where it has them, else in English.
-local function Message(global, english)
-    local text = _G[global];
-    return (type(text) == "string" and text ~= "" and text or english):lower():gsub("[%.!]+$", "");
+-- the hook: the client's own wording where it has a name for it, and the
+-- English text, lower case without the closing punctuation.
+local function Normal(text)
+    return (text:lower():gsub("[%s%.!]+$", ""));
 end
-local GOT_AWAY = Message("ERR_FISH_ESCAPED", "Your fish got away!");
-local NOT_HOOKED = Message("ERR_FISH_NOT_HOOKED", "No fish are hooked.");
+local function Messages(english, ...)
+    local list = { Normal(english) };
+    for _, name in ipairs({ ... }) do
+        local text = _G[name];
+        if type(text) == "string" and text ~= "" then
+            table.insert(list, Normal(text));
+        end
+    end
+    return list;
+end
+local GOT_AWAY = Messages("Your fish got away!", "ERR_FISH_ESCAPED", "SPELL_FAILED_FISH_ESCAPED");
+local NOT_HOOKED = Messages("No fish are hooked.", "ERR_FISH_NOT_HOOKED", "SPELL_FAILED_NO_FISH");
+
+local function Matches(text, list)
+    for _, message in ipairs(list) do
+        if text:find(message, 1, true) then
+            return true;
+        end
+    end
+    return false;
+end
+
+-- Reads every message the game shows in its yellow error text, whichever
+-- event brought it, and reports the two fishing ones. The same outcome twice
+-- within a second is one message shown twice.
+local lastOutcome, lastOutcomeAt = 0, 0;
+local function OnErrorText(_, text)
+    if type(text) ~= "string" then
+        return;
+    end
+    text = Normal(text);
+    local code = Matches(text, GOT_AWAY) and OUTCOME_GOT_AWAY or Matches(text, NOT_HOOKED) and OUTCOME_NOT_HOOKED;
+    if not code or code == lastOutcome and GetTime() - lastOutcomeAt < 1 then
+        return;
+    end
+    lastOutcome, lastOutcomeAt = code, GetTime();
+    ShowOutcome(code);
+end
+if UIErrorsFrame then
+    hooksecurefunc(UIErrorsFrame, "AddMessage", OnErrorText);
+end
 local function Layout()
 	local px = PixelSize(marker);
 	marker:SetSize(BOX * px, BOX * px);
@@ -496,19 +535,11 @@ function handlers.NAME_PLATE_UNIT_REMOVED(unit)
 	end
 end
 
--- arg1 is the message type and arg2 the text on current clients; older ones
--- pass only the text.
+-- The error event as well, for a client whose error frame shows messages some
+-- other way; OnErrorText takes the same message only once. arg1 is the
+-- message type and arg2 the text on current clients; older ones pass only the text.
 function handlers.UI_ERROR_MESSAGE(arg1, arg2)
-	local text = type(arg2) == "string" and arg2 or arg1;
-	if type(text) ~= "string" then
-		return;
-	end
-	text = text:lower():gsub("[%.!]+$", "");
-	if text == GOT_AWAY then
-		ShowOutcome(OUTCOME_GOT_AWAY);
-	elseif text == NOT_HOOKED then
-		ShowOutcome(OUTCOME_NOT_HOOKED);
-	end
+	OnErrorText(nil, type(arg2) == "string" and arg2 or arg1);
 end
 
 function handlers.LOOT_OPENED()
