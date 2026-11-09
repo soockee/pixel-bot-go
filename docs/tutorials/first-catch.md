@@ -16,15 +16,15 @@ Start World of Warcraft: Forever first. Then right-click the Go Fish exe and cho
 
 ## 3. Add the addon to the game
 
-Go Fish finds your bobber by the pink brackets the **Bobber Marker** addon draws around it. Open **Settings** in Go Fish, click **Install** under **Addon**, then type `/reload` in the game. More in [Install the Bobber Marker addon](../how-to/install-addon.md).
+Go Fish finds your bobber by the pink brackets the **Bobber Marker** addon draws around it. The **Fishing** tab shows a **Get ready** checklist of what is still missing, with a button for each. Click **Install** there, or under **Addon** in **Settings**, then type `/reload` in the game. The checklist goes away when everything is in place. More in [Install the Bobber Marker addon](../how-to/install-addon.md).
 
 ## 4. Sign in
 
-Click **Sign in with Google** in the top bar. Your browser opens; pick your account and return to Go Fish. The top bar now shows your email and your role. If it says *no role*, ask the owner to give your account one; see [Sign in](../how-to/sign-in.md).
+Click **Sign in with Google** in the top bar, or in the checklist. Your browser opens; pick your account and return to Go Fish. The top bar now shows your email and your role. If it says *no role*, ask the owner to give your account one; see [Sign in](../how-to/sign-in.md).
 
-## 5. Tell Go Fish your Fishing key
+## 5. Choose your Fishing key
 
-Open **Settings**. Under **Keys**, click **Cast key** and press the key you cast Fishing with in the game, for example `3` or `F3`. It saves at once.
+Open **Settings**. Under **Keys**, click **Cast key** and press the key you want Go Fish to cast with, for example `3` or `F3`. It saves at once. You don't set anything up in the game: the addon makes a **Fishing** macro and binds this key to it when you install or update the addon and `/reload`. If you change the key later, click **Update** under **Addon** and `/reload` again.
 
 ## 6. Fish
 

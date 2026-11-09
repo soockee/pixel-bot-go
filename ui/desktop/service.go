@@ -7,6 +7,7 @@ import (
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/detect"
+	"github.com/soocke/pixel-bot-go/internal/cloud"
 	"github.com/soocke/pixel-bot-go/internal/recorder"
 )
 
@@ -23,7 +24,7 @@ type Commands struct {
 	// sign-in waits for the browser, an upload and an update for the network.
 	SignIn  func() error
 	SignOut func()
-	Upload  func(dir string) error
+	Upload  func(dir, fingerprint string, frames, audio bool) error
 	Update  func() error
 	// CheckUpdate asks GitHub for the latest release; it also waits for the network.
 	CheckUpdate  func() error
@@ -32,6 +33,8 @@ type Commands struct {
 	InstallAddon func() error
 	// SetTheme shows the theme's icon on the window and the taskbar.
 	SetTheme func(theme string)
+	// MoveOverlay starts or ends placing the overlay; ending saves its place.
+	MoveOverlay func(on bool) error
 }
 
 // Service is what the frontend calls. Every method runs on the UI loop, so
@@ -107,6 +110,24 @@ func (s *Service) SetWindow(title string) {
 	})
 }
 
+// CheckGame looks for the game window, for the setup steps. Unless the person
+// chose a window, it selects the game as soon as it opens, so starting the game
+// after Go Fish needs no click. The frontend calls it now and then.
+func (s *Service) CheckGame() {
+	titles := s.cmds.ListWindows()
+	_ = s.do(func() {
+		current := s.view.State().Window
+		if !s.picked && !s.cmds.Running() && current != defaultWindow && slices.Contains(titles, defaultWindow) {
+			s.cmds.SetWindow(defaultWindow)
+			current = defaultWindow
+		}
+		s.view.SetGameFound(slices.Contains(titles, current))
+		if s.cmds.CheckAddon != nil {
+			s.cmds.CheckAddon() // the game's folder comes from its window
+		}
+	})
+}
+
 // ToggleCapture starts or stops the run.
 func (s *Service) ToggleCapture() { _ = s.do(s.cmds.ToggleCapture) }
 
@@ -139,15 +160,27 @@ func (s *Service) SaveSettings(values Settings) (saved Settings, err error) {
 			err = errors.New("the Interact key matches the active Stop hotkey")
 			return
 		}
-		if next.Schedule && sameKey(next.LogoutKey, s.view.State().StopKey) {
+		if (next.Schedule || next.RepositionKey != "") && sameKey(next.LogoutKey, s.view.State().StopKey) {
 			err = errors.New("the Logout key matches the active Stop hotkey")
 			return
+		}
+		for _, optional := range []struct{ key, label string }{
+			{next.IdleKey, "Between-catch action"}, {next.TargetPlayerKey, "Target passing player"},
+			{next.RepositionKey, "Reposition key"},
+		} {
+			if optional.key != "" && sameKey(optional.key, s.view.State().StopKey) {
+				err = errors.New("the " + optional.label + " key matches the active Stop hotkey")
+				return
+			}
 		}
 		if err = next.Save(s.cfgPath); err != nil {
 			s.logger.Error("config save failed", "error", err)
 			return
 		}
 		*s.cfg = next
+		if s.cmds.CheckAddon != nil {
+			s.cmds.CheckAddon() // the addon binds the Cast and Interact keys, so a change makes it outdated
+		}
 		s.view.SetRecorder(next.RecorderShown())
 		s.logger.Info("config saved", "path", s.cfgPath)
 		s.view.SetStatus("Settings saved")
@@ -187,13 +220,32 @@ func (s *Service) SignIn() error { return s.cmds.SignIn() }
 // SignOut forgets the signed-in account.
 func (s *Service) SignOut() { s.cmds.SignOut() }
 
-// Upload sends recording name to the upload service and returns when done.
-func (s *Service) Upload(name string) error {
+// ReviewUpload inspects the local recording before any upload request.
+func (s *Service) ReviewUpload(name string) (cloud.RecordingReview, error) {
+	dir, err := s.recordings.path(name)
+	if err != nil {
+		return cloud.RecordingReview{}, err
+	}
+	var active bool
+	if err := s.do(func() { active = s.view.State().RecordingName == name }); err != nil {
+		return cloud.RecordingReview{}, err
+	}
+	if active {
+		return cloud.RecordingReview{}, errors.New("stop recording before reviewing the upload")
+	}
+	return cloud.ReviewRecording(dir)
+}
+
+// Upload sends a key-free reviewed copy with the approved media.
+func (s *Service) Upload(name, fingerprint string, frames, audio bool) error {
 	dir, err := s.recordings.path(name)
 	if err != nil {
 		return err
 	}
-	return s.cmds.Upload(dir)
+	if fingerprint == "" {
+		return errors.New("review the recording before uploading")
+	}
+	return s.cmds.Upload(dir, fingerprint, frames, audio)
 }
 
 // Update downloads, verifies and installs the newer release, then restarts.
@@ -211,6 +263,21 @@ func (s *Service) CheckAddon() { _ = s.do(s.cmds.CheckAddon) }
 // InstallAddon installs or updates the Bobber Marker addon in the game.
 func (s *Service) InstallAddon() (err error) {
 	if doErr := s.do(func() { err = s.cmds.InstallAddon() }); doErr != nil {
+		return doErr
+	}
+	return err
+}
+
+// MoveOverlay starts placing the overlay, where the person drags it over the
+// game, or ends it and keeps the place. A run in progress refuses it.
+func (s *Service) MoveOverlay(on bool) (err error) {
+	if doErr := s.do(func() {
+		if on && s.cmds.Running() {
+			err = errors.New("stop the run to place the overlay")
+			return
+		}
+		err = s.cmds.MoveOverlay(on)
+	}); doErr != nil {
 		return doErr
 	}
 	return err

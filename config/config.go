@@ -10,15 +10,15 @@ import (
 
 // CheckSchedule validates the settings needed to run a play and break cycle.
 func (c Config) CheckSchedule() error {
-	if !c.Schedule {
+	if !c.Schedule && c.RepositionKey == "" {
 		return nil
 	}
-	if c.PlayMinMinutes < 1 || c.PlayMaxMinutes < c.PlayMinMinutes || c.PlayMaxMinutes > 240 ||
-		c.BreakMinMinutes < 1 || c.BreakMaxMinutes < c.BreakMinMinutes || c.BreakMaxMinutes > 240 {
+	if c.Schedule && (c.PlayMinMinutes < 1 || c.PlayMaxMinutes < c.PlayMinMinutes || c.PlayMaxMinutes > 240 ||
+		c.BreakMinMinutes < 1 || c.BreakMaxMinutes < c.BreakMinMinutes || c.BreakMaxMinutes > 240) {
 		return errors.New("set ordered play and break ranges from 1 to 240 minutes")
 	}
 	if c.LogoutKey == "" || c.CharacterPNG == "" || c.InWorldPNG == "" {
-		return errors.New("set the Logout key and both screen images before enabling the schedule")
+		return errors.New("set the Logout key and both screen images for scheduled breaks or automatic logout after repositioning")
 	}
 	return nil
 }
@@ -28,6 +28,7 @@ func (c Config) CheckSchedule() error {
 const FilePath = "pixle_bot_config.json"
 
 const (
+	RepositionAuto  = "AUTO"         // use the built-in movement sequence
 	ReelRightClick  = "right_click"  // Reel by clicking the bobber.
 	ReelInteractKey = "interact_key" // Reel with the game's native Interact binding.
 )
@@ -65,6 +66,12 @@ type Config struct {
 	ESP32Port string `json:"esp32_port,omitempty"`
 	// StopKey is the global hotkey that halts the bot. Read at startup.
 	StopKey string `json:"stop_key"`
+	// IdleKey is an optional non-toggle game action between catches.
+	IdleKey string `json:"idle_key,omitempty"`
+	// RepositionKey nudges the character between catches, before a verification cast.
+	RepositionKey string `json:"reposition_key,omitempty"`
+	// TargetPlayerKey selects the nearby friendly player reported by the addon.
+	TargetPlayerKey string `json:"target_player_key,omitempty"`
 	// MaxFailedCasts halts the bot after this many casts in a row end without a reel.
 	MaxFailedCasts int `json:"max_failed_casts"`
 	// MaxSessionMinutes halts the bot at the first cast after this long.
@@ -107,6 +114,13 @@ type Config struct {
 
 	// Theme is the window's look, one of Themes.
 	Theme string `json:"theme"`
+
+	// OverlayX and OverlayY place the overlay's status pill on the game window,
+	// each as a share of the free space: 0 puts it against the left or top edge,
+	// 1 against the right or bottom edge, 0.5 in the middle. The place holds when
+	// the window changes size, and no place leaves the pill outside the window.
+	OverlayX float64 `json:"overlay_x"`
+	OverlayY float64 `json:"overlay_y"`
 }
 
 // Themes are the window's looks; the first is the default.
@@ -133,18 +147,20 @@ func DefaultConfig() *Config {
 		Locator:                "marker",
 		BiteDetector:           "motion",
 		RecordDir:              "datasets",
-		RecordKeys:             true,
+		RecordKeys:             false,
 		ROISizePx:              80,
 		MaxCastDurationSeconds: 30,
 		CooldownSeconds:        8,
 		Theme:                  Themes[0],
+		OverlayX:               0.5,
+		OverlayY:               0.01,
 	}
 }
 
-// Validate clamps/normalizes values to safe ranges.
 // RecorderShown reports whether the window offers the Recorder.
 func (c *Config) RecorderShown() bool { return c.Debug || c.ShareRecordings }
 
+// Validate clamps/normalizes values to safe ranges.
 func (c *Config) Validate() error {
 	d := DefaultConfig()
 	if c.MinScale <= 0 {
@@ -173,6 +189,15 @@ func (c *Config) Validate() error {
 	}
 	c.InteractKey = strings.TrimSpace(c.InteractKey)
 	c.ESP32Port = strings.ToUpper(strings.TrimSpace(c.ESP32Port))
+	if c.OverlayX < 0 || c.OverlayX > 1 {
+		c.OverlayX = d.OverlayX
+	}
+	if c.OverlayY < 0 || c.OverlayY > 1 {
+		c.OverlayY = d.OverlayY
+	}
+	c.IdleKey = strings.ToUpper(strings.TrimSpace(c.IdleKey))
+	c.RepositionKey = strings.ToUpper(strings.TrimSpace(c.RepositionKey))
+	c.TargetPlayerKey = strings.ToUpper(strings.TrimSpace(c.TargetPlayerKey))
 	if c.StopKey == "" {
 		c.StopKey = d.StopKey
 	}

@@ -55,7 +55,7 @@ func TestMoveToReachesTargetDespiteAcceleration(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			port := &mousePort{gain: gain, x: 900, y: 100}
-			k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port})}
+			k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port}), pointer: true}
 			pos := func() (int, int, bool) { return port.x, port.y, true }
 			if err := k.MoveTo(image.Pt(120, 640), pos); err != nil {
 				t.Fatalf("%v after %d moves, pointer at %d,%d", err, port.moves, port.x, port.y)

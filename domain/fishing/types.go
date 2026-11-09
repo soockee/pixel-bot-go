@@ -43,18 +43,31 @@ func (s FishingState) String() string {
 
 // ActionCallbacks exposes OS actions used by the fishing logic.
 type ActionCallbacks struct {
-	PressKey   func(vk byte)
+	PressKey   func(vk byte) bool
 	MoveCursor func(x, y int)
-	ClickRight func()
+	ClickRight func() bool
 	ParseVK    func(key string) (byte, bool)
+	// CanAct checks focus just before dispatching an optional action.
+	CanAct func() bool
+	// DragCamera makes a guarded horizontal drag when there is room in the client.
+	DragCamera func(dx int) (attempted, moved bool)
+	// DragHardwareCamera sends a drag through the ESP32 when supported.
+	DragHardwareCamera func(dx int) (attempted, moved bool)
 	// OpenKeyboard validates and opens the external keyboard for one run.
 	OpenKeyboard func(config.Config) (closeKeyboard func(), err error)
-	TapKeyboard  func(vk byte) error
+	TapKeyboard  func(vk byte, hold time.Duration) error
 
 	// ObserveCast and ObserveReel run when a cast or reel is scheduled.
 	// Each can return a callback to observe its eventual dispatch.
 	ObserveCast func() func()
 	ObserveReel func() func()
+
+	// ReelRoll optionally supplies a pseudorandom draw in [0, n) for reel variation.
+	ReelRoll func(n int) int
+	// RepositionRoll varies live settle times and camera distances.
+	RepositionRoll func(n int) int
+	// Approach selects a waiting position after the locator locks.
+	Approach func(center image.Point, box image.Rectangle) (image.Point, bool)
 
 	// PlanReel schedules a timed hold and cooldown. A zero cooldown keeps the
 	// configured value. Without HoldRight, the button hold is simulated.

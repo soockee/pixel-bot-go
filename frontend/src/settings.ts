@@ -21,13 +21,16 @@ const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] 
       { key: "castKey", label: "Cast key", hint: "Click to set the key or mouse side button you use to cast Fishing in game.", kind: "key" },
       { key: "reelMethod", label: "Reel method", hint: "Right-click the bobber, or use the game's Interact key without moving the cursor.", kind: "reelMethod" },
       { key: "interactKey", label: "Interact key", hint: "Set the same binding as in the game before selecting Interact key as your reel method.", kind: "key" },
-      { key: "esp32Port", label: "ESP32 port", hint: "Pick the paired board's COM port to send keys, cursor moves and right clicks through it. Off uses Windows input.", kind: "port" },
+      { key: "esp32Port", label: "ESP32 port", hint: "Pick Auto to find the paired board, or its COM port, to send keys, cursor moves and right clicks through it. Off uses Windows input.", kind: "port" },
+      { key: "targetPlayerKey", label: "Target passing player", hint: "Optional unused key, such as F8. Update Bobber Marker after setting it. Clear to disable.", kind: "text" },
+      { key: "idleKey", label: "Between-catch action", hint: "Optional key for a one-shot game action. Clear to disable.", kind: "text" },
       { key: "stopKey", label: "Stop key", hint: "Stops fishing from anywhere, applies after a restart", kind: "key" },
     ],
   },
   {
     title: "Run",
     fields: [
+      { key: "repositionKey", label: "Reposition key", hint: "Enter auto for WASD and camera drags on supported input modes, or enter a bound movement key. Requires the Logout key and both screen images below. Clear to disable.", kind: "text" },
       { key: "maxSessionMinutes", label: "Session length", hint: "Stop at the first cast after this long", kind: "slider", min: 5, max: 240, step: 5, unit: "min" },
       { key: "maxFailedCasts", label: "Casts without a bite", hint: "Stop after this many casts in a row without a catch", kind: "slider", min: 1, max: 20, step: 1 },
       { key: "cooldownSeconds", label: "Pause after a catch", hint: "Wait before the next cast", kind: "slider", min: 1, max: 60, step: 1, unit: "s" },
@@ -260,7 +263,7 @@ export function setupSettings(): (s: State) => void {
     let value = "";
     async function load() {
       const ports = (await Service.ESP32Ports()) ?? [];
-      select.replaceChildren(new Option("Off, use Windows input", ""), ...ports.map((p) => new Option(p, p)));
+      select.replaceChildren(new Option("Off, use Windows input", ""), new Option("Auto, find the board", "AUTO"), ...ports.map((p) => new Option(p, p)));
       select.value = value;
     }
     select.addEventListener("mousedown", () => void load());

@@ -27,6 +27,7 @@ func (v *View) State() State { return v.state }
 
 // Flush sends the state if it changed since the last Flush.
 func (v *View) Flush() {
+	v.state.Setup, v.state.SetupDone = setupSteps(v.state)
 	if v.state == v.sent {
 		return
 	}
@@ -55,8 +56,9 @@ func (v *View) SetRecording(dir string) {
 func (v *View) SetSession(session, _ time.Duration) { v.state.SessionSeconds = int(session.Seconds()) }
 
 // SetRun shows the run's counts and the limits that stop it.
-func (v *View) SetRun(casts, reels, failedInRow, maxFailed, sessionLimit int) {
+func (v *View) SetRun(casts, reels, attempts, inputs, failedInRow, maxFailed, sessionLimit int) {
 	v.state.Casts, v.state.Reels, v.state.FailedInRow = casts, reels, failedInRow
+	v.state.ReelAttempts, v.state.ReelInputs = attempts, inputs
 	v.state.MaxFailed, v.state.SessionLimit = maxFailed, sessionLimit
 }
 
@@ -88,6 +90,9 @@ func (v *View) PreviewReset() {
 
 // SetWindow shows the target window title.
 func (v *View) SetWindow(title string) { v.state.Window = title }
+
+// SetGameFound shows whether the selected window is open.
+func (v *View) SetGameFound(found bool) { v.state.GameFound = found }
 
 // SetAccount shows the signed-in account and what its role may do; an empty
 // email means signed out.
@@ -131,6 +136,11 @@ func (v *View) SetAddon(dir, status string) { v.state.AddonDir, v.state.Addon = 
 
 // SetAddonVersion shows the version of the addon the app carries.
 func (v *View) SetAddonVersion(version string) { v.state.AddonVersion = version }
+
+// SetOverlay shows where the overlay pill sits, and whether it is being moved.
+func (v *View) SetOverlay(x, y float64, moving bool) {
+	v.state.OverlayX, v.state.OverlayY, v.state.OverlayMove = x, y, moving
+}
 
 // SetVersion shows the running build's version.
 func (v *View) SetVersion(version string) { v.state.Version = version }

@@ -22,6 +22,7 @@ type Lifecycle interface {
 type CaptureFSM interface {
 	EventAwaitFocus()
 	EventHalt()
+	HaltReason() string // why the run halted on its own, "" when the person stopped it
 }
 
 // CaptureView updates UI elements affected by capture toggling.
@@ -80,10 +81,15 @@ func (c *CapturePresenter) OnState(_, next fishing.FishingState) {
 	}
 }
 
-// Tick stops capture after the FSM halted on its own.
+// Tick stops capture after the FSM halted on its own, and says why when the
+// FSM knows: a run that just stops leaves the person guessing.
 func (c *CapturePresenter) Tick() {
 	if c.halted.Swap(false) {
+		reason := c.fsm.HaltReason()
 		c.Disable()
+		if reason != "" {
+			c.view.SetStatus("Stopped: " + reason)
+		}
 	}
 }
 

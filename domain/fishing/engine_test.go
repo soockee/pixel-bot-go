@@ -5,6 +5,7 @@ import (
 	"errors"
 	"image"
 	"log/slog"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -216,7 +217,7 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 					log.add("open")
 					return func() { log.add("close") }, nil
 				}
-				actions.TapKeyboard = func(vk byte) error {
+				actions.TapKeyboard = func(vk byte, _ time.Duration) error {
 					switch vk {
 					case 0x72:
 						log.add("cast")
@@ -384,4 +385,146 @@ func TestEngineReelsWhenTheDetectorHearsABite(t *testing.T) {
 		wantState(t, fsm, StateCooldown)
 		wantActions(t, log, "move", "move", "click")
 	})
+}
+
+// TestFakeGameESP32CameraRecovery gives the scene a fishable view only after
+// reversing the first drag. An obstructed scene never produces a bobber.
+func TestFakeGameESP32CameraRecovery(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		blocked bool
+	}{
+		{name: "reverse drag finds water"},
+		{name: "water remains obstructed", blocked: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				var frames *sceneFrames
+				var drags []int
+				var steps []byte
+				var heading, trialCasts, reels int
+				var firstMove time.Time
+				actions := ActionCallbacks{
+					ParseVK: func(key string) (byte, bool) {
+						switch key {
+						case "F3":
+							return 0x72, true
+						case "F10":
+							return 0x79, true
+						}
+						if len(key) == 1 {
+							return key[0], true
+						}
+						return 0, false
+					},
+					OpenKeyboard: func(config.Config) (func(), error) {
+						return func() {}, nil
+					},
+					PressKey:   func(byte) bool { t.Error("used Windows keyboard input"); return false },
+					MoveCursor: func(int, int) { t.Error("used Windows cursor input") },
+					DragCamera: func(int) (bool, bool) {
+						t.Error("used a Windows camera drag")
+						return true, false
+					},
+					DragHardwareCamera: func(dx int) (bool, bool) {
+						if firstMove.IsZero() {
+							firstMove = time.Now()
+						}
+						drags = append(drags, dx)
+						heading += dx
+						return true, true
+					},
+					TapKeyboard: func(vk byte, _ time.Duration) error {
+						switch vk {
+						case 'F':
+							reels++
+							frames.set(fakegame.PhaseEmpty)
+						case 0x72:
+							if reels != 0 {
+								trialCasts++
+							}
+							if reels == 0 || !tc.blocked && len(drags) != 0 && heading == 0 {
+								// Simulate the cast animation before the new marker appears.
+								time.AfterFunc(200*time.Millisecond, func() { frames.set(fakegame.PhaseBobber) })
+							}
+						case 'W', 'A', 'S', 'D':
+							if firstMove.IsZero() {
+								firstMove = time.Now()
+							}
+							steps = append(steps, vk)
+						default:
+							t.Errorf("unexpected ESP32 key: %x", vk)
+						}
+						return nil
+					},
+				}
+				engine, fsm, scene, _ := newSceneEngine(t, actions)
+				frames = scene
+				render := frames.render
+				rendered := map[fakegame.Phase]*image.RGBA{}
+				for _, phase := range []fakegame.Phase{fakegame.PhaseEmpty, fakegame.PhaseBobber, fakegame.PhaseSplash} {
+					rendered[phase] = render(phase)
+				}
+				frames.render = func(phase fakegame.Phase) *image.RGBA { return rendered[phase] }
+				frames.set(fakegame.PhaseEmpty)
+				engine.cfg.ReelMethod = config.ReelInteractKey
+				engine.cfg.InteractKey = "F"
+				engine.cfg.ESP32Port = "COM3"
+				engine.cfg.RepositionKey = config.RepositionAuto
+
+				defer fsm.Close()
+				startEngine(t, engine)
+				defer engine.Stop()
+				fsm.EventAwaitFocus()
+				fsm.EventFocusAcquired()
+				wantState(t, fsm, StateSearching)
+				// Exercise recovery immediately. The FSM tests cover the normal
+				// 45–55 reel trigger and the retry budget.
+				fsm.nextReposition = 1
+				fsm.ForceCast()
+				time.Sleep(500 * time.Millisecond)
+				wantState(t, fsm, StateMonitoring)
+				frames.set(fakegame.PhaseSplash)
+				time.Sleep(500 * time.Millisecond)
+				wantState(t, fsm, StateCooldown)
+				if fsm.Stats().Reels != 1 {
+					t.Fatal("the fake game did not produce the initial catch")
+				}
+				for range 400 {
+					time.Sleep(100 * time.Millisecond)
+					if fsm.Current() == StateMonitoring || fsm.Current() == StateHalt {
+						break
+					}
+				}
+				synctest.Wait()
+				if firstMove.IsZero() {
+					t.Fatal("the fake game received no reposition input")
+				}
+				t.Logf("test casts=%d, WASD=%q, drags=%v, simulated recovery=%s",
+					trialCasts, steps, drags, time.Since(firstMove))
+				if !slices.Equal(drags, []int{12, -12}) || heading != 0 {
+					t.Fatalf("expected opposite ESP32 drags, got %v at heading %d", drags, heading)
+				}
+				if tc.blocked {
+					wantState(t, fsm, StateHalt)
+					if trialCasts < 4 || trialCasts > 6 || !fsm.TakeRepositionLogout() || fsm.TakeRepositionLogout() {
+						t.Fatalf("expected one logout request after 4–6 attempts, got %d attempts", trialCasts)
+					}
+					return
+				}
+				wantState(t, fsm, StateMonitoring)
+				if trialCasts < 2 || trialCasts > 4 || fsm.TakeRepositionLogout() {
+					t.Fatalf("expected recovery within four attempts, got %d attempts", trialCasts)
+				}
+				// The returned bobber must be usable, not just visible.
+				time.Sleep(300 * time.Millisecond)
+				frames.set(fakegame.PhaseSplash)
+				time.Sleep(500 * time.Millisecond)
+				wantState(t, fsm, StateCooldown)
+				if fsm.Stats().Reels != 2 {
+					t.Fatal("fishing did not resume after the reverse drag")
+				}
+			})
+		})
+	}
 }

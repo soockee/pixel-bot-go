@@ -49,3 +49,6 @@ fishing-recordings/
 
 # Locally installed Codex copy of the unslop skill
 .agents/skills/unslop/
+
+# written by the app at install time, see addon/addon.go keysFile
+addon/BobberMarker/Keys.lua

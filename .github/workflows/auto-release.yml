@@ -19,6 +19,8 @@ concurrency:
 
 jobs:
   test:
+    # Forks never run this repository's workflows.
+    if: github.repository == 'soockee/pixel-bot-go'
     uses: ./.github/workflows/ci.yml
 
   release:
@@ -103,9 +105,10 @@ jobs:
           mkdir -p dist
           # The version lets the app offer newer releases (internal/update); the
           # sign-in values come from repository settings, not the public source.
+          # -H=windowsgui builds a GUI program, so starting the app opens no terminal.
           pkg=github.com/soocke/pixel-bot-go/internal
           GOOS=windows GOARCH=amd64 go build -tags production \
-            -ldflags "-X $pkg/update.Version=$VERSION -X $pkg/cloud.DefaultURL=$CLOUD_URL -X $pkg/cloud.DefaultClientID=$CLIENT_ID -X $pkg/cloud.DefaultClientSecret=$CLIENT_SECRET" \
+            -ldflags "-H=windowsgui -X $pkg/update.Version=$VERSION -X $pkg/cloud.DefaultURL=$CLOUD_URL -X $pkg/cloud.DefaultClientID=$CLIENT_ID -X $pkg/cloud.DefaultClientSecret=$CLIENT_SECRET" \
             -o dist/pixel-bot-go-windows-amd64.exe .
 
       - name: Generate checksum

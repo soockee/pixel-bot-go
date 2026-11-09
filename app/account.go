@@ -129,7 +129,7 @@ func (a *app) signOut() {
 }
 
 // upload sends the finished recording in dir, showing progress in the status bar.
-func (a *app) upload(dir string) error {
+func (a *app) upload(dir, fingerprint string, frames, audio bool) error {
 	name := filepath.Base(dir)
 	var s *cloud.Session
 	var refusal error
@@ -152,7 +152,7 @@ func (a *app) upload(dir string) error {
 		return refusal
 	}
 
-	err := s.Upload(context.Background(), dir, func(done, total int) {
+	err := s.UploadReviewed(context.Background(), dir, fingerprint, frames, audio, func(done, total int) {
 		a.loop.Do(func() {
 			a.container.View.SetStatus(fmt.Sprintf("Uploading %s: %d of %d files", name, done, total))
 		})

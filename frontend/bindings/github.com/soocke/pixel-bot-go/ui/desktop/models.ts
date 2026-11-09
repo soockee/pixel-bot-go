@@ -46,6 +46,9 @@ export interface Settings {
     "interactKey": string;
     "esp32Port": string;
     "stopKey": string;
+    "idleKey": string;
+    "repositionKey": string;
+    "targetPlayerKey": string;
     "maxFailedCasts": number;
     "maxSessionMinutes": number;
     "schedule": boolean;
@@ -77,6 +80,28 @@ export interface SettingsForm {
 }
 
 /**
+ * SetupStep is one thing the bot needs before it can fish.
+ */
+export interface SetupStep {
+    /**
+     * "game", "addon" or "account"; "" for an unused slot
+     */
+    "id": string;
+    "title": string;
+    "done": boolean;
+
+    /**
+     * what to do or what is wrong; a reminder when Done
+     */
+    "detail": string;
+
+    /**
+     * the label of the button that does it, "" when there is nothing to click
+     */
+    "action": string;
+}
+
+/**
  * State is everything the main window shows.
  */
 export interface State {
@@ -104,6 +129,8 @@ export interface State {
      * this run's casts
      */
     "casts": number;
+    "reelAttempts": number;
+    "reelInputs": number;
 
     /**
      * this run's reels, each a bite answered
@@ -223,6 +250,21 @@ export interface State {
     "checking": boolean;
 
     /**
+     * the selected window is open
+     */
+    "gameFound": boolean;
+
+    /**
+     * what the bot still needs, see setupSteps
+     */
+    "setup": SetupStep[];
+
+    /**
+     * nothing is missing, or this is a dry run
+     */
+    "setupDone": boolean;
+
+    /**
      * Bobber Marker in the game: "missing", "outdated", "current", or "" when the game was not found
      */
     "addon": string;
@@ -236,6 +278,21 @@ export interface State {
      * the version the app carries
      */
     "addonVersion": string;
+
+    /**
+     * where the overlay pill sits across the game window: 0 is the left edge, 1 the right
+     */
+    "overlayX": number;
+
+    /**
+     * where the overlay pill sits down the game window: 0 is the top edge, 1 the bottom
+     */
+    "overlayY": number;
+
+    /**
+     * the overlay is being placed: it takes the mouse and shows only the pill
+     */
+    "overlayMove": boolean;
 
     /**
      * the running build's release tag, "dev" for local builds

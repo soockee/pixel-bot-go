@@ -41,6 +41,14 @@
       </div>
 
       <aside class="side">
+        <div class="panel" id="setup" hidden>
+          <div class="panel-head">
+            <h2>Get ready</h2>
+            <button class="button" id="setup-check" type="button">Check again</button>
+          </div>
+          <ol class="steps" id="setup-list"></ol>
+        </div>
+
         <div class="panel">
           <button class="button primary wide" id="start" type="button">Start fishing</button>
           <p class="muted small" id="start-hint" hidden></p>
@@ -53,7 +61,7 @@
         <div class="panel catch">
           <div class="figure">
             <span class="big mono" id="reels">0</span>
-            <span class="muted" id="reels-label">catches this run</span>
+            <span class="muted" id="reels-label">reels sent this run</span>
           </div>
           <p class="muted small" id="casts">No casts yet</p>
           <div class="meter" id="meter-session">
@@ -95,7 +103,7 @@
             <h1 id="trace-title">No recording open</h1>
             <p class="muted" id="trace-status">Record a session or pick one from the list</p>
           </div>
-          <button class="button" id="upload" type="button" hidden>Upload</button>
+          <button class="button" id="upload" type="button" hidden>Review upload</button>
         </div>
         <dl class="stats" id="stats"></dl>
         <div class="trace-body" id="trace-body">
@@ -177,6 +185,16 @@
           </div>
           <p class="hint">Draws the pink brackets around your bobber that Go Fish looks for. Go Fish installs it into the game's AddOns folder and touches no other addon.</p>
         </section>
+        <section class="updates" aria-labelledby="overlay-title">
+          <div class="updates-head">
+            <div>
+              <h2 id="overlay-title">Overlay</h2>
+              <p class="hint" id="overlay-detail"></p>
+            </div>
+            <button class="button" id="move-overlay" type="button">Move overlay</button>
+          </div>
+          <p class="hint">The pill over the game that shows how a run is going. It takes no clicks, so the game stays in charge of the mouse. Move it to where it is out of your way.</p>
+        </section>
       </div>
       <form class="settings-form" id="settings" novalidate></form>
     </section>
@@ -190,5 +208,28 @@
       <span id="stop-hint"><kbd id="stop-key"></kbd> stops</span>
     </span>
   </footer>
+  <dialog id="upload-review" aria-labelledby="upload-review-title">
+    <form method="dialog">
+      <h2 id="upload-review-title">Review recording upload</h2>
+      <p>Nothing has been sent from this review yet. Earlier uploads are separate.</p>
+      <p id="upload-review-summary"></p>
+      <div id="upload-review-preview" hidden>
+        <img id="upload-review-image" alt="Frame from the recording">
+        <label>Review frame <input type="range" id="upload-review-slider" min="0" value="0">
+          <span id="upload-review-frame-time"></span>
+        </label>
+      </div>
+      <audio id="upload-review-player" controls preload="none" hidden></audio>
+      <p id="upload-review-warning"></p>
+      <ul id="upload-review-sensitive"></ul>
+      <label><input type="checkbox" id="upload-review-frames"> Include screen frames</label>
+      <label><input type="checkbox" id="upload-review-audio"> Include game audio</label>
+      <p id="upload-review-error" role="alert"></p>
+      <div class="upload-review-actions">
+        <button class="button" value="cancel">Cancel</button>
+        <button class="button primary" id="upload-review-send" type="button">Upload reviewed copy</button>
+      </div>
+    </form>
+  </dialog>
 </body>
 </html>

@@ -79,6 +79,32 @@ func TestInteractKeySettings(t *testing.T) {
 	}
 }
 
+func TestESP32PortSettings(t *testing.T) {
+	base := config.DefaultConfig()
+	values := settingsOf(base)
+	values.ReelMethod, values.InteractKey = config.ReelInteractKey, "f"
+	for in, want := range map[string]string{"auto": "AUTO", " Auto ": "AUTO", "com3": "COM3", "": ""} {
+		values.ESP32Port = in
+		got, err := values.apply(*base)
+		if err != nil || got.ESP32Port != want {
+			t.Errorf("ESP32 port %q = %q, %v; want %q", in, got.ESP32Port, err, want)
+		}
+	}
+	values.ESP32Port = "ttyUSB0"
+	if _, err := values.apply(*base); err == nil || !strings.Contains(err.Error(), "auto") {
+		t.Errorf("a name that is not a COM port or auto was accepted: %v", err)
+	}
+	// The board moves the pointer and clicks for the right-click reel.
+	values.ESP32Port, values.ReelMethod, values.InteractKey = "auto", config.ReelRightClick, ""
+	if got, err := values.apply(*base); err != nil || got.ESP32Port != "AUTO" {
+		t.Errorf("right-click reel with the ESP32 = %q, %v; want AUTO", got.ESP32Port, err)
+	}
+	values.CastKey = "Mouse4"
+	if _, err := values.apply(*base); err == nil {
+		t.Error("a mouse button for Cast was accepted with the ESP32")
+	}
+}
+
 func TestShareRecordingsShowsTheRecorder(t *testing.T) {
 	cfg := config.DefaultConfig()
 	view := NewView(NewFrames(), func(State) {})
@@ -139,6 +165,31 @@ func TestESP32PortsKeepTheSavedPort(t *testing.T) {
 
 	if got := s.ESP32Ports(); !slices.Equal(got, []string{"COM3", "COM7"}) {
 		t.Fatalf("ports = %v, want COM3 and the saved COM7", got)
+	}
+}
+
+func TestSavingSettingsRechecksTheAddon(t *testing.T) {
+	cfg := config.DefaultConfig()
+	loop := NewLoop(func() {})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go loop.Run(ctx, time.Hour)
+	checks := 0
+	cmds := Commands{Running: func() bool { return false }, CheckAddon: func() { checks++ }}
+	s := NewService(loop, NewView(NewFrames(), func(State) {}), cmds, nil, cfg,
+		filepath.Join(t.TempDir(), "config.json"), slog.New(slog.DiscardHandler))
+
+	values := settingsOf(cfg)
+	values.CastKey = "F4" // the addon binds this key, so its install is now out of date
+	if _, err := s.SaveSettings(values); err != nil {
+		t.Fatal(err)
+	}
+	if checks != 1 {
+		t.Fatalf("addon checked %d times after saving, want 1", checks)
+	}
+	values.StopKey = "nope"
+	if _, err := s.SaveSettings(values); err == nil || checks != 1 {
+		t.Fatalf("a rejected save: err %v, checks %d; want an error and no check", err, checks)
 	}
 }
 
@@ -239,13 +290,13 @@ func TestShrinkKeepsPreviewsSmall(t *testing.T) {
 func TestUploadRefusesUnsafeNames(t *testing.T) {
 	var uploaded []string
 	s := &Service{recordings: NewRecordings(func() string { return "datasets" }),
-		cmds: Commands{Upload: func(dir string) error { uploaded = append(uploaded, dir); return nil }}}
+		cmds: Commands{Upload: func(dir, _ string, _, _ bool) error { uploaded = append(uploaded, dir); return nil }}}
 	for _, name := range []string{"", ".", "..", `..\x`, "a/b"} {
-		if err := s.Upload(name); err == nil {
+		if err := s.Upload(name, "reviewed", true, false); err == nil {
 			t.Errorf("Upload(%q) accepted", name)
 		}
 	}
-	if err := s.Upload("20261108-012132"); err != nil {
+	if err := s.Upload("20261108-012132", "reviewed", true, false); err != nil {
 		t.Fatal(err)
 	}
 	if want := filepath.Join("datasets", "20261108-012132"); len(uploaded) != 1 || uploaded[0] != want {

@@ -13,7 +13,9 @@ namespace {
 constexpr char deviceName[] = "Go Fish ESP32 Probe";
 constexpr uint8_t keyboardReportID = 1;
 constexpr uint8_t mouseReportID = 2;
+constexpr int maxDrag = 24;
 constexpr uint8_t keyA = 0x04;
+constexpr uint8_t leftButton = 0x01;
 constexpr uint8_t rightButton = 0x02;
 constexpr unsigned long holdMs = 40;
 constexpr unsigned long clickMs = 30; // same hold as the app's Windows right click
@@ -30,8 +32,8 @@ uint8_t reportMap[] = {
     0x05, 0x01, 0x09, 0x02, 0xa1, 0x01, 0x85, mouseReportID,
     0x09, 0x01, 0xa1, 0x00,
     0x05, 0x09, 0x19, 0x01, 0x29, 0x03, 0x15, 0x00, 0x25, 0x01,
-    0x95, 0x03, 0x75, 0x01, 0x81, 0x02,
-    0x95, 0x01, 0x75, 0x05, 0x81, 0x03,
+    0x75, 0x01, 0x95, 0x03, 0x81, 0x02,
+    0x75, 0x05, 0x95, 0x01, 0x81, 0x03,
     0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x15, 0x81, 0x25, 0x7f,
     0x75, 0x08, 0x95, 0x02, 0x81, 0x06, 0xc0, 0xc0,
 };
@@ -48,7 +50,7 @@ bool invalidLine;
 struct Entry {
   unsigned long ms;
   char command[16];
-  char input[16]; // key name, "right click", or the number of merged moves
+  char input[16]; // key name, "right click", "drag", or the number of merged moves
   const char *reply;
   uint16_t moves; // consecutive MOVE reports merged into this row
   int dx, dy;     // their sum
@@ -74,26 +76,72 @@ class ReportCallbacks : public BLECharacteristicCallbacks {
 
 ReportCallbacks reportCallbacks;
 
-bool notify(BLECharacteristic *c, uint8_t *report, size_t size) {
-  c->setValue(report, size);
+bool notifyReport(BLECharacteristic *input, uint8_t *report, size_t size) {
+  input->setValue(report, size);
   reportQueued = false;
-  c->notify();
+  input->notify();
   return reportQueued;
 }
 
 bool sendKey(uint8_t usage) {
   uint8_t report[8] = {};
   report[2] = usage;
-  return notify(keyboardInput, report, sizeof(report));
+  return notifyReport(keyboardInput, report, sizeof(report));
 }
 
-bool sendMouse(uint8_t buttons, int dx, int dy) {
-  uint8_t report[3] = {buttons, static_cast<uint8_t>(dx), static_cast<uint8_t>(dy)};
-  return notify(mouseInput, report, sizeof(report));
+bool sendMouse(uint8_t buttons, int dx, int dy = 0) {
+  uint8_t report[] = {buttons, static_cast<uint8_t>(dx), static_cast<uint8_t>(dy)};
+  return notifyReport(mouseInput, report, sizeof(report));
 }
 
-bool parseUsage(uint8_t &usage) {
-  if (length != 6 || std::strncmp(line, "TAP ", 4) != 0) {
+const char *result(bool ok) { return ok && connected ? "OK" : "ERR BLE report"; }
+
+// parseDrag reads "DRAG <dx>" with a signed nonzero count up to maxDrag.
+bool parseDrag(int &dx) {
+  if (std::strncmp(line, "DRAG ", 5) != 0) {
+    return false;
+  }
+  size_t i = 5;
+  const bool negative = line[i] == '-';
+  if (negative) {
+    ++i;
+  }
+  dx = 0;
+  if (i == length) {
+    return false;
+  }
+  for (; i < length; ++i) {
+    if (line[i] < '0' || line[i] > '9') {
+      return false;
+    }
+    dx = dx * 10 + (line[i] - '0');
+    if (dx > maxDrag) {
+      return false;
+    }
+  }
+  if (negative) {
+    dx = -dx;
+  }
+  return dx != 0;
+}
+
+const char *drag(int dx) {
+  if (!connected) {
+    return "ERR disconnected";
+  }
+  const bool down = sendMouse(leftButton, 0);
+  delay(25);
+  const bool moved = down && connected && sendMouse(leftButton, dx);
+  delay(25);
+  bool up = sendMouse(0, 0);
+  if (!up && connected) {
+    up = sendMouse(0, 0);
+  }
+  return result(down && moved && up);
+}
+
+bool parseTap(uint8_t &usage, unsigned long &duration) {
+  if (length < 6 || std::strncmp(line, "TAP ", 4) != 0) {
     return false;
   }
   for (size_t i = 4; i < 6; ++i) {
@@ -106,7 +154,23 @@ bool parseUsage(uint8_t &usage) {
       return false;
     }
   }
-  return usage >= 0x04 && usage <= 0x65;
+  if (usage < 0x04 || usage > 0x65) {
+    return false;
+  }
+  if (length == 6) {
+    return true;
+  }
+  if (line[6] != ' ' || length < 9 || length > 10) {
+    return false;
+  }
+  duration = 0;
+  for (size_t i = 7; i < length; ++i) {
+    if (line[i] < '0' || line[i] > '9') {
+      return false;
+    }
+    duration = duration * 10 + (line[i] - '0');
+  }
+  return duration >= 10 && duration <= 500;
 }
 
 // parseMove reads "MOVE <dx> <dy>" with both values from -127 to 127.
@@ -129,14 +193,12 @@ bool parseMove(int &dx, int &dy) {
   return true;
 }
 
-const char *result(bool ok) { return ok && connected ? "OK" : "ERR BLE report"; }
-
-const char *tap(uint8_t usage) {
+const char *tap(uint8_t usage, unsigned long duration) {
   if (!connected) {
     return "ERR disconnected";
   }
   const bool down = sendKey(usage);
-  delay(holdMs);
+  delay(duration);
   return result(sendKey(0) && down);
 }
 
@@ -144,9 +206,9 @@ const char *click() {
   if (!connected) {
     return "ERR disconnected";
   }
-  const bool down = sendMouse(rightButton, 0, 0);
+  const bool down = sendMouse(rightButton, 0);
   delay(clickMs);
-  return result(sendMouse(0, 0, 0) && down);
+  return result(sendMouse(0, 0) && down);
 }
 
 const char *move(int dx, int dy) {
@@ -203,7 +265,8 @@ void record(const char *reply, const String &input, bool isMove, int dx, int dy)
   size_t i = 0;
   for (; i < sizeof(e->command) - 1 && line[i] != '\0'; ++i) {
     // Keep the page free of markup whatever arrives on the serial port.
-    e->command[i] = isalnum(line[i]) || line[i] == ' ' ? line[i] : '?';
+    const char ch = line[i];
+    e->command[i] = isalnum(ch) || ch == ' ' || ch == '-' ? ch : '?';
   }
   e->command[i] = '\0';
 }
@@ -216,6 +279,7 @@ void handleLine() {
     return;
   }
   uint8_t usage = 0;
+  unsigned long duration = holdMs;
   int dx = 0, dy = 0;
   bool isMove = false;
   const char *reply;
@@ -225,13 +289,20 @@ void handleLine() {
   } else if (std::strcmp(line, "PING") == 0) {
     reply = connected ? "PONG connected" : "PONG waiting";
   } else if (std::strcmp(line, "HELLO") == 0) {
-    reply = connected ? "GOFISH 2 READY" : "GOFISH 2 WAITING";
+    reply = connected ? "GOFISH 1 READY" : "GOFISH 1 WAITING";
+  } else if (std::strcmp(line, "TAPMS") == 0 || std::strcmp(line, "MOUSE") == 0 ||
+             std::strcmp(line, "POINTER") == 0) {
+    reply = line; // capability probe; the copy in the log keeps its own text
   } else if (std::strcmp(line, "TEST") == 0) {
-    reply = tap(keyA);
+    reply = tap(keyA, holdMs);
     input = keyName(keyA);
-  } else if (parseUsage(usage)) {
-    reply = tap(usage);
+  } else if (parseTap(usage, duration)) {
+    reply = tap(usage, duration);
     input = keyName(usage);
+  } else if (parseDrag(dx)) {
+    reply = drag(dx);
+    input = "drag";
+    dx = 0;
   } else if (std::strcmp(line, "CLICK") == 0) {
     reply = click();
     input = "right click";
@@ -243,7 +314,10 @@ void handleLine() {
     reply = "ERR command";
   }
   Serial.println(reply);
-  record(reply, input, isMove, dx, dy);
+  if (reply == line) {
+    reply = "capability"; // line is overwritten by the next command
+  }
+  record(reply, input, isMove, isMove ? dx : 0, isMove ? dy : 0);
 }
 
 WebServer http(80);

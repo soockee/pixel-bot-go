@@ -11,6 +11,16 @@ The status bar at the bottom of Go Fish usually says what is wrong. These are th
 - **Not signed in, or no role.** Sign in, and ask the owner for a role. See [Sign in](sign-in.md).
 - **No game window.** Start the game, then pick **World of Warcraft** on the Fishing tab.
 
+## It stopped by itself
+
+When Go Fish stops without you pressing Stop, the status bar says **Stopped:** and why:
+
+- **N casts in a row got no bite.** It cast the number of times you set under **Casts without a bite** and none got a bite. Check that the pink brackets show around your bobber, and that you fish where fish bite.
+- **The mouse was moved.** Go Fish parks the pointer on the bobber while it waits, and stops when you move the mouse so that it never fights you for it. Leave the mouse alone while it fishes, and click **Start fishing** again.
+- **The pointer was moved away, or the game was not in front.** The same, when the game lost the focus at the wrong moment.
+- **The N minute session limit was reached.** The limit under **Session** in Settings ended the run.
+- Other messages name the setting to check, such as the Cast or Interact key.
+
 ## It casts, but never finds the bobber
 
 - Check that the pink brackets appear around your bobber in the game. If not, open **Settings → Addon** in Go Fish: it should say **Up to date**. See [Install the Bobber Marker addon](install-addon.md).

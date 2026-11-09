@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -12,8 +13,7 @@ import (
 	"github.com/soocke/pixel-bot-go/internal/recorder"
 )
 
-// RecordingsPath is where Recordings serves the newest frame of a recording,
-// as RecordingsPath+name.
+// RecordingsPath serves local recording media under RecordingsPath+name.
 const RecordingsPath = "/recordings/"
 
 // Recording is one recording directory.
@@ -61,24 +61,42 @@ func (r *Recordings) Events(name string, offset int64) (recorder.EventPage, erro
 	return recorder.ReadEvents(dataset.InputPath(dir), offset)
 }
 
-// ServeHTTP serves the newest frame of the recording named in the path.
+var reviewFrameName = regexp.MustCompile(`^[0-9]{1,12}\.png$`)
+
+// ServeHTTP serves a local frame or audio for preview, without caching it.
 func (r *Recordings) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	dir, err := r.path(strings.TrimPrefix(req.URL.Path, RecordingsPath))
-	frame := ""
-	if err == nil {
-		frame = dataset.LatestFrame(dataset.FramesPath(dir))
-	}
-	if frame == "" {
+	if err != nil || !localDirectory(dir) {
 		http.NotFound(w, req)
 		return
 	}
-	w.Header().Set("Content-Type", "image/png")
+	query := req.URL.Query()
+	path, mime := "", "image/png"
+	if query.Get("audio") == "1" {
+		path, mime = dataset.AudioPath(dir), "audio/wav"
+	} else if frames := dataset.FramesPath(dir); localDirectory(frames) {
+		if name := query.Get("frame"); name == "" {
+			path = dataset.LatestFrame(frames)
+		} else if reviewFrameName.MatchString(name) {
+			path = filepath.Join(frames, name)
+		}
+	}
+	if info, err := os.Lstat(path); err != nil || !info.Mode().IsRegular() {
+		http.NotFound(w, req)
+		return
+	}
+	w.Header().Set("Content-Type", mime)
 	w.Header().Set("Cache-Control", "no-store")
-	http.ServeFile(w, req, frame)
+	http.ServeFile(w, req, path)
+}
+
+func localDirectory(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.IsDir()
 }
 
 func (r *Recordings) path(name string) (string, error) {
-	if name == "" || name != filepath.Base(name) || name == "." || name == ".." {
+	if name == "" || name != filepath.Base(name) || strings.ContainsAny(name, `\/:`) || name == "." || name == ".." {
 		return "", errors.New("invalid recording name")
 	}
 	return filepath.Join(r.dir(), name), nil

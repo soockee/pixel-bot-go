@@ -14,7 +14,7 @@ Go Fish is a Windows Go application for visual event and response experiments. I
 ./run.ps1 [app flags]               # PowerShell: build frontend and app, then start it (e.g. ./run.ps1 -dry-run)
 (cd frontend && npm ci && npm run build)   # frontend, embedded by go build; needed once and after frontend changes
 (cd frontend && npm run bindings)   # regenerate frontend/bindings after changing ui/desktop types or Service methods (needs wails3 CLI v3.1.0)
-go build -o pixel-bot-go.exe .      # build
+go build -o pixel-bot-go.exe .      # build (console program; releases and run.ps1 add -ldflags '-H=windowsgui', so no terminal opens)
 ./scripts/theme-icons.ps1            # after changing frontend/public/themes/*.svg: renders app/icons/*.png and the exe icon (rsrc_windows_amd64.syso, needs Edge and wails3)
 go test ./...                       # run all tests
 go vet ./...                        # static checks
@@ -31,19 +31,19 @@ There is no Makefile. Without a frontend build the window is empty (`frontend/di
 | Path | Role |
 |------|------|
 | `main.go`, `logger.go` | Entry point; loads `pixle_bot_config.json` (sic, the filename is misspelled on purpose, keep it), sets up slog, optional pprof on `localhost:6060` when `debug` is true |
-| `app/` | Wails application and window (`app.go`), and `AppContainer` (`container.go`) that wires models, presenters and the desktop adapter |
+| `app/` | Wails application and window (`app.go`), and `AppContainer` (`container.go`) that wires models, presenters and the desktop adapter. `overlay.go` is the transparent, click-through status window over the game, hidden from screen capture and parked off screen unless a run goes; Settings → Overlay → Move overlay shrinks it to a draggable pill (`overlay_place.go` holds the placement maths) and saves its place as `overlay_x`, `overlay_y` |
 | `config/` | `Config` struct, `DefaultConfig`, `Validate`, `Load` (JSON) |
 | `domain/capture/` | `Source.Next` grabs one frame of the selected region; `Frame.Origin` is its screen position |
 | `domain/detect/` | `Locator` and `BiteDetector` interfaces, `MarkerLocator` (the app's locator), NCC template matching (evaluation only), motion bite detector |
 | `domain/fishing/` | `Engine` (`engine.go`, the capture and detection loop) and the FSM (`fsm.go`: states, deadline, input) |
 | `domain/action/` | Key press, cursor move, right click (Windows input injection), `Guard` (safety checks on real input), global stop hotkey |
 | `ui/model` `ui/presenter` | MVP-style UI: models hold state, presenters connect domain to view interfaces. No toolkit dependency |
-| `ui/desktop` | Adapter between presenters and the window, no toolkit dependency: `View` turns presenter calls into one `State`, `Service` is what the frontend calls, `Loop` runs both on one goroutine, plus settings validation, selection, recordings and preview frames |
-| `frontend/` | Vite + TypeScript frontend (`src/`: `live.ts` the Fishing view, `recorder.ts`, `settings.ts`). The Fishing view is the product; the bite watch and detection settings are developer tools shown only when `State.Debug` (config `debug`) is set; the Recorder tab and Recording settings show when `State.Recorder` is set (config `share_recordings`, Settings → Data sharing, or `debug`). `bindings/` is generated from `ui/desktop`; `assets.go` embeds `dist/` |
+| `ui/desktop` | Adapter between presenters and the window, no toolkit dependency: `View` turns presenter calls into one `State`, `Service` is what the frontend calls, `Loop` runs both on one goroutine, plus settings validation, selection, recordings and preview frames, and the setup steps (`setup.go`: what is still missing before a run, computed from `State` in `View.Flush`; `State` is compared by value, so it holds arrays, not slices) |
+| `frontend/` | Vite + TypeScript frontend (`src/`: `live.ts` the Fishing view, `setup.ts` its "Get ready" checklist, `recorder.ts`, `settings.ts`). The Fishing view is the product; the bite watch and detection settings are developer tools shown only when `State.Debug` (config `debug`) is set; the Recorder tab and Recording settings show when `State.Recorder` is set (config `share_recordings`, Settings → Data sharing, or `debug`). `bindings/` is generated from `ui/desktop`; `assets.go` embeds `dist/` |
 | `internal/update/` | In-app update: latest GitHub Release, checksum-verified download, exe swap and restart; `Version` is set by ldflags in `auto-release.yml` (`app/update.go` wires it) |
 | `internal/cloud/` | Google sign-in (desktop OAuth, PKCE, loopback), the account's role from the vrl-recordings service, recording upload through signed URLs, DPAPI token store |
 | `debug/` | `/debug/state` handler |
-| `addon/` | `BobberMarker/`: the WoW: Forever addon (Lua) that draws the magenta brackets `MarkerLocator` finds, only while fishing. No Lua tooling in the repo; check it in the client. `addon.go` embeds it, so the app installs and updates it in the game (`app/addon.go`, Settings → Addon); the game folder comes from the game window's exe (`capture.WindowExe`) or the default install path |
+| `addon/` | `BobberMarker/`: the WoW: Forever addon (Lua) that draws the magenta brackets `MarkerLocator` finds, only while fishing. No Lua tooling in the repo; check it in the client. `addon.go` embeds it, so the app installs and updates it in the game (`app/addon.go`, Settings → Addon); the game folder comes from the game window's exe (`capture.WindowExe`) or the default install path. Install also writes `Keys.lua` with the Cast and Interact keys from the config, which the addon binds in the game (a macro and `INTERACTTARGET`); changing either key makes the addon outdated |
 | `assets/` | Embedded `fishing_target.png` template (`embed.go`), used by the simulator and NCC evaluation |
 | `cmd/detecteval/` | Compares every registered `Locator` and `BiteDetector` on recorded datasets, writes `labels.json` from a session with `-label`, and exports each cast's watched area with `-export`. See `docs/dev/reference/datasets.md` |
 | `internal/dataset/` | Dataset format, labels and the frame loop |

@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"sync"
 	"time"
@@ -20,31 +21,37 @@ import (
 
 // Session describes one recording.
 type Session struct {
-	Dir    string              // new dataset directory
-	Frames dataset.FrameSource // screen capture
-	Window string              // exact title of the window to record input and sound from; empty records frames only
-	Live   bool                // flush the input trace often, so a viewer can follow it
-	Label  string              // shared with other traces from this playtest
-	Keys   bool                // record keys as well as the mouse
-	Status io.Writer           // progress messages
+	Dir    string                       // new dataset directory
+	Frames dataset.FrameSource          // screen capture
+	Target *framecapture.WindowIdentity // exact selection from the desktop or CLI
+	Window string                       // exact title of the window to record input and sound from; empty records frames only
+	Live   bool                         // flush the input trace often, so a viewer can follow it
+	Label  string                       // shared with other traces from this playtest
+	Keys   bool                         // record keys as well as the mouse
+	Status io.Writer                    // progress messages
 }
 
 // Run records until ctx ends or either recording fails. Frames and input share
 // one start time, so their timestamps line up.
 func (s Session) Run(parent context.Context) error {
 	var target windowTarget
-	if s.Window != "" {
-		var err error
-		if target, err = findTarget(s.Window); err != nil {
-			return err
-		}
-	}
 	var info dataset.SessionInfo
 	if s.Window != "" {
-		var err error
-		if info, err = s.sessionInfo(target); err != nil {
+		selected := s.Target
+		if selected == nil {
+			w, err := framecapture.ResolveWindow(s.Window)
+			if err != nil {
+				return err
+			}
+			selected = &w
+		}
+		area, err := selected.Area()
+		if err != nil {
 			return err
 		}
+		target = windowTarget{handle: uintptr(selected.Handle), pid: selected.PID}
+		s.Frames = protectedFrames{source: s.Frames, window: *selected, area: area}
+		// Full-client recording keeps the trace and frame origins aligned.
 	}
 	if err := dataset.Create(s.Dir); err != nil {
 		return err
@@ -93,17 +100,28 @@ func recordAudio(ctx context.Context, pid uint32, dir string, start time.Time) (
 	return framecapture.CaptureAudio(ctx, pid, w.Write)
 }
 
-// sessionInfo works out how to turn a position in the window into a frame pixel.
-func (s Session) sessionInfo(target windowTarget) (dataset.SessionInfo, error) {
-	frame, err := s.Frames.Next()
-	if err != nil {
-		return dataset.SessionInfo{}, err
+type protectedFrames struct {
+	source dataset.FrameSource
+	window framecapture.WindowIdentity
+	area   image.Rectangle
+}
+
+func (p protectedFrames) Next() (framecapture.Frame, error) {
+	if !p.window.Valid() {
+		return framecapture.Frame{}, errors.New("recording window closed")
 	}
-	origin, err := target.clientOrigin()
-	if err != nil {
-		return dataset.SessionInfo{}, err
+	if !p.window.RecordingClear(p.area) {
+		return framecapture.Frame{}, framecapture.ErrFrameUnavailable
 	}
-	return dataset.SessionInfo{ClientToFrame: origin.Sub(frame.Origin)}, nil
+	frame, err := p.source.Next()
+	if err != nil {
+		return framecapture.Frame{}, err
+	}
+	if frame.Image == nil || frame.Image.Bounds().Size() != p.area.Size() ||
+		frame.Origin != p.area.Min || !p.window.RecordingClear(p.area) {
+		return framecapture.Frame{}, framecapture.ErrFrameUnavailable
+	}
+	return frame, nil
 }
 
 func run(parent context.Context, target windowTarget, out string, status io.Writer, live, recordKeys bool, session string, start time.Time) (err error) {

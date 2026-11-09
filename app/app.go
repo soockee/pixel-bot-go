@@ -5,6 +5,7 @@ import (
 	"image"
 	"log/slog"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/debug"
 	"github.com/soocke/pixel-bot-go/domain/action"
+	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/frontend"
 	"github.com/soocke/pixel-bot-go/internal/cloud"
 	"github.com/soocke/pixel-bot-go/internal/esp32"
@@ -30,22 +32,26 @@ const (
 func init() { application.RegisterEvent[desktop.State](desktop.StateEvent) }
 
 type app struct {
-	container    *AppContainer
-	logger       *slog.Logger
-	start        time.Time
-	loop         *desktop.Loop
-	wails        *application.App
-	main         *application.WebviewWindow
-	overlay      *application.WebviewWindow
-	overlayArea  image.Rectangle // the game area the overlay covers, empty while parked; used on the loop
-	overlayReady bool            // passThrough set the overlay's styles; used on the main thread
-	cloud        *cloud.Client   // nil while sign-in is not configured
-	session      *cloud.Session  // the signed-in account, nil when signed out; used on the loop
-	updates      *update.Client
-	release      update.Release // the latest release found, zero before the first check; used on the loop
-	restart      string         // the executable to start once the app quit, after an update
-	schedule     *playSchedule
-	scheduleStop atomic.Bool // set by the global hotkey outside the UI loop
+	container       *AppContainer
+	logger          *slog.Logger
+	start           time.Time
+	loop            *desktop.Loop
+	wails           *application.App
+	main            *application.WebviewWindow
+	overlay         *application.WebviewWindow
+	overlayPlaced   overlayPlacement // what the overlay window was last set to; used on the loop
+	overlayMove     bool             // the person is placing the overlay; used on the loop
+	overlayReady    bool             // passThrough set the overlay's styles; used on the main thread
+	pillMu          sync.Mutex       // guards pill, which the main thread writes and the loop reads
+	pill            image.Rectangle  // the overlay window while it is moved, wherever the person left it
+	cloud           *cloud.Client    // nil while sign-in is not configured
+	session         *cloud.Session   // the signed-in account, nil when signed out; used on the loop
+	updates         *update.Client
+	release         update.Release // the latest release found, zero before the first check; used on the loop
+	restart         string         // the executable to start once the app quit, after an update
+	schedule        *playSchedule
+	recoveryAllowed bool
+	scheduleStop    atomic.Bool // set by the global hotkey outside the UI loop
 }
 
 // NewApp builds the components and the window.
@@ -73,18 +79,23 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		},
 		SetWindow:     a.setWindow,
 		ToggleCapture: a.toggleCapture,
-		ToggleRecord:  c.RecordPresenter.Toggle,
-		Running:       func() bool { return c.Capture.Enabled() || a.schedule != nil },
-		Exit:          func() { go a.wails.Quit() }, // Quit waits for the loop, which runs this
-		SignIn:        a.signIn,
-		SignOut:       a.signOut,
-		Upload:        a.upload,
-		Update:        a.installUpdate,
-		CheckUpdate:   a.findUpdate,
-		ReleaseNotes:  a.releaseNotes,
-		CheckAddon:    a.checkAddon,
-		InstallAddon:  a.installAddon,
-		SetTheme:      a.setTheme,
+		ToggleRecord: func() {
+			if a.schedule == nil && !c.Capture.Enabled() {
+				c.RecordPresenter.Toggle()
+			}
+		},
+		Running:      func() bool { return c.Capture.Enabled() || a.schedule != nil },
+		Exit:         func() { go a.wails.Quit() }, // Quit waits for the loop, which runs this
+		SignIn:       a.signIn,
+		SignOut:      a.signOut,
+		Upload:       a.upload,
+		Update:       a.installUpdate,
+		CheckUpdate:  a.findUpdate,
+		ReleaseNotes: a.releaseNotes,
+		CheckAddon:   a.checkAddon,
+		InstallAddon: a.installAddon,
+		MoveOverlay:  a.setOverlayMove,
+		SetTheme:     a.setTheme,
 	}, c.Recordings, cfg, config.FilePath, logger)
 
 	assets := http.NewServeMux()
@@ -131,6 +142,7 @@ func (a *app) Run() error {
 	}
 	c.View.SetInfo(cfg.DryRun, cfg.Debug, cfg.StopKey)
 	c.View.SetTheme(cfg.Theme)
+	c.View.SetOverlay(cfg.OverlayX, cfg.OverlayY, false)
 	c.View.SetRecorder(cfg.RecorderShown())
 	c.View.SetAddonVersion(addon.Version())
 	a.checkAddon()
@@ -166,7 +178,10 @@ func (a *app) Run() error {
 func (a *app) autoStart(tries int) {
 	time.AfterFunc(500*time.Millisecond, func() {
 		a.loop.Do(func() {
-			if tries > 1 && a.container.startProblem() != "" {
+			if a.schedule != nil || a.container.Capture.Enabled() {
+				return
+			}
+			if tries > 1 && (a.container.bindGameWindow() != nil || a.container.startProblem() != "") {
 				a.autoStart(tries - 1)
 				return
 			}
@@ -180,9 +195,12 @@ func (a *app) tick() {
 	c := a.container
 	c.Loop.Tick()
 	a.tickSchedule(time.Now())
+	if a.overlayMove && c.Capture.Enabled() {
+		_ = a.setOverlayMove(false) // a run owns the overlay; keep the place the person chose
+	}
 	a.followGame()
 	run := c.FSM.Stats()
-	c.View.SetRun(run.Casts, run.Reels, run.FailedInRow, c.Config.MaxFailedCasts, c.Config.MaxSessionMinutes)
+	c.View.SetRun(run.Casts, run.Reels, run.ReelAttempts, run.ReelInputs, run.FailedInRow, c.Config.MaxFailedCasts, c.Config.MaxSessionMinutes)
 	c.View.Flush()
 }
 
@@ -198,9 +216,11 @@ func (a *app) shutdown() {
 }
 
 func (a *app) setWindow(title string) {
-	if a.schedule != nil {
+	if a.schedule != nil || a.container.Capture.Enabled() ||
+		a.container.FSM.Current() != fishing.StateHalt || a.container.View.State().Recording {
 		return
 	}
+	a.container.gameWindow.Store(nil)
 	a.container.Capture.SetWindow(title)
 	a.container.View.SetWindow(title)
 }
@@ -209,10 +229,15 @@ func (a *app) setWindow(title string) {
 func (a *app) toggleCapture() {
 	c := a.container
 	if a.schedule != nil {
+		c.FSM.TakeRepositionLogout()
 		a.stopSchedule("Schedule stopped")
 		return
 	}
 	if !c.Capture.Enabled() {
+		if c.View.State().Recording {
+			c.View.SetStatus("Stop recording before starting a run")
+			return
+		}
 		// A dry run sends no input, so tests and agents need no account; without
 		// a configured sign-in there are no roles to check.
 		if !c.Config.DryRun && a.cloud != nil && !a.can(cloud.PermFish) {
@@ -220,10 +245,26 @@ func (a *app) toggleCapture() {
 			c.View.SetStatus("Sign in with an account whose role may fish")
 			return
 		}
+		if err := c.bindGameWindow(); err != nil {
+			c.View.SetStatus("Cannot start: " + err.Error())
+			return
+		}
 		if problem := c.startProblem(); problem != "" {
 			a.logger.Error("start refused: " + problem)
 			c.View.SetStatus("Cannot start: " + problem)
 			return
+		}
+		keys := *c.Config
+		keys.StopKey = c.View.State().StopKey
+		if err := fishing.CheckActivityKeys(keys, action.ParseVK); err != nil {
+			c.View.SetStatus("Cannot start: " + err.Error())
+			return
+		}
+		if c.Config.RepositionKey != "" && !c.Config.Schedule {
+			if _, err := a.prepareSchedule(); err != nil {
+				c.View.SetStatus("Cannot enable repositioning: " + err.Error())
+				return
+			}
 		}
 		if c.Config.Schedule {
 			if err := a.beginSchedule(); err != nil {
@@ -231,6 +272,10 @@ func (a *app) toggleCapture() {
 			}
 			return
 		}
+	}
+	a.recoveryAllowed = !c.Capture.Enabled()
+	if !a.recoveryAllowed {
+		a.scheduleStop.Store(true)
 	}
 	c.View.SetStatus("Ready")
 	c.CapturePresenter.Toggle()

@@ -66,3 +66,20 @@ When the config includes `shadow`, trace-feedback mode adds two silent observers
 Training and calibration use disjoint seeds and a synthetic reference policy with three response pacing bands and a separate retry schedule. The two backoff profiles and the fixed profile are excluded from fitting and calibration, as are workload families listed in `holdout_families`. Cutoffs use the rank of peak session scores on calibration traces and a strict greater-than comparison. The target applies to that pooled synthetic calibration set. The separate evaluation reference runs expose how false alarms change under different workloads.
 
 Both observers use the same simulated-time grid for every controller on a scenario. Scores expire after `score_age_ms`. First-alert rates use scorable runs and time to first alert uses flagged runs. Time above threshold uses all ticks, including idle or unscored time, and is reported alongside scored-time coverage and repeated alert episodes. These detectors evaluate synthetic traces and their alerts have no live-game interpretation.
+
+
+## ESP32 camera recovery replay
+
+Run this test to print the camera commands, test casts and elapsed simulated
+time for each recovery scenario.
+
+```powershell
+go test ./domain/fishing -run '^TestFakeGameESP32CameraRecovery$' -v -count=6
+```
+
+The replay uses rendered fake-game frames, the real marker and bite detectors,
+and the real fishing state machine. It models a signed camera heading from
+the ESP32 drag callbacks. In the recoverable scene, reversing the first drag
+makes the next cast produce a bobber. In the obstructed scene, every test cast
+fails and the run requests logout once. The clock is virtual and the replay
+does not model Bluetooth latency or the game's camera sensitivity.

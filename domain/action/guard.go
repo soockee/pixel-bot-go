@@ -13,9 +13,9 @@ type Guard struct {
 	Area         func() *image.Rectangle    // capture area in screen coordinates
 	CursorPos    func() (x, y int, ok bool) // where the pointer is now
 	OnTakeover   func()                     // the user moved the pointer
-	Press        func(vk byte)              // input that is sent when allowed
+	Press        func(vk byte) bool         // input that is sent when allowed
 	Move         func(x, y int) bool        //
-	Click        func()                     //
+	Click        func() bool                //
 	BeginHold    func() func()              // starts a timed right-button hold
 	BeginKeyHold func(byte) func()          // starts a timed key or side-button hold
 	target       image.Point                // where the last Move left the pointer
@@ -23,12 +23,12 @@ type Guard struct {
 }
 
 // PressKey sends the key if the selected window has focus.
-func (g *Guard) PressKey(vk byte) {
+func (g *Guard) PressKey(vk byte) bool {
 	if !g.InFront() {
 		g.Logger.Warn("input dropped: selected window is not in front", "action", "press_key")
-		return
+		return false
 	}
-	g.Press(vk)
+	return g.Press(vk)
 }
 
 // HoldKey starts a timed press if the selected window has focus. The caller
@@ -83,11 +83,33 @@ func (g *Guard) BeginCursor() (image.Point, image.Rectangle, bool) {
 	return p, *area, true
 }
 
-// ClickRight clicks if the pointer is still where MoveCursor left it.
-func (g *Guard) ClickRight() {
-	if g.canClick() {
-		g.Click()
+// DragCamera keeps the drag inside the game and checks for user takeover
+// before moving. The game may relocate the pointer on release.
+func (g *Guard) DragCamera(dx int, drag func(int, func() bool) bool) (attempted, moved bool) {
+	if !g.InFront() {
+		return true, false
 	}
+	area := g.Area()
+	x, y, ok := g.CursorPos()
+	start := image.Pt(x, y)
+	if g.cursorTaken(start, ok) {
+		return true, false
+	}
+	if area == nil || !ok {
+		return false, false
+	}
+	inner := area.Inset(8)
+	if !start.Add(image.Pt(3*dx, 0)).In(inner) || !start.In(inner) {
+		return false, false
+	}
+	g.target, g.hasTarget = start, true
+	defer g.ResetCursor()
+	return true, drag(dx, func() bool { return g.InFront() && !g.userMoved() })
+}
+
+// ClickRight clicks if the pointer is still where MoveCursor left it.
+func (g *Guard) ClickRight() bool {
+	return g.canClick() && g.Click()
 }
 
 // HoldRight checks the press. The caller must release even after focus loss.

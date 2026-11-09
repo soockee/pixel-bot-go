@@ -4,9 +4,11 @@
 import { onState, Service, type State } from "./api";
 import { $, keyLabel, storage } from "./dom";
 import { setupLive } from "./live";
+import { setupMoveOverlay } from "./move-overlay";
 import { setupRecorder } from "./recorder";
 import { setupSettings } from "./settings";
 import { burst, playSound, themeById } from "./themes";
+import { setupWizard } from "./setup";
 import { setupUpdates } from "./updates";
 
 type Tab = "live" | "recorder" | "settings";
@@ -63,6 +65,8 @@ signIn.addEventListener("click", () => {
 $("update").addEventListener("click", () => void Service.Update().catch(() => undefined));
 
 const live = setupLive();
+const wizard = setupWizard();
+const moveOverlay = setupMoveOverlay();
 const settings = setupSettings();
 const updates = setupUpdates();
 let theme = "";
@@ -89,6 +93,8 @@ onState((s: State) => {
     show(wanted);
   }
   live(s);
+  wizard(s);
+  moveOverlay(s);
   if (recorderShown) recorder.onState(s);
   settings(s);
   updates(s);

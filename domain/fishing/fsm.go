@@ -2,8 +2,10 @@ package fishing
 
 import (
 	"context"
+	"fmt"
 	"image"
 	"log/slog"
+	"math/rand/v2"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -13,45 +15,58 @@ import (
 )
 
 const (
-	searchTimeout  = 5 * time.Second        // recast when no bobber appears
-	reelClickDelay = 300 * time.Millisecond // gives the cursor time to settle on the bobber
-	interactHold   = 40 * time.Millisecond
+	searchTimeout    = 5 * time.Second        // recast when no bobber appears
+	reelClickDelay   = 300 * time.Millisecond // gives the cursor time to settle on the bobber
+	interactHold     = 40 * time.Millisecond
+	repositionSettle = 750 * time.Millisecond
 )
 
 // FishingFSM manages fishing state, its deadline and input actions. All of them
 // run on one goroutine, so a transition cancels anything the old state had pending.
 type FishingFSM struct {
-	state         FishingState // owned by the loop goroutine; cur mirrors it for other goroutines
-	cur           atomic.Int32
-	coordMu       sync.Mutex // guards coordX/Y/Set writes against TargetCoordinates reads
-	coordX        int
-	coordY        int
-	coordSet      bool
-	targetValid   func() bool
-	confirmMarker func() bool
-	logger        *slog.Logger
-	source        *config.Config // copied by the goroutine that starts a run, which owns it
-	cfg           config.Config  // loop-owned copy for the current run
-	timer         *time.Timer
-	gen           uint64 // identifies the live deadline
-	deadline      time.Time
-	cursorStart   time.Time
-	cursorSteps   []CursorStep
-	reelDone      func()
-	reelTiming    ReelTiming
-	reelPressed   bool
-	releaseInput  func()
-	detectorAt    time.Time
-	reelDelay     time.Duration
-	failedCasts   int
-	sessionEnd    time.Time
-	stats         struct{ casts, reels, failedInRow atomic.Int32 } // this run, for the UI
-	actions       ActionCallbacks
-	events        chan any
-	done          <-chan struct{}
-	stopped       chan struct{}
-	cancel        context.CancelFunc
-	listeners     []FishingStateListener
+	state               FishingState // owned by the loop goroutine; cur mirrors it for other goroutines
+	cur                 atomic.Int32
+	coordMu             sync.Mutex // guards coordX/Y/Set writes against TargetCoordinates reads
+	coordX              int
+	coordY              int
+	coordSet            bool
+	targetValid         func() bool
+	confirmMarker       func() bool
+	targetBox           image.Rectangle
+	missAim             *image.Point
+	offTargetReel       bool
+	logger              *slog.Logger
+	source              *config.Config // copied by the goroutine that starts a run, which owns it
+	cfg                 config.Config  // loop-owned copy for the current run
+	timer               *time.Timer
+	gen                 uint64 // identifies the live deadline
+	deadline            time.Time
+	cursorStart         time.Time
+	cursorSteps         []CursorStep
+	reelDone            func()
+	reelTiming          ReelTiming
+	reelPressed         bool
+	releaseInput        func()
+	detectorAt          time.Time
+	reelDelay           time.Duration
+	idleTried           bool
+	nextReposition      int32
+	checkingReposition  bool
+	repositionAttempt   int
+	repositionLimit     int
+	repositionDirection int
+	repositionDX        int
+	repositionLogout    atomic.Bool
+	failedCasts         int
+	sessionEnd          time.Time
+	stats               struct{ casts, reels, reelAttempts, reelInputs, failedInRow atomic.Int32 } // this run, for the UI
+	actions             ActionCallbacks
+	events              chan any
+	done                <-chan struct{}
+	stopped             chan struct{}
+	cancel              context.CancelFunc
+	listeners           []FishingStateListener
+	haltReason          atomic.Pointer[string] // why the run halted on its own; nil when the person stopped it
 }
 
 // NewFSM creates and starts a FishingFSM in StateHalt. A nil logger discards
@@ -80,6 +95,8 @@ func (f *FishingFSM) loop() {
 	defer func() {
 		if r := recover(); r != nil {
 			f.logger.Error("fsm panic; halting", "error", r, "stack", string(debug.Stack()))
+			reason := "an internal error; see pixel_bot_logs.json"
+			f.haltReason.Store(&reason)
 			f.cancel()
 			f.transition(StateHalt)
 		}
@@ -108,17 +125,33 @@ func (f *FishingFSM) handle(ev any) {
 			f.setCoords(e.x, e.y, true)
 			f.targetValid = e.valid
 			f.confirmMarker = e.confirm
+			f.targetBox = e.box
+			f.missAim = e.missAim
+			if f.checkingReposition && f.hasCurrentTarget() {
+				f.checkingReposition = false
+				f.failedCasts = 0
+				f.stats.failedInRow.Store(0)
+				f.planReposition()
+				f.logger.Info("reposition verified: bobber found")
+			}
 			f.transition(StateMonitoring)
 		}
 	case evtTargetInvalidated:
 		if (f.state == StateMonitoring || f.state == StateReeling) && !f.hasCurrentTarget() {
 			f.resumeSearch()
 		}
+	case evtPassingPlayer:
+		if f.state == StateMonitoring && f.hasCurrentTarget() && e.confirm() {
+			f.activity(f.cfg.TargetPlayerKey, "target passing player")
+		}
 	case evtTargetLost:
 		if f.state == StateMonitoring {
 			f.castFailed()
 		}
 	case evtHalt:
+		if e.reason != "" {
+			f.why(e.reason)
+		}
 		f.halt()
 	case evtFishBite:
 		if f.state == StateMonitoring {
@@ -130,16 +163,25 @@ func (f *FishingFSM) handle(ev any) {
 			f.transition(StateSearching)
 		}
 	case evtFocusLost:
-		if f.state != StateHalt {
+		if f.checkingReposition && f.state != StateHalt {
+			f.why("game focus was lost while checking the new fishing position")
+			f.halt()
+		} else if f.state != StateHalt {
 			f.transition(StateWaitingFocus)
 		}
 	case evtAwaitFocus:
 		if f.state == StateHalt {
 			f.cfg = e.cfg
+			f.haltReason.Store(nil)
 			f.failedCasts = 0
 			f.stats.casts.Store(0)
 			f.stats.reels.Store(0)
+			f.stats.reelAttempts.Store(0)
+			f.stats.reelInputs.Store(0)
 			f.stats.failedInRow.Store(0)
+			f.checkingReposition = false
+			f.repositionLogout.Store(false)
+			f.planReposition()
 			if f.actions.Cursor != nil {
 				f.actions.Cursor.Reset()
 			}
@@ -151,7 +193,7 @@ func (f *FishingFSM) handle(ev any) {
 			f.transition(StateWaitingFocus)
 		}
 	case evtForceCast:
-		if f.state == StateSearching || f.state == StateMonitoring || f.state == StateCooldown {
+		if !f.checkingReposition && (f.state == StateSearching || f.state == StateMonitoring || f.state == StateCooldown) {
 			f.recast()
 		}
 	case evtDeadline:
@@ -167,10 +209,13 @@ type (
 		x, y    int
 		valid   func() bool
 		confirm func() bool
+		missAim *image.Point
+		box     image.Rectangle
 	}
 	evtTargetInvalidated struct{}
 	evtTargetLost        struct{}
-	evtHalt              struct{}
+	evtPassingPlayer     struct{ confirm func() bool }
+	evtHalt              struct{ reason string }
 	evtFishBite          struct{ at time.Time }
 	evtFocusAcquired     struct{}
 	evtFocusLost         struct{}
@@ -239,6 +284,7 @@ func (f *FishingFSM) wake() {
 		f.cursorSteps = f.cursorSteps[n:]
 		// Skip elapsed intermediate points instead of sending a burst.
 		if !f.actions.Cursor.Move(point) {
+			f.why("the pointer was moved away, or the game was not in front")
 			f.halt()
 			return
 		}
@@ -257,25 +303,135 @@ func (f *FishingFSM) deadlineReached() {
 	case StateReeling:
 		f.finishReel()
 	case StateCooldown:
+		if !f.idleTried && time.Now().Before(f.sessionEnd) {
+			if f.nextReposition != 0 && f.stats.reels.Load() >= f.nextReposition {
+				f.startReposition()
+				return
+			}
+			if f.cfg.IdleKey != "" && rand.IntN(12) == 0 {
+				f.idleTried = true
+				if f.activity(f.cfg.IdleKey, "between-catch action") || f.state == StateCooldown {
+					f.arm(time.Duration(300+rand.IntN(601)) * time.Millisecond)
+				}
+				return
+			}
+		}
 		f.recast()
 	}
 }
 
 // castFailed ends a cast that produced no reel, halting once too many fail in a row.
-func (f *FishingFSM) castFailed() {
+func (f *FishingFSM) countFailedCast() bool {
 	f.failedCasts++
 	f.stats.failedInRow.Store(int32(f.failedCasts))
-	if f.failedCasts >= f.cfg.MaxFailedCasts {
-		f.logger.Warn("halting: too many failed casts", "limit", f.cfg.MaxFailedCasts)
+	return f.failedCasts >= f.cfg.MaxFailedCasts
+}
+
+func (f *FishingFSM) castFailed() {
+	if f.checkingReposition {
+		f.countFailedCast()
+		if time.Now().After(f.sessionEnd) {
+			f.recast()
+			return
+		}
+		if f.repositionAttempt < f.repositionLimit {
+			f.transition(StateCooldown)
+			f.startReposition()
+			return
+		}
+		f.why(fmt.Sprintf("no bobber found after %d reposition attempts", f.repositionAttempt))
+		f.repositionLogout.Store(true)
+		f.halt()
+		return
+	}
+	if f.countFailedCast() {
+		f.why(fmt.Sprintf("%d casts in a row got no bite", f.cfg.MaxFailedCasts))
 		f.halt()
 		return
 	}
 	f.recast()
 }
 
+func (f *FishingFSM) planReposition() {
+	f.nextReposition = 0
+	if f.cfg.RepositionKey != "" {
+		f.nextReposition = f.stats.reels.Load() + int32(45+rand.IntN(11))
+	}
+}
+
+func (f *FishingFSM) startReposition() {
+	f.idleTried = true
+	if !f.checkingReposition {
+		f.repositionAttempt = 0
+		f.repositionLimit = 4 + rand.IntN(3) // initial move plus three to five retries
+		f.repositionDirection = rand.IntN(12)
+		f.repositionDX = 12
+		if roll := f.actions.RepositionRoll; roll != nil {
+			f.repositionDX = 8 + roll(9)
+			if roll(2) == 0 {
+				f.repositionDX = -f.repositionDX
+			}
+		}
+	}
+	if !f.moveForReposition() {
+		if f.state != StateHalt {
+			f.why("reposition input was blocked. Check the movement binding and game focus")
+			f.halt()
+		}
+		return
+	}
+	f.repositionAttempt++
+	f.checkingReposition = true
+	settle := repositionSettle
+	if roll := f.actions.RepositionRoll; roll != nil {
+		settle = time.Duration(550+roll(251)+roll(251)) * time.Millisecond
+	}
+	f.arm(settle)
+}
+
+func (f *FishingFSM) moveForReposition() bool {
+	key := f.cfg.RepositionKey
+	if key == config.RepositionAuto {
+		// Reverse each pair of steps before trying the other axis.
+		direction := f.repositionDirection % 4
+		key = string("WSAD"[direction^(f.repositionAttempt%4)])
+		cameraAttempt := f.repositionAttempt - 2
+		if f.repositionDirection < 4 {
+			cameraAttempt = f.repositionAttempt
+		}
+		var drag func(int) (bool, bool)
+		if f.hardwareKeyboard() {
+			drag = f.actions.DragHardwareCamera
+		} else if f.cfg.ReelMethod != config.ReelInteractKey {
+			drag = f.actions.DragCamera
+		}
+		if drag != nil && cameraAttempt >= 0 && cameraAttempt < 2 {
+			dx := f.repositionDX
+			if dx == 0 {
+				dx = 12
+			}
+			if cameraAttempt == 1 {
+				dx = -dx
+			}
+			if attempted, moved := drag(dx); attempted {
+				if moved {
+					f.logger.Info("reposition camera drag", "dx", dx)
+				}
+				return moved
+			}
+		}
+	}
+	return f.activity(key, "reposition action executed")
+}
+
+// TakeRepositionLogout reports a failed reposition sequence once, after capture stops.
+func (f *FishingFSM) TakeRepositionLogout() bool {
+	return f.repositionLogout.Swap(false)
+}
+
 func (f *FishingFSM) recast() {
 	if time.Now().After(f.sessionEnd) {
-		f.logger.Warn("halting: session limit reached", "minutes", f.cfg.MaxSessionMinutes)
+		f.why(fmt.Sprintf("the %d minute session limit was reached", f.cfg.MaxSessionMinutes))
 		f.halt()
 		return
 	}
@@ -285,6 +441,22 @@ func (f *FishingFSM) recast() {
 func (f *FishingFSM) halt() {
 	f.setCoords(0, 0, false)
 	f.transition(StateHalt)
+}
+
+// why records the reason for a halt that the person did not ask for, before
+// halt notifies the listeners that show it.
+func (f *FishingFSM) why(reason string) {
+	f.logger.Warn("halting: " + reason)
+	f.haltReason.Store(&reason)
+}
+
+// HaltReason says why the last run halted on its own, or "" when the person
+// stopped it. Safe from any goroutine.
+func (f *FishingFSM) HaltReason() string {
+	if reason := f.haltReason.Load(); reason != nil {
+		return *reason
+	}
+	return ""
 }
 
 func (f *FishingFSM) setCoords(x, y int, set bool) {
@@ -322,6 +494,7 @@ func (f *FishingFSM) transition(next FishingState) {
 	case StateReeling:
 		f.startReel()
 	case StateCooldown:
+		f.idleTried = false
 		cooldown := f.reelTiming.Cooldown
 		f.reelTiming = ReelTiming{}
 		if cooldown == 0 {
@@ -336,7 +509,7 @@ func (f *FishingFSM) transition(next FishingState) {
 func (f *FishingFSM) pressCast() bool {
 	vk, ok := f.actions.ParseVK(f.cfg.CastKey)
 	if !ok {
-		f.logger.Error("halting: unknown cast key", "key", f.cfg.CastKey)
+		f.why(fmt.Sprintf("%q is not a Cast key Go Fish can press", f.cfg.CastKey))
 		return false
 	}
 	var dispatched func()
@@ -344,11 +517,12 @@ func (f *FishingFSM) pressCast() bool {
 		dispatched = f.actions.ObserveCast()
 	}
 	if f.hardwareKeyboard() {
-		if !f.tapKeyboard(vk) {
+		if !f.tapKeyboard(vk, 0) {
 			return false
 		}
-	} else {
-		f.actions.PressKey(vk)
+	} else if !f.actions.PressKey(vk) {
+		f.why("cast input was blocked")
+		return false
 	}
 	if dispatched != nil {
 		dispatched()
@@ -363,8 +537,14 @@ func (f *FishingFSM) startMonitoring() {
 		f.resumeSearch()
 		return
 	}
-	if f.cfg.ReelMethod != config.ReelInteractKey && !f.beginCursor(true) {
-		return
+	if f.cfg.ReelMethod != config.ReelInteractKey {
+		aim, move := image.Pt(f.coordX, f.coordY), true
+		if f.actions.Approach != nil {
+			aim, move = f.actions.Approach(aim, f.targetBox)
+		}
+		if move && !f.beginCursor(aim, true) {
+			return
+		}
 	}
 	f.logger.Info("found blobber", "x", f.coordX, "y", f.coordY)
 	f.arm(time.Duration(f.cfg.MaxCastDurationSeconds) * time.Second)
@@ -381,6 +561,22 @@ func (f *FishingFSM) startReel() {
 		f.resumeSearch()
 		return
 	}
+	f.offTargetReel = false
+	aim := image.Pt(f.coordX, f.coordY)
+	if f.actions.ReelRoll != nil {
+		switch f.actions.ReelRoll(60) {
+		case 0:
+			f.finishMiss("forgot to reel")
+			return
+		case 1:
+			if f.cfg.ReelMethod == config.ReelInteractKey || f.missAim == nil || f.actions.HoldRight == nil {
+				f.finishMiss("no off-target reel available")
+				return
+			}
+			f.offTargetReel = true
+			aim = *f.missAim
+		}
+	}
 	if f.actions.ObserveReel != nil {
 		f.reelDone = f.actions.ObserveReel()
 	}
@@ -393,17 +589,22 @@ func (f *FishingFSM) startReel() {
 		f.reelPressed = false
 	}
 	if f.cfg.ReelMethod == config.ReelInteractKey {
-		f.reelTiming.Hold = interactHold
-	} else if !f.beginCursor(false) {
-		return
-	}
-	if f.hardwareKeyboard() {
-		f.reelTiming.Hold = 0 // the ESP32 owns the press and release
-	}
-	if f.reelTiming.Hold > 0 {
-		if elapsed := f.reelTiming.AfterDetection; elapsed > 0 {
-			f.reelDelay = max(0, elapsed-time.Since(f.detectorAt))
+		if f.reelTiming.Hold == 0 {
+			f.reelTiming.Hold = interactHold
 		}
+	} else {
+		if f.offTargetReel && f.reelTiming.Hold == 0 {
+			f.reelTiming.Hold = interactHold
+		}
+		if !f.beginCursor(aim, false) {
+			return
+		}
+	}
+	if elapsed := f.reelTiming.AfterDetection; elapsed > 0 {
+		f.reelDelay = max(0, elapsed-time.Since(f.detectorAt))
+	}
+	if f.hardwareKeyboard() && f.cfg.ReelMethod != config.ReelInteractKey {
+		f.reelTiming.Hold = 0 // the ESP32 right click owns its press and release
 	}
 	if n := len(f.cursorSteps); n > 0 {
 		f.reelDelay = max(f.reelDelay, time.Until(f.cursorStart.Add(f.cursorSteps[n-1].After)))
@@ -414,15 +615,14 @@ func (f *FishingFSM) startReel() {
 	f.arm(f.reelDelay)
 }
 
-func (f *FishingFSM) beginCursor(settle bool) bool {
+func (f *FishingFSM) beginCursor(target image.Point, settle bool) bool {
 	if f.actions.Cursor == nil {
-		f.actions.MoveCursor(f.coordX, f.coordY)
+		f.actions.MoveCursor(target.X, target.Y)
 		return true
 	}
-	target := image.Pt(f.coordX, f.coordY)
 	steps, ok := f.actions.Cursor.Plan(target, settle)
 	if !ok || len(steps) == 0 || steps[len(steps)-1].Point != target {
-		f.logger.Warn("halting: cursor path unavailable")
+		f.why("could not aim at the bobber. Keep the pointer inside the focused game window")
 		f.halt()
 		return false
 	}
@@ -444,7 +644,7 @@ func (f *FishingFSM) finishReel() {
 		if f.cfg.ReelMethod == config.ReelInteractKey {
 			vk, ok := f.interactVK(f.cfg)
 			if !ok {
-				f.logger.Warn("halting: Interact key unavailable")
+				f.why("the Interact key is not set, or it matches the Cast or Stop key")
 				f.halt()
 				return
 			}
@@ -453,8 +653,9 @@ func (f *FishingFSM) finishReel() {
 				f.resumeSearch()
 				return
 			}
+			f.stats.reelAttempts.Add(1)
 			if f.hardwareKeyboard() {
-				if !f.tapKeyboard(vk) {
+				if !f.tapKeyboard(vk, f.reelTiming.Hold) {
 					f.halt()
 					return
 				}
@@ -465,20 +666,26 @@ func (f *FishingFSM) finishReel() {
 				}
 			}
 		} else if f.reelTiming.Hold > 0 && f.actions.HoldRight != nil {
+			f.stats.reelAttempts.Add(1)
 			needsRelease = true
 			f.releaseInput = f.actions.HoldRight()
 		} else {
-			f.actions.ClickRight()
+			f.stats.reelAttempts.Add(1)
+			if !f.actions.ClickRight() {
+				f.why("reel click was blocked")
+				f.halt()
+				return
+			}
 		}
 		if needsRelease && f.releaseInput == nil {
-			f.logger.Warn("halting: timed reel press was blocked")
+			f.why("the reel press was blocked; the game was not in front")
 			f.halt()
 			return
 		}
 		if f.reelDone != nil {
 			f.reelDone()
 		}
-		if f.reelTiming.Hold > 0 {
+		if f.reelTiming.Hold > 0 && !f.hardwareKeyboard() {
 			f.reelPressed = true
 			f.arm(f.reelTiming.Hold)
 			return
@@ -488,6 +695,11 @@ func (f *FishingFSM) finishReel() {
 		f.observeReelTiming("reel_released", "")
 		f.reelPressed = false
 	}
+	f.stats.reelInputs.Add(1)
+	if f.offTargetReel {
+		f.finishMiss("clicked beside the bobber")
+		return
+	}
 	f.failedCasts = 0
 	f.stats.reels.Add(1)
 	f.stats.failedInRow.Store(0)
@@ -495,17 +707,28 @@ func (f *FishingFSM) finishReel() {
 	f.transition(StateCooldown)
 }
 
+func (f *FishingFSM) finishMiss(reason string) {
+	f.logger.Info("reel missed", "reason", reason)
+	if f.countFailedCast() {
+		f.why(fmt.Sprintf("%d casts in a row ended without a catch", f.cfg.MaxFailedCasts))
+		f.halt()
+		return
+	}
+	f.transition(StateCooldown)
+	f.idleTried = true
+}
+
 func (f *FishingFSM) hardwareKeyboard() bool {
 	return f.cfg.ESP32Port != "" && !f.cfg.DryRun
 }
 
-func (f *FishingFSM) tapKeyboard(vk byte) bool {
+func (f *FishingFSM) tapKeyboard(vk byte, hold time.Duration) bool {
 	if f.actions.TapKeyboard == nil {
-		f.logger.Warn("halting: ESP32 keyboard unavailable")
+		f.why("the ESP32 keyboard is not available")
 		return false
 	}
-	if err := f.actions.TapKeyboard(vk); err != nil {
-		f.logger.Error("halting: ESP32 keyboard action failed", "error", err)
+	if err := f.actions.TapKeyboard(vk, hold); err != nil {
+		f.why("the ESP32 keyboard failed: " + err.Error())
 		return false
 	}
 	return true
@@ -566,10 +789,13 @@ func (f *FishingFSM) Current() FishingState              { return FishingState(f
 func (f *FishingFSM) EventTargetAcquiredAt(x, y int)     { f.send(evtTargetAcquiredAt{x: x, y: y}) }
 func (f *FishingFSM) EventTargetLost()                   { f.send(evtTargetLost{}) }
 func (f *FishingFSM) EventHalt()                         { f.send(evtHalt{}) }
-func (f *FishingFSM) EventFishBite()                     { f.send(evtFishBite{at: time.Now()}) }
-func (f *FishingFSM) EventFocusAcquired()                { f.send(evtFocusAcquired{}) }
-func (f *FishingFSM) EventFocusLost()                    { f.send(evtFocusLost{}) }
-func (f *FishingFSM) ForceCast()                         { f.send(evtForceCast{}) }
+
+// EventHaltBecause halts and says why, for the UI to show.
+func (f *FishingFSM) EventHaltBecause(reason string) { f.send(evtHalt{reason: reason}) }
+func (f *FishingFSM) EventFishBite()                 { f.send(evtFishBite{at: time.Now()}) }
+func (f *FishingFSM) EventFocusAcquired()            { f.send(evtFocusAcquired{}) }
+func (f *FishingFSM) EventFocusLost()                { f.send(evtFocusLost{}) }
+func (f *FishingFSM) ForceCast()                     { f.send(evtForceCast{}) }
 
 // EventAwaitFocus starts a run with a copy of the current config. Call it from
 // the goroutine that owns the config.
@@ -587,14 +813,20 @@ func (f *FishingFSM) TargetCoordinates() (int, int, bool) {
 
 // Stats counts the current run's actions; a new run starts them at zero.
 type Stats struct {
-	Casts       int // casts made
-	Reels       int // reels made, each one a bite the bot answered
-	FailedInRow int // casts in a row that ended without a reel
+	Casts        int // casts made
+	Reels        int // acknowledged on-target reel inputs
+	ReelAttempts int // dispatch attempts, including blocked and off-target input
+	ReelInputs   int // acknowledged reel inputs, including off-target input
+	FailedInRow  int // casts in a row that ended without a reel
 }
 
 // Stats returns the current run's counts. Safe from any goroutine.
 func (f *FishingFSM) Stats() Stats {
-	return Stats{Casts: int(f.stats.casts.Load()), Reels: int(f.stats.reels.Load()), FailedInRow: int(f.stats.failedInRow.Load())}
+	return Stats{
+		Casts: int(f.stats.casts.Load()), Reels: int(f.stats.reels.Load()),
+		ReelAttempts: int(f.stats.reelAttempts.Load()), ReelInputs: int(f.stats.reelInputs.Load()),
+		FailedInRow: int(f.stats.failedInRow.Load()),
+	}
 }
 
 // Close stops the FSM and waits for its loop. Call it outside that loop.

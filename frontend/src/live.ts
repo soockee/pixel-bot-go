@@ -143,7 +143,7 @@ export function setupLive(): (state: State) => void {
 
     $("reels").textContent = String(s.reels);
     $("reels-label").textContent = words.catches[s.reels === 1 ? 0 : 1];
-    $("casts").textContent = s.casts ? `${s.reels} of ${s.casts} casts got a bite` : "No casts yet";
+    $("casts").textContent = s.casts ? `${s.casts} casts · ${s.reelInputs} of ${s.reelAttempts} reel inputs sent` : "No casts yet";
     meter("session", s.sessionSeconds, s.sessionLimit * 60, `${clock(s.sessionSeconds)} of ${s.sessionLimit} min`);
     meter("failed", s.failedInRow, s.maxFailed, `${s.failedInRow} of ${s.maxFailed}`);
   };

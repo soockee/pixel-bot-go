@@ -25,10 +25,14 @@ func (s *mockPipeline) Start() error {
 }
 func (s *mockPipeline) Stop() { s.stopped++ }
 
-type mockFSM struct{ awaited, halted int }
+type mockFSM struct {
+	awaited, halted int
+	reason          string
+}
 
-func (f *mockFSM) EventAwaitFocus() { f.awaited++ }
-func (f *mockFSM) EventHalt()       { f.halted++ }
+func (f *mockFSM) EventAwaitFocus()   { f.awaited++ }
+func (f *mockFSM) EventHalt()         { f.halted++ }
+func (f *mockFSM) HaltReason() string { return f.reason }
 
 type mockView struct {
 	reset   int
@@ -75,6 +79,30 @@ func TestCapturePresenterStopsCaptureAfterFSMHalt(t *testing.T) {
 	p.Tick()
 	if m.Enabled() || pipeline.stopped != 1 {
 		t.Fatalf("capture still running: enabled=%v stopped=%d", m.Enabled(), pipeline.stopped)
+	}
+}
+
+func TestCapturePresenterSaysWhyTheRunHalted(t *testing.T) {
+	m := &mockModel{}
+	fsm := &mockFSM{}
+	view := &mockView{status: "Ready"}
+	p := NewCapturePresenter(m, &mockPipeline{}, fsm, view)
+
+	// The person pressed Stop: nothing to explain, so the status stays.
+	p.Enable()
+	p.OnState(fishing.StateCooldown, fishing.StateHalt)
+	p.Tick()
+	if m.Enabled() || view.status != "Ready" {
+		t.Fatalf("a stop the person asked for: enabled=%v status=%q", m.Enabled(), view.status)
+	}
+
+	// The run halted on its own: the status says why.
+	fsm.reason = "5 casts in a row got no bite"
+	p.Enable()
+	p.OnState(fishing.StateMonitoring, fishing.StateHalt)
+	p.Tick()
+	if m.Enabled() || view.status != "Stopped: 5 casts in a row got no bite" {
+		t.Fatalf("a halt on its own: enabled=%v status=%q", m.Enabled(), view.status)
 	}
 }
 
