@@ -22,8 +22,10 @@ import (
 // Pets, players and the fishing line passing through the box are dark, and
 // spell effects are coloured, so neither counts; a change in brightness or
 // motion alone does not either. On labelled bot and hand-play recordings a
-// bite's spray covers 10 to 40 % of the centre disc, everything else at most
-// about 6 %.
+// bite's spray covers 10 to 40 % of the centre disc, everything else on open
+// water at most about 6 %. A fishing pool's foam sprays the centre all the
+// time, so a splash must also stand out from the water's recent level
+// (sprayLevel).
 //
 // Two fallbacks cover games that never play the bite sound. A game that has
 // made no sound at all since the run started, for example with its sound
@@ -38,9 +40,10 @@ import (
 type SplashSoundDetector struct {
 	logger     *slog.Logger
 	scene      brightening
-	start      time.Time // the first frame since Reset
-	splashFrom time.Time // first frame of the latest splash at the bobber
-	splash     time.Time // its last frame
+	level      sprayLevel // the centre's recent spray, which a splash must stand out from
+	start      time.Time  // the first frame since Reset
+	splashFrom time.Time  // first frame of the latest splash at the bobber
+	splash     time.Time  // its last frame
 	sound      onsets
 	fired      bool
 
@@ -56,7 +59,9 @@ const (
 	splashRise      = 12                     // luminance above the baseline that counts as spray
 	splashLag       = 500 * time.Millisecond // the baseline takes on lasting changes, such as the landed bobber or a parked cursor
 	splashSpread    = 25                     // at most this spread between colour channels: spray is nearly colourless
-	splashMinCentre = 0.09                   // share of the centre disc that must turn to spray
+	splashMinCentre = 0.09                   // share of the centre disc that must turn to spray at least
+	splashLevelFor  = 3 * time.Second        // how far back the water's own spray level reaches
+	splashOverLevel = 2                      // and how many times its 90th percentile a splash must reach
 )
 
 const (
@@ -114,7 +119,12 @@ func (s *SplashSoundDetector) Feed(roi *image.RGBA, t time.Time) bool {
 		s.start = t
 	}
 	b, settled := s.scene.measure(roi, t)
-	if !settled || !b.centreSplash() {
+	share := float64(b.centre) / float64(max(b.disc, 1))
+	splash := settled && b.centre > 0 && share >= s.level.threshold(t)
+	if settled {
+		s.level.add(t, share)
+	}
+	if !splash {
 		return false
 	}
 	if s.splash.IsZero() || t.Sub(s.splash) > soundAfterSplash {
@@ -267,10 +277,6 @@ type brightening struct {
 // centre disc where the bobber sits.
 type brightened struct{ all, centre, disc int }
 
-func (b brightened) centreSplash() bool {
-	return b.centre > 0 && float64(b.centre) >= splashMinCentre*float64(b.disc)
-}
-
 // measure updates the baseline with roi and reports what brightened. It reports
 // false until the scene has settled after the first frame.
 func (s *brightening) measure(roi *image.RGBA, t time.Time) (brightened, bool) {
@@ -308,4 +314,34 @@ func (s *brightening) measure(roi *image.RGBA, t time.Time) (brightened, bool) {
 		}
 	}
 	return b, !first && t.Sub(s.start) >= splashSettle
+}
+
+// sprayLevel keeps the centre's spray share over the last splashLevelFor, so
+// a splash must stand out from the water's own churn: almost none on open
+// water, while the foam of a fishing pool keeps 10 to 16 % of the centre
+// sprayed in recordings, up to 26 % without a bite.
+type sprayLevel struct {
+	at    []time.Time
+	share []float64
+}
+
+// threshold is the spray share a frame at t needs to count as a splash:
+// splashMinCentre, or splashOverLevel times the recent 90th percentile once
+// a second of history is known.
+func (l *sprayLevel) threshold(t time.Time) float64 {
+	if len(l.at) == 0 || t.Sub(l.at[0]) < time.Second {
+		return splashMinCentre
+	}
+	recent := slices.Clone(l.share)
+	slices.Sort(recent)
+	return max(splashMinCentre, splashOverLevel*recent[len(recent)*9/10])
+}
+
+// add remembers a frame's spray share and forgets what is older than splashLevelFor.
+func (l *sprayLevel) add(t time.Time, share float64) {
+	drop := 0
+	for drop < len(l.at) && t.Sub(l.at[drop]) > splashLevelFor {
+		drop++
+	}
+	l.at, l.share = append(l.at[drop:], t), append(l.share[drop:], share)
 }

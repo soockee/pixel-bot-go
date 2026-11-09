@@ -407,3 +407,58 @@ func TestSplashSoundNeedsWhiteSprayAtTheBobber(t *testing.T) {
 		})
 	}
 }
+
+// foam is calm water whose centre is speckled with white foam that moves
+// every frame, as a fishing pool's swirl does; splash adds a white disc of
+// that radius at the bobber.
+func foam(rng *rand.Rand, splash int) *image.RGBA {
+	img := water(0, 0, 0)
+	for py := range 90 {
+		for px := range 100 {
+			d2 := (px-50)*(px-50) + (py-45)*(py-45)
+			if d2 <= 22*22 && rng.IntN(100) < 30 || splash > 0 && d2 <= splash*splash {
+				img.SetRGBA(px, py, color.RGBA{185, 195, 200, 255})
+			}
+		}
+	}
+	return img
+}
+
+// In a fishing pool the foam keeps part of the centre white all the time. A
+// splash must stand out from that: the foam with a bite-like sound is no
+// bite, a splash on top of it with the bite sound is.
+func TestSplashSoundStandsOutFromAPoolsFoam(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		splash int
+		want   bool
+	}{
+		{"foam and another player's bite sound", 0, false},
+		{"a splash in the foam and the bite sound", 16, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			rng := rand.New(rand.NewPCG(1, 2))
+			d := NewSplashSoundDetector(nil)
+			start := time.Unix(0, 0)
+			quiet, loud := tone(5), tone(200)
+			fired := false
+			for at := time.Duration(0); at < 7*time.Second && !fired; at += 10 * time.Millisecond {
+				if at%(33*time.Millisecond) == 0 {
+					splash := 0
+					if at >= 5*time.Second && at < 5500*time.Millisecond {
+						splash = tt.splash
+					}
+					fired = d.Feed(foam(rng, splash), start.Add(at))
+				}
+				packet := quiet
+				if at >= 5300*time.Millisecond && at < 5600*time.Millisecond {
+					packet = loud
+				}
+				fired = fired || d.Hear(packet, start.Add(at))
+			}
+			if fired != tt.want {
+				t.Errorf("fired = %v, want %v", fired, tt.want)
+			}
+		})
+	}
+}
