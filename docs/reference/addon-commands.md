@@ -8,8 +8,10 @@ order: 3
 | --- | --- |
 | `/bobbermarker` | Shows how far the box sits from the bobber's marker spot, in pixels. |
 | `/bobbermarker y <pixels>` | Moves the box up or down. Negative numbers move it down. The default is `-40`. |
+| `/bobbermarker pixels off` | Hides the brackets and status pixels for recording experiments. |
+| `/bobbermarker pixels on` | Shows the addon pixels again. Reloading the UI also restores them. |
 
-The setting is saved with your other addon settings and kept between sessions.
+The vertical offset is saved with your other addon settings and kept between sessions.
 
 ## Game settings the addon uses
 

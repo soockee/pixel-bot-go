@@ -6,6 +6,8 @@ order: 7
 
 `-record` writes `frames/<elapsed ms>.png`, every one with the window's size and coordinates: the whole window once every 10 seconds, and in between, while the marker shows, only a square around the marker box (at least 256 px, 32 px beyond the marker) with the rest black, about 10 a second; frames without a marker in between are skipped. Black compresses to almost nothing, so a bobber frame takes about 0.3 MB instead of several MB, and readers need no crop offsets. With `-window` it also writes `input.jsonl` and `audio.wav`. Frame names, trace times and audio count from the same start: sample n of `audio.wav` (16-bit PCM, stereo, 44.1 kHz) played n/44100 s after it, and silence fills the time the game played nothing. The sound is a copy of the game process and its child processes only (Windows process loopback, Windows 10 2004 or later); the game stays audible and no other program's sound is recorded. If the sound cannot be captured, the status says so and the recording continues without it. and `session.json` holds the offset from window positions to frame pixels. Coordinates in `labels.json` are pixels in the frames. Write it by hand or generate it with `detecteval -label`.
 
+Use `-record-full` for vision experiments. It targets 30 fps and saves the full client area on every successful capture, including before the cast and when the marker is hidden. Use the PNG timestamps to measure the actual frame cadence. [Experiment protocol](../how-to/test-fishing-vision.md)
+
 ```json
 {
   "casts": [

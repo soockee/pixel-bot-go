@@ -15,12 +15,10 @@ import (
 	"github.com/soocke/pixel-bot-go/domain/detect"
 )
 
-// recordInterval gives about 10 fps.
-// shortcut: live detection runs at 30 fps, so bite results from a recording are
-// only an approximation; raise the rate if the disk can take it.
-const recordInterval = 100 * time.Millisecond
-
 const (
+	recordInterval     = 100 * time.Millisecond
+	fullRecordInterval = 33 * time.Millisecond
+
 	// fullEvery is how often a recording keeps the whole window. In between,
 	// frames keep only the square around the bobber, which is all bite
 	// detection reads, and leave the rest black, which PNG stores in almost no
@@ -51,11 +49,15 @@ func Create(dir string) error {
 
 // Record saves frames into a directory from Create until ctx ends and returns
 // how many it wrote. File names are milliseconds since start. Every frame has
-// the window's size and coordinates; see fullEvery for what each one holds.
-// locator finds the bobber.
-func Record(ctx context.Context, frames FrameSource, locator detect.Locator, dir string, start time.Time) (int, error) {
+// the window's size and coordinates. With fullFrames it keeps the whole frame
+// at a higher cadence. Otherwise it uses locator to crop between full frames.
+func Record(ctx context.Context, frames FrameSource, locator detect.Locator, dir string, start time.Time, fullFrames bool) (int, error) {
 	encoder := png.Encoder{CompressionLevel: png.BestSpeed}
-	ticker := time.NewTicker(recordInterval)
+	interval := recordInterval
+	if fullFrames {
+		interval = fullRecordInterval
+	}
+	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	written := 0
 	var lastFull time.Time
@@ -78,7 +80,7 @@ func Record(ctx context.Context, frames FrameSource, locator detect.Locator, dir
 			return written, err
 		}
 		img := frame.Image
-		if frame.CapturedAt.Sub(lastFull) >= fullEvery {
+		if fullFrames || frame.CapturedAt.Sub(lastFull) >= fullEvery {
 			lastFull = frame.CapturedAt
 		} else if match, found := locator.Locate(img); found {
 			kept = keepAround(img, match.Box, kept)

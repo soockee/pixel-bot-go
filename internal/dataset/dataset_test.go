@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/soocke/pixel-bot-go/domain/capture"
@@ -60,7 +61,7 @@ func TestRecordGrabsNoFrameAfterStop(t *testing.T) {
 			t.Fatal(err)
 		}
 		frames := &slowStop{countingFrames{limit: 1, cancel: cancel}}
-		if _, err := Record(ctx, frames, detect.NewMarkerLocator(), dir, time.Unix(0, 0)); err != nil {
+		if _, err := Record(ctx, frames, detect.NewMarkerLocator(), dir, time.Unix(0, 0), false); err != nil {
 			t.Fatal(err)
 		}
 		cancel()
@@ -78,7 +79,7 @@ func TestRecordThenLoad(t *testing.T) {
 	if err := Create(dir); err != nil {
 		t.Fatal(err)
 	}
-	n, err := Record(ctx, &countingFrames{limit: 3, cancel: cancel}, detect.NewMarkerLocator(), dir, time.Unix(0, 0))
+	n, err := Record(ctx, &countingFrames{limit: 3, cancel: cancel}, detect.NewMarkerLocator(), dir, time.Unix(0, 0), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +145,7 @@ func TestRecordKeepsOnlyTheBobberBetweenWholeFrames(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	n, err := Record(ctx, &scriptedFrames{images: images, ms: ms, cancel: cancel}, detect.NewMarkerLocator(), dir, time.UnixMilli(0))
+	n, err := Record(ctx, &scriptedFrames{images: images, ms: ms, cancel: cancel}, detect.NewMarkerLocator(), dir, time.UnixMilli(0), false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -174,6 +175,33 @@ func TestRecordKeepsOnlyTheBobberBetweenWholeFrames(t *testing.T) {
 	}
 }
 
+func TestRecordFullKeepsUnmarkedFrames(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "session")
+		if err := Create(dir); err != nil {
+			t.Fatal(err)
+		}
+		img := image.NewRGBA(image.Rect(0, 0, 320, 240))
+		img.Pix[0], img.Pix[3] = 90, 255
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		frames := &scriptedFrames{images: []*image.RGBA{img, img}, ms: []int64{33, 66}, cancel: cancel}
+		started := time.Now()
+		n, err := Record(ctx, frames, nil, dir, time.UnixMilli(0), true)
+		if elapsed := time.Since(started); err != nil || n != 2 || elapsed != 66*time.Millisecond {
+			t.Fatalf("recorded %d frames in %v, err %v; want 2 frames in 66 ms", n, elapsed, err)
+		}
+		ref := FrameRef{Path: filepath.Join(FramesPath(dir), "000000066.png")}
+		got, err := ref.Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Bounds() != img.Bounds() || got.RGBAAt(0, 0) != img.RGBAAt(0, 0) {
+			t.Fatal("second frame lost pixels outside the bobber area")
+		}
+	})
+}
+
 func TestCreateRefusesAnExistingDirectory(t *testing.T) {
 	if err := Create(t.TempDir()); err == nil {
 		t.Error("want an error")
@@ -189,7 +217,7 @@ func TestRecordStopsOnCaptureFailure(t *testing.T) {
 	if err := Create(dir); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Record(context.Background(), brokenFrames{}, detect.NewMarkerLocator(), dir, time.Now()); err == nil {
+	if _, err := Record(context.Background(), brokenFrames{}, detect.NewMarkerLocator(), dir, time.Now(), false); err == nil {
 		t.Error("want an error")
 	}
 }
