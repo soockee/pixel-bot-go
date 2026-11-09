@@ -470,7 +470,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				engine.cfg.ReelMethod = config.ReelInteractKey
 				engine.cfg.InteractKey = "F"
 				engine.cfg.ESP32Port = "COM3"
-				engine.cfg.RepositionKey = config.RepositionAuto
+				engine.cfg.Reposition = true
 
 				defer fsm.Close()
 				startEngine(t, engine)

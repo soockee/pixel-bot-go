@@ -13,7 +13,10 @@ import (
 	"strings"
 )
 
-//go:embed BobberMarker
+// The files are named, not the folder: a game folder linked to the source
+// folder gets keysFile written into it by Install, which must not be carried.
+//
+//go:embed BobberMarker/BobberMarker.lua BobberMarker/BobberMarker.toc
 var files embed.FS
 
 // Name is the addon's folder name under Interface\AddOns.

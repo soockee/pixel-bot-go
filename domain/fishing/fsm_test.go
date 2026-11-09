@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -308,17 +309,17 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 		t.Run(outcome, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				cfg := testConfig()
-				cfg.RepositionKey = "Q"
+				cfg.Reposition = true
 				log := &actionLog{}
 				actions := recordingActions(log)
 				actions.ParseVK = func(key string) (byte, bool) {
-					if key == cfg.RepositionKey {
-						return 'Q', true
+					if len(key) == 1 && strings.Contains("WASD", key) {
+						return key[0], true
 					}
 					return 'F', true
 				}
 				actions.PressKey = func(vk byte) bool {
-					if vk == 'Q' {
+					if strings.ContainsRune("WASD", rune(vk)) {
 						log.add("reposition")
 					} else {
 						log.add("cast")
@@ -407,7 +408,7 @@ func TestAutomaticRepositionPairsOppositeMoves(t *testing.T) {
 	var keys []byte
 	var drags []int
 	f := &FishingFSM{
-		cfg:                 config.Config{RepositionKey: config.RepositionAuto},
+		cfg:                 config.Config{Reposition: true},
 		logger:              testLogger,
 		repositionDirection: 4,
 		actions: ActionCallbacks{
@@ -433,9 +434,9 @@ func TestAutomaticRepositionUsesOnlyESP32WhenSelected(t *testing.T) {
 	var taps []byte
 	f := &FishingFSM{
 		cfg: config.Config{
-			RepositionKey: config.RepositionAuto,
-			ReelMethod:    config.ReelInteractKey,
-			ESP32Port:     "AUTO",
+			Reposition: true,
+			ReelMethod: config.ReelInteractKey,
+			ESP32Port:  "AUTO",
 		},
 		logger:              testLogger,
 		repositionDirection: 4,
@@ -470,9 +471,9 @@ func TestAutomaticRepositionDragsThroughESP32(t *testing.T) {
 	var drags []int
 	f := &FishingFSM{
 		cfg: config.Config{
-			RepositionKey: config.RepositionAuto,
-			ReelMethod:    config.ReelInteractKey,
-			ESP32Port:     "AUTO",
+			Reposition: true,
+			ReelMethod: config.ReelInteractKey,
+			ESP32Port:  "AUTO",
 		},
 		logger: testLogger,
 		actions: ActionCallbacks{

@@ -33,6 +33,8 @@ The serial link runs at 115200 baud. Terminate each command with a newline.
 | `DRAG -12` | Holds the left mouse button, moves horizontally by 12 counts to the left, and releases. Accepts signed nonzero counts from -24 to 24. |
 | `TEST` | Performs the same tap as `TAP 04`. |
 | `MOVE <dx> <dy>` | Sends one relative mouse report, each value from -127 to 127. Windows scales it by its pointer speed, so Go Fish reads the cursor after each one and corrects until it is on the target. Returns `OK` or an `ERR` response. |
+| `BUTTONS` | Returns `BUTTONS` on firmware that presses the mouse side buttons. |
+| `BUTTON 4` | Holds Mouse 4 (or `BUTTON 5` for Mouse 5) for 40 ms and releases it. An optional hold from 10 to 500 ms follows, such as `BUTTON 4 85`. Returns `OK` or an `ERR` response. |
 | `CLICK` | Presses the right mouse button, holds it for 30 ms, and releases it. Returns `OK` or an `ERR` response. |
 | `WIFI <ssid> <password>` | Stores the Wi-Fi credentials in flash and restarts. The last space separates SSID and password. Replies `OK restarting`, or `ERR WIFI <ssid> <password>` when the password is shorter than 8 characters. |
 | `WIFI` | `WIFI http://<ip>` once connected, `WIFI connecting` before that, or `WIFI off` without stored credentials |

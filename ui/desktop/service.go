@@ -160,18 +160,13 @@ func (s *Service) SaveSettings(values Settings) (saved Settings, err error) {
 			err = errors.New("the Interact key matches the active Stop hotkey")
 			return
 		}
-		if (next.Schedule || next.RepositionKey != "") && sameKey(next.LogoutKey, s.view.State().StopKey) {
+		if (next.Schedule || next.Reposition) && sameKey(next.LogoutKey, s.view.State().StopKey) {
 			err = errors.New("the Logout key matches the active Stop hotkey")
 			return
 		}
-		for _, optional := range []struct{ key, label string }{
-			{next.IdleKey, "Between-catch action"}, {next.TargetPlayerKey, "Target passing player"},
-			{next.RepositionKey, "Reposition key"},
-		} {
-			if optional.key != "" && sameKey(optional.key, s.view.State().StopKey) {
-				err = errors.New("the " + optional.label + " key matches the active Stop hotkey")
-				return
-			}
+		if next.TargetPlayerKey != "" && sameKey(next.TargetPlayerKey, s.view.State().StopKey) {
+			err = errors.New("the Target passing player key matches the active Stop hotkey")
+			return
 		}
 		if err = next.Save(s.cfgPath); err != nil {
 			s.logger.Error("config save failed", "error", err)

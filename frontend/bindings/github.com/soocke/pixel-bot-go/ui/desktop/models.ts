@@ -46,8 +46,8 @@ export interface Settings {
     "interactKey": string;
     "esp32Port": string;
     "stopKey": string;
-    "idleKey": string;
-    "repositionKey": string;
+    "idleMoves": boolean;
+    "reposition": boolean;
     "targetPlayerKey": string;
     "maxFailedCasts": number;
     "maxSessionMinutes": number;
@@ -57,8 +57,6 @@ export interface Settings {
     "breakMinMinutes": number;
     "breakMaxMinutes": number;
     "logoutKey": string;
-    "characterPNG": string;
-    "inWorldPNG": string;
     "locator": string;
     "biteDetector": string;
     "recordDir": string;

@@ -1,6 +1,11 @@
 package esp32
 
-import "golang.org/x/sys/windows"
+import (
+	"errors"
+	"time"
+
+	"golang.org/x/sys/windows"
+)
 
 var (
 	user32            = windows.NewLazySystemDLL("user32.dll")
@@ -31,7 +36,8 @@ var scanUsage = [...]byte{
 
 // ForegroundUsage resolves a virtual key through the active window's layout.
 func ForegroundUsage(vk byte) (byte, bool) {
-	if !SupportsKey(vk) && vk != 0x0d { // Enter is used for scheduled login.
+	// Enter is used for scheduled login; the side buttons have no key position.
+	if !SupportsKey(vk) && vk != 0x0d || vk == vkMouse4 || vk == vkMouse5 {
 		return 0, false
 	}
 	window := windows.GetForegroundWindow()
@@ -49,4 +55,17 @@ func ForegroundUsage(vk byte) (byte, bool) {
 		return 0, false
 	}
 	return scanUsage[scan], scanUsage[scan] != 0
+}
+
+// Press sends one binding: Mouse 4 and 5 as mouse buttons, any other key as
+// the key at its position in the foreground window's layout.
+func (k *Keyboard) Press(vk byte, hold time.Duration) error {
+	if vk == vkMouse4 || vk == vkMouse5 {
+		return k.PressButton(vk, hold)
+	}
+	usage, ok := ForegroundUsage(vk)
+	if !ok {
+		return errors.New("ESP32 could not map the key in the active keyboard layout")
+	}
+	return k.TapFor(usage, hold)
 }

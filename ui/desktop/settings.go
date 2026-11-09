@@ -25,8 +25,8 @@ type Settings struct {
 	InteractKey            string  `json:"interactKey"`
 	ESP32Port              string  `json:"esp32Port"`
 	StopKey                string  `json:"stopKey"`
-	IdleKey                string  `json:"idleKey"`
-	RepositionKey          string  `json:"repositionKey"`
+	IdleMoves              bool    `json:"idleMoves"`
+	Reposition             bool    `json:"reposition"`
 	TargetPlayerKey        string  `json:"targetPlayerKey"`
 	MaxFailedCasts         int     `json:"maxFailedCasts"`
 	MaxSessionMinutes      int     `json:"maxSessionMinutes"`
@@ -36,8 +36,6 @@ type Settings struct {
 	BreakMinMinutes        int     `json:"breakMinMinutes"`
 	BreakMaxMinutes        int     `json:"breakMaxMinutes"`
 	LogoutKey              string  `json:"logoutKey"`
-	CharacterPNG           string  `json:"characterPNG"`
-	InWorldPNG             string  `json:"inWorldPNG"`
 	Locator                string  `json:"locator"`
 	BiteDetector           string  `json:"biteDetector"`
 	RecordDir              string  `json:"recordDir"`
@@ -61,12 +59,12 @@ func settingsOf(c *config.Config) Settings {
 		MinScale: c.MinScale, MaxScale: c.MaxScale, ScaleStep: c.ScaleStep, Threshold: c.Threshold,
 		Stride: c.Stride, Refine: c.Refine, CastKey: c.CastKey, StopKey: c.StopKey,
 		ReelMethod: c.ReelMethod, InteractKey: c.InteractKey, ESP32Port: c.ESP32Port,
-		IdleKey: c.IdleKey, RepositionKey: c.RepositionKey, TargetPlayerKey: c.TargetPlayerKey,
+		IdleMoves: c.IdleMoves, Reposition: c.Reposition, TargetPlayerKey: c.TargetPlayerKey,
 		MaxFailedCasts: c.MaxFailedCasts, MaxSessionMinutes: c.MaxSessionMinutes,
 		Schedule: c.Schedule, PlayMinMinutes: c.PlayMinMinutes, PlayMaxMinutes: c.PlayMaxMinutes,
 		BreakMinMinutes: c.BreakMinMinutes, BreakMaxMinutes: c.BreakMaxMinutes,
-		LogoutKey: c.LogoutKey, CharacterPNG: c.CharacterPNG, InWorldPNG: c.InWorldPNG,
-		Locator: c.Locator, BiteDetector: c.BiteDetector, RecordDir: c.RecordDir, RecordKeys: c.RecordKeys, ShareRecordings: c.ShareRecordings,
+		LogoutKey: c.LogoutKey,
+		Locator:   c.Locator, BiteDetector: c.BiteDetector, RecordDir: c.RecordDir, RecordKeys: c.RecordKeys, ShareRecordings: c.ShareRecordings,
 		ROISizePx: c.ROISizePx, CooldownSeconds: c.CooldownSeconds, MaxCastDurationSeconds: c.MaxCastDurationSeconds,
 	}
 }
@@ -108,10 +106,10 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	}
 	if port != "" {
 		if !esp32.SupportsKey(castVK) {
-			return c, errors.New("ESP32 requires a keyboard binding for Cast")
+			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Cast")
 		}
 		if s.ReelMethod == config.ReelInteractKey && !esp32.SupportsKey(interactVK) {
-			return c, errors.New("ESP32 requires a keyboard binding for Interact")
+			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Interact")
 		}
 	}
 	check(slices.Contains(detect.LocatorNames(), s.Locator), "Locator")
@@ -120,25 +118,25 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	if len(invalid) > 0 {
 		return c, errors.New("not saved, invalid: " + strings.Join(invalid, ", "))
 	}
-	if s.Schedule || strings.TrimSpace(s.RepositionKey) != "" {
+	if s.Schedule || s.Reposition {
 		vk, ok := action.ParseVK(s.LogoutKey)
 		if !ok || sameKey(s.LogoutKey, s.CastKey) || sameKey(s.LogoutKey, s.StopKey) ||
 			s.ReelMethod == config.ReelInteractKey && sameKey(s.LogoutKey, s.InteractKey) {
 			return c, errors.New("set a Logout key distinct from Cast, Interact and Stop")
 		}
 		if port != "" && !esp32.SupportsKey(vk) {
-			return c, errors.New("ESP32 requires a keyboard binding for Logout")
+			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Logout")
 		}
 	}
 	c.MinScale, c.MaxScale, c.ScaleStep, c.Threshold = s.MinScale, s.MaxScale, s.ScaleStep, s.Threshold
 	c.Stride, c.Refine, c.CastKey, c.StopKey = s.Stride, s.Refine, s.CastKey, s.StopKey
 	c.ReelMethod, c.InteractKey, c.ESP32Port = s.ReelMethod, s.InteractKey, port
 	c.MaxFailedCasts, c.MaxSessionMinutes = s.MaxFailedCasts, s.MaxSessionMinutes
-	c.IdleKey, c.RepositionKey, c.TargetPlayerKey = s.IdleKey, s.RepositionKey, s.TargetPlayerKey
+	c.IdleMoves, c.Reposition, c.TargetPlayerKey = s.IdleMoves, s.Reposition, s.TargetPlayerKey
 	c.Schedule = s.Schedule
 	c.PlayMinMinutes, c.PlayMaxMinutes = s.PlayMinMinutes, s.PlayMaxMinutes
 	c.BreakMinMinutes, c.BreakMaxMinutes = s.BreakMinMinutes, s.BreakMaxMinutes
-	c.LogoutKey, c.CharacterPNG, c.InWorldPNG = s.LogoutKey, s.CharacterPNG, s.InWorldPNG
+	c.LogoutKey = s.LogoutKey
 	c.Locator, c.BiteDetector = s.Locator, s.BiteDetector
 	c.RecordDir, c.RecordKeys, c.ShareRecordings = strings.TrimSpace(s.RecordDir), s.RecordKeys, s.ShareRecordings
 	c.ROISizePx, c.CooldownSeconds, c.MaxCastDurationSeconds = s.ROISizePx, s.CooldownSeconds, s.MaxCastDurationSeconds

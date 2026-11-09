@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 	"testing"
+	"time"
 
 	"go.bug.st/serial"
 )
@@ -19,9 +20,10 @@ type testPort struct {
 	closed bool
 }
 
-func (p *testPort) Read(b []byte) (int, error)  { return p.reply.Read(b) }
-func (p *testPort) Write(b []byte) (int, error) { return p.writes.Write(b) }
-func (p *testPort) Close() error                { p.closed = true; return nil }
+func (p *testPort) Read(b []byte) (int, error)         { return p.reply.Read(b) }
+func (p *testPort) Write(b []byte) (int, error)        { return p.writes.Write(b) }
+func (p *testPort) Close() error                       { p.closed = true; return nil }
+func (p *testPort) SetReadTimeout(time.Duration) error { return nil }
 
 // mousePort is firmware that moves a fake pointer by gain(counts) per report.
 type mousePort struct {
@@ -64,6 +66,24 @@ func TestMoveToReachesTargetDespiteAcceleration(t *testing.T) {
 				t.Errorf("took %d moves", port.moves)
 			}
 		})
+	}
+}
+
+func TestPressButtonSendsTheSideButton(t *testing.T) {
+	port := &testPort{reply: strings.NewReader("OK\r\nOK\r\n")}
+	k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port})}
+	if err := k.PressButton(vkMouse4, 0); err == nil {
+		t.Fatal("pressed a side button on firmware that did not offer BUTTONS")
+	}
+	k.buttons = true
+	if err := k.PressButton(vkMouse4, 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := k.PressButton(vkMouse5, 85*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	if got := port.writes.String(); got != "BUTTON 4 40\nBUTTON 5 85\n" {
+		t.Fatalf("writes = %q", got)
 	}
 }
 

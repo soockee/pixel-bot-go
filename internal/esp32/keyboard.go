@@ -37,9 +37,18 @@ func PortName(name string) (string, error) {
 	return fmt.Sprintf("COM%d", n), nil
 }
 
-// SupportsKey reports whether the backend accepts this Windows virtual key.
+// Windows virtual keys of the mouse side buttons, which the board presses as
+// HID mouse buttons 4 and 5.
+const (
+	vkMouse4 = 0x05
+	vkMouse5 = 0x06
+)
+
+// SupportsKey reports whether the backend accepts this Windows virtual key:
+// letters, digits, F1 to F12, and Mouse 4 and 5.
 func SupportsKey(vk byte) bool {
-	return vk >= 'A' && vk <= 'Z' || vk >= '0' && vk <= '9' || vk >= 0x70 && vk <= 0x7b
+	return vk >= 'A' && vk <= 'Z' || vk >= '0' && vk <= '9' || vk >= 0x70 && vk <= 0x7b ||
+		vk == vkMouse4 || vk == vkMouse5
 }
 
 // Keyboard owns one port for the duration of a fishing run.
@@ -50,6 +59,7 @@ type Keyboard struct {
 	timed   bool
 	camera  bool
 	pointer bool                                            // MOVE and CLICK, for the right-click reel
+	buttons bool                                            // BUTTON, for bindings on Mouse 4 and 5
 	name    string                                          // the port in use, which AutoPort resolves
 	open    func(string, *serial.Mode) (serial.Port, error) // nil opens the real port; tests replace it
 	list    func() ([]string, error)                        // nil lists the USB serial ports; tests replace it
@@ -217,6 +227,35 @@ func (k *Keyboard) prepareCapability(command string, supported *bool) error {
 		return fmt.Errorf("ESP32 %s capability: unexpected response %q", command, reply)
 	}
 	return nil
+}
+
+// PrepareButtons probes for the mouse side buttons without sending input.
+func (k *Keyboard) PrepareButtons() error {
+	return k.prepareCapability("BUTTONS", &k.buttons)
+}
+
+// PressButton holds Mouse 4 or Mouse 5 for hold, 40 ms when it is zero, with
+// the same failure contract as Tap.
+func (k *Keyboard) PressButton(vk byte, hold time.Duration) error {
+	if vk != vkMouse4 && vk != vkMouse5 {
+		return errors.New("ESP32 presses only Mouse 4 and Mouse 5")
+	}
+	if hold == 0 {
+		hold = 40 * time.Millisecond
+	}
+	if hold < 10*time.Millisecond || hold > 500*time.Millisecond {
+		return errors.New("ESP32 hold must be between 10 and 500 ms")
+	}
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.port == nil || !k.buttons {
+		return errors.New("flash the current ESP32 firmware to press Mouse 4 and Mouse 5")
+	}
+	if err := k.port.SetReadTimeout(300*time.Millisecond + hold); err != nil {
+		k.closePort()
+		return fmt.Errorf("ESP32 button timeout: %w", err)
+	}
+	return k.sendAction(fmt.Sprintf("BUTTON %d %d", vk-vkMouse4+4, hold.Milliseconds()), "button press")
 }
 
 // PreparePointer probes for pointer moves and right clicks without sending input.
@@ -400,7 +439,7 @@ func (k *Keyboard) closePort() {
 	if k.port != nil {
 		_ = k.port.Close()
 		k.port, k.reader, k.name = nil, nil, ""
-		k.timed, k.camera, k.pointer = false, false, false
+		k.timed, k.camera, k.pointer, k.buttons = false, false, false, false
 	}
 }
 

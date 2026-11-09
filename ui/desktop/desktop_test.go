@@ -99,9 +99,10 @@ func TestESP32PortSettings(t *testing.T) {
 	if got, err := values.apply(*base); err != nil || got.ESP32Port != "AUTO" {
 		t.Errorf("right-click reel with the ESP32 = %q, %v; want AUTO", got.ESP32Port, err)
 	}
+	// The board presses the mouse side buttons too.
 	values.CastKey = "Mouse4"
-	if _, err := values.apply(*base); err == nil {
-		t.Error("a mouse button for Cast was accepted with the ESP32")
+	if _, err := values.apply(*base); err != nil {
+		t.Errorf("Mouse 4 for Cast with the ESP32: %v", err)
 	}
 }
 

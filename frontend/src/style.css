@@ -759,3 +759,5 @@ input.switch:disabled { opacity: 0.5; cursor: default; }
 
 #upload-review-image { display: block; max-width: 100%; max-height: 26vh; }
 #upload-review-player { width: 100%; }
+
+.key-pair { display: flex; gap: 8px; align-items: center; }

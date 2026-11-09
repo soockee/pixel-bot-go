@@ -104,7 +104,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			for _, key := range keys {
 				vk, valid := action.ParseVK(key)
 				if !valid || !esp32.SupportsKey(vk) {
-					return nil, errors.New("ESP32 requires keyboard bindings for Cast and Interact")
+					return nil, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Cast and Interact")
 				}
 			}
 			if err := keyboard.Open(port); err != nil {
@@ -115,10 +115,13 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 					return nil, err
 				}
 			}
-			if run.RepositionKey == config.RepositionAuto {
+			if run.Reposition || run.IdleMoves {
 				if err := keyboard.PrepareCamera(); err != nil {
 					return nil, err
 				}
+			}
+			if err := keyboard.PrepareButtons(); err != nil {
+				return nil, err
 			}
 			if run.ReelMethod != config.ReelInteractKey {
 				if err := keyboard.PreparePointer(); err != nil {
@@ -157,14 +160,10 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			return true
 		}
 		callbacks.TapKeyboard = func(vk byte, hold time.Duration) error {
-			usage, ok := esp32.ForegroundUsage(vk)
 			if !inFront() {
 				return errors.New("selected game window lost focus")
 			}
-			if !ok {
-				return errors.New("ESP32 could not map the key in the active keyboard layout")
-			}
-			return keyboard.TapFor(usage, hold)
+			return keyboard.Press(vk, hold)
 		}
 		guard := &action.Guard{
 			Logger: logger, InFront: inFront, Area: c.gameArea, CursorPos: action.CursorPos,
@@ -174,6 +173,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			BeginHold: action.BeginRightHold, BeginKeyHold: action.BeginKeyHold,
 		}
 		callbacks.PressKey, callbacks.MoveCursor, callbacks.ClickRight = guard.PressKey, guard.MoveCursor, guard.ClickRight
+		callbacks.CursorPos = action.CursorPos
 		callbacks.HoldInteract = guard.HoldKey
 		callbacks.HoldRight = guard.HoldRight
 		callbacks.DragCamera = func(dx int) (bool, bool) { return guard.DragCamera(dx, action.DragCamera) }

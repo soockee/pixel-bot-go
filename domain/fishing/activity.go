@@ -3,15 +3,18 @@ package fishing
 import (
 	"fmt"
 	"image"
+	"math"
+	"math/rand/v2"
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/internal/esp32"
 )
 
-// CheckActivityKeys rejects optional keys that could perform another Go Fish action.
+// CheckActivityKeys rejects a Target passing player key, and the WASD keys a
+// reposition presses, that another Go Fish action already uses.
 func CheckActivityKeys(cfg config.Config, parse func(string) (byte, bool)) error {
-	if cfg.IdleKey == "" && cfg.TargetPlayerKey == "" && cfg.RepositionKey == "" {
+	if cfg.TargetPlayerKey == "" && !cfg.Reposition {
 		return nil
 	}
 	if parse == nil {
@@ -26,8 +29,6 @@ func CheckActivityKeys(cfg config.Config, parse func(string) (byte, bool)) error
 		{cfg.InteractKey, "Interact", false},
 		{cfg.StopKey, "Stop", false},
 		{cfg.LogoutKey, "Logout", false},
-		{cfg.IdleKey, "Between-catch action", true},
-		{repositionBinding(cfg.RepositionKey), "Reposition key", true},
 		{cfg.TargetPlayerKey, "Target passing player", true},
 	} {
 		if binding.key == "" {
@@ -36,7 +37,7 @@ func CheckActivityKeys(cfg config.Config, parse func(string) (byte, bool)) error
 		vk, ok := parse(binding.key)
 		if binding.optional {
 			if !ok || !esp32.SupportsKey(vk) {
-				return fmt.Errorf("%s requires a letter, digit or F1–F12", binding.label)
+				return fmt.Errorf("%s requires a letter, digit, F1–F12, Mouse 4 or Mouse 5", binding.label)
 			}
 			if other, exists := used[vk]; exists {
 				return fmt.Errorf("%s needs a different key from %s", binding.label, other)
@@ -46,11 +47,11 @@ func CheckActivityKeys(cfg config.Config, parse func(string) (byte, bool)) error
 			used[vk] = binding.label
 		}
 	}
-	if cfg.RepositionKey == config.RepositionAuto {
+	if cfg.Reposition {
 		for _, key := range "WASD" {
 			if vk, ok := parse(string(key)); ok {
 				if other, exists := used[vk]; exists {
-					return fmt.Errorf("automatic reposition uses %s, which is assigned to %s", string(key), other)
+					return fmt.Errorf("repositioning walks with %s, which is assigned to %s", string(key), other)
 				}
 			}
 		}
@@ -58,11 +59,72 @@ func CheckActivityKeys(cfg config.Config, parse func(string) (byte, bool)) error
 	return nil
 }
 
-func repositionBinding(key string) string {
-	if key == config.RepositionAuto {
-		return ""
+// idleMove plays one between-catch movement: now and then a small camera
+// nudge where the input mode can drag, otherwise a cursor wander.
+func (f *FishingFSM) idleMove() {
+	if drag := f.cameraDrag(); drag != nil && rand.IntN(3) == 0 {
+		dx := 4 + rand.IntN(7)
+		if rand.IntN(2) == 0 {
+			dx = -dx
+		}
+		if _, moved := drag(dx); moved {
+			f.logger.Info("between-catch camera nudge", "dx", dx)
+		}
+		return
 	}
-	return key
+	start := image.Pt(f.coordX, f.coordY)
+	if f.actions.CursorPos != nil {
+		if x, y, ok := f.actions.CursorPos(); ok {
+			start = image.Pt(x, y)
+		}
+	}
+	// shortcut: the path runs on the FSM loop, so a Stop waits for it (about
+	// half a second); schedule its points as timed steps if that is too slow.
+	for _, p := range wanderPath(start, rand.IntN) {
+		if f.actions.CanAct != nil && !f.actions.CanAct() {
+			return
+		}
+		f.actions.MoveCursor(p.X, p.Y)
+		time.Sleep(wanderStep)
+	}
+	f.logger.Info("between-catch cursor wander", "from", start)
+}
+
+// cameraDrag is the drag the input mode allows, nil when it has none. Windows
+// input drags only in right-click mode, where the app owns the pointer anyway.
+func (f *FishingFSM) cameraDrag() func(int) (bool, bool) {
+	if f.hardwareKeyboard() {
+		return f.actions.DragHardwareCamera
+	}
+	if f.cfg.ReelMethod != config.ReelInteractKey {
+		return f.actions.DragCamera
+	}
+	return nil
+}
+
+const wanderStep = 30 * time.Millisecond
+
+// wanderPath is a cursor drift of 40 to 160 px from start along a bent curve,
+// slow at both ends, with a pixel of tremble on the way. roll draws in [0, n).
+func wanderPath(start image.Point, roll func(int) int) []image.Point {
+	distance := float64(40 + roll(121))
+	angle := float64(roll(360)) * math.Pi / 180
+	end := image.Pt(start.X+int(distance*math.Cos(angle)), start.Y+int(distance*math.Sin(angle)))
+	// The control point sits off the straight line by up to a quarter of its length.
+	bend := float64(roll(51)-25) / 100 * distance
+	mid := image.Pt((start.X+end.X)/2+int(-math.Sin(angle)*bend), (start.Y+end.Y)/2+int(math.Cos(angle)*bend))
+	n := 10 + roll(7)
+	path := make([]image.Point, n)
+	for i := range path {
+		t := (1 - math.Cos(math.Pi*float64(i+1)/float64(n))) / 2
+		x := (1-t)*(1-t)*float64(start.X) + 2*(1-t)*t*float64(mid.X) + t*t*float64(end.X)
+		y := (1-t)*(1-t)*float64(start.Y) + 2*(1-t)*t*float64(mid.Y) + t*t*float64(end.Y)
+		path[i] = image.Pt(int(math.Round(x)), int(math.Round(y)))
+		if i < n-1 {
+			path[i] = path[i].Add(image.Pt(roll(3)-1, roll(3)-1))
+		}
+	}
+	return path
 }
 
 func (f *FishingFSM) activity(key, name string) bool {
@@ -127,6 +189,28 @@ func (r *run) pollPlayer(window image.Rectangle) {
 		e.fsm.send(evtPassingPlayer{confirm: func() bool { return sample() == player }})
 	}
 	r.playerSeen = player
+}
+
+// WorldSignalArea is where Bobber Marker shows its in-world blocks, in the
+// game window's client area.
+var WorldSignalArea = image.Rect(8, 16, 26, 22)
+
+// InWorld reports whether img, a capture of WorldSignalArea, shows the addon's
+// magenta, green and magenta blocks. Addons do not run on the character
+// screen, so without them the player is logged out or loading.
+func InWorld(img *image.RGBA) bool {
+	if img == nil || img.Bounds().Dx() < 18 || img.Bounds().Dy() < 6 {
+		return false
+	}
+	near := func(a, b uint8) bool { return max(a, b)-min(a, b) <= 24 }
+	o := img.Bounds().Min
+	for i, rgb := range [3][3]uint8{{255, 0, 255}, {0, 255, 0}, {255, 0, 255}} {
+		c := img.RGBAAt(o.X+3+i*6, o.Y+3)
+		if !near(c.R, rgb[0]) || !near(c.G, rgb[1]) || !near(c.B, rgb[2]) {
+			return false
+		}
+	}
+	return true
 }
 
 // The addon's opaque cyan/yellow/magenta/blue blocks identify an eligible
