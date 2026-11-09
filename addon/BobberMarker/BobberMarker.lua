@@ -137,6 +137,30 @@ local function UpdatePlayerSignal()
     playerSignal:Show();
 end
 
+-- Tells Go Fish the player is in the world. Addons do not run on the
+-- character screen, so no blocks there means logged out. Without a parent it
+-- draws over the interface and stays while Alt+Z hides UIParent; a WorldFrame
+-- child would draw under the interface.
+local worldSignal = CreateFrame("Frame");
+worldSignal:SetFrameStrata("TOOLTIP");
+local worldBlocks = {};
+for i, rgb in ipairs({ { 1, 0, 1 }, { 0, 1, 0 }, { 1, 0, 1 } }) do
+    local block = worldSignal:CreateTexture(nil, "OVERLAY");
+    block:SetColorTexture(rgb[1], rgb[2], rgb[3], 1);
+    worldBlocks[i] = block;
+end
+
+local function LayoutWorldSignal()
+    local px = PixelSize(worldSignal);
+    worldSignal:ClearAllPoints();
+    worldSignal:SetPoint("TOPLEFT", WorldFrame, "TOPLEFT", 8 * px, -16 * px);
+    worldSignal:SetSize(18 * px, 6 * px);
+    for i, block in ipairs(worldBlocks) do
+        block:SetPoint("TOPLEFT", worldSignal, "TOPLEFT", (i - 1) * 6 * px, 0);
+        block:SetSize(6 * px, 6 * px);
+    end
+end
+
 local function Layout()
 	local px = PixelSize(marker);
 	marker:SetSize(BOX * px, BOX * px);
@@ -386,6 +410,7 @@ function handlers.ADDON_LOADED()
 end
 
 function handlers.PLAYER_ENTERING_WORLD()
+	LayoutWorldSignal();
 	TrySetUpKeys();
 	if IsChanneling() then
 		StartFishing();
@@ -424,6 +449,8 @@ handlers.PLAYER_SOFT_INTERACT_CHANGED = Evaluate;
 handlers.PLAYER_SOFT_FRIEND_CHANGED = UpdatePlayerSignal;
 handlers.PLAYER_TARGET_CHANGED = UpdatePlayerSignal;
 handlers.PLAYER_REGEN_DISABLED = function() playerSignal:Hide(); end;
+handlers.DISPLAY_SIZE_CHANGED = LayoutWorldSignal;
+handlers.UI_SCALE_CHANGED = LayoutWorldSignal;
 
 local addonName = ...;
 local events = CreateFrame("Frame");

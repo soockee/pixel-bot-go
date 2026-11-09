@@ -7,30 +7,37 @@ import { playSound, sounds, themes } from "./themes";
 type Key = keyof Settings;
 type Value = Settings[Key];
 
-type Field = { key: Key; label: string; hint: string } & (
+/** when hides a field the other values make pointless; optional keys can be cleared. */
+type Field = { key: Key; label: string; hint: string; when?: (v: Settings) => boolean; optional?: boolean } & (
   | { kind: "key" | "switch" | "text" | "port" | "locator" | "biteDetector" | "reelMethod" }
   | { kind: "slider"; min: number; max: number; step: number; unit?: string }
 );
 
 /** User groups come first; dev groups (detection tuning) show only in debug
  * mode, recorder groups while the Recorder is shown. */
+const interact = (v: Settings) => v.reelMethod === "interact_key";
+const breaks = (v: Settings) => v.schedule;
+const logout = (v: Settings) => v.schedule || v.reposition;
+
 const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] = [
   {
-    title: "Keys",
+    title: "Fishing",
     fields: [
-      { key: "castKey", label: "Cast key", hint: "Click to set the key or mouse side button you use to cast Fishing in game.", kind: "key" },
-      { key: "reelMethod", label: "Reel method", hint: "Right-click the bobber, or use the game's Interact key without moving the cursor.", kind: "reelMethod" },
-      { key: "interactKey", label: "Interact key", hint: "Set the same binding as in the game before selecting Interact key as your reel method.", kind: "key" },
-      { key: "esp32Port", label: "ESP32 port", hint: "Pick Auto to find the paired board, or its COM port, to send keys, cursor moves and right clicks through it. Off uses Windows input.", kind: "port" },
-      { key: "targetPlayerKey", label: "Target passing player", hint: "Optional unused key, such as F8. Update Bobber Marker after setting it. Clear to disable.", kind: "text" },
-      { key: "idleKey", label: "Between-catch action", hint: "Optional key for a one-shot game action. Clear to disable.", kind: "text" },
-      { key: "stopKey", label: "Stop key", hint: "Stops fishing from anywhere, applies after a restart", kind: "key" },
+      { key: "castKey", label: "Cast key", hint: "The key or mouse side button that casts Fishing in game", kind: "key" },
+      { key: "reelMethod", label: "Reel method", hint: "Right-click the bobber, or press the game's Interact key without moving the cursor", kind: "reelMethod" },
+      { key: "interactKey", label: "Interact key", hint: "The same binding as Interact With Target in game", kind: "key", when: interact },
+      { key: "stopKey", label: "Stop key", hint: "Stops fishing from anywhere; applies after a restart", kind: "key" },
+    ],
+  },
+  {
+    title: "Input",
+    fields: [
+      { key: "esp32Port", label: "ESP32 board", hint: "Send every key, click and cursor move through the paired board. Auto finds it on its USB cable. Off uses Windows input.", kind: "port" },
     ],
   },
   {
     title: "Run",
     fields: [
-      { key: "repositionKey", label: "Reposition key", hint: "Enter auto for WASD and camera drags on supported input modes, or enter a bound movement key. Requires the Logout key and both screen images below. Clear to disable.", kind: "text" },
       { key: "maxSessionMinutes", label: "Session length", hint: "Stop at the first cast after this long", kind: "slider", min: 5, max: 240, step: 5, unit: "min" },
       { key: "maxFailedCasts", label: "Casts without a bite", hint: "Stop after this many casts in a row without a catch", kind: "slider", min: 1, max: 20, step: 1 },
       { key: "cooldownSeconds", label: "Pause after a catch", hint: "Wait before the next cast", kind: "slider", min: 1, max: 60, step: 1, unit: "s" },
@@ -38,16 +45,22 @@ const groups: { title: string; show?: "debug" | "recorder"; fields: Field[] }[] 
     ],
   },
   {
+    title: "Between catches",
+    fields: [
+      { key: "idleMoves", label: "Move the mouse", hint: "Now and then, drift the cursor a little or nudge the camera", kind: "switch" },
+      { key: "reposition", label: "Change spot", hint: "Every 45 to 55 catches, take a step with WASD or turn the camera, then check the next cast. Logs out if no spot works.", kind: "switch" },
+      { key: "targetPlayerKey", label: "Target passing player", hint: "An unused key Bobber Marker binds to select a friendly player who walks by. Update the addon after setting it.", kind: "key", optional: true },
+    ],
+  },
+  {
     title: "Scheduled breaks",
     fields: [
-      { key: "schedule", label: "Schedule play and breaks", hint: "Alternate timed fishing sessions and logged-out breaks after Start.", kind: "switch" },
-      { key: "playMinMinutes", label: "Shortest session", hint: "Lower end of the random play duration", kind: "slider", min: 1, max: 240, step: 1, unit: "min" },
-      { key: "playMaxMinutes", label: "Longest session", hint: "Upper end of the random play duration", kind: "slider", min: 1, max: 240, step: 1, unit: "min" },
-      { key: "breakMinMinutes", label: "Shortest break", hint: "Lower end of the random logged-out break", kind: "slider", min: 1, max: 240, step: 1, unit: "min" },
-      { key: "breakMaxMinutes", label: "Longest break", hint: "Upper end of the random logged-out break", kind: "slider", min: 1, max: 240, step: 1, unit: "min" },
-      { key: "logoutKey", label: "Logout key", hint: "Binding for your /logout macro in game", kind: "key" },
-      { key: "characterPNG", label: "Character screen image", hint: "Path to a PNG crop of a static character-select control", kind: "text" },
-      { key: "inWorldPNG", label: "In-game image", hint: "Path to a PNG crop of a static in-game control", kind: "text" },
+      { key: "schedule", label: "Take breaks", hint: "Alternate random fishing sessions with logged-out breaks", kind: "switch" },
+      { key: "playMinMinutes", label: "Shortest session", hint: "Lower end of the random play time", kind: "slider", min: 1, max: 240, step: 1, unit: "min", when: breaks },
+      { key: "playMaxMinutes", label: "Longest session", hint: "Upper end of the random play time", kind: "slider", min: 1, max: 240, step: 1, unit: "min", when: breaks },
+      { key: "breakMinMinutes", label: "Shortest break", hint: "Lower end of the random break", kind: "slider", min: 1, max: 240, step: 1, unit: "min", when: breaks },
+      { key: "breakMaxMinutes", label: "Longest break", hint: "Upper end of the random break", kind: "slider", min: 1, max: 240, step: 1, unit: "min", when: breaks },
+      { key: "logoutKey", label: "Logout key", hint: "Binding for your /logout macro in game. Bobber Marker tells Go Fish when you are logged out.", kind: "key", when: logout },
     ],
   },
   {
@@ -112,6 +125,11 @@ interface Control {
 export function setupSettings(): (s: State) => void {
   const form = $<HTMLFormElement>("settings");
   const controls = new Map<Key, Control>();
+  const conditional: { row: HTMLElement; when: (v: Settings) => boolean }[] = [];
+  const values = () => Object.fromEntries([...controls].map(([k, c]) => [k, c.get()])) as unknown as Settings;
+  const refresh = (v: Settings) => {
+    for (const c of conditional) c.row.hidden = !c.when(v);
+  };
   const gated: { fs: HTMLElement; show: "debug" | "recorder" }[] = [];
   const message = h("p", "Changes save as you make them", "settings-status");
   let running = false;
@@ -126,10 +144,11 @@ export function setupSettings(): (s: State) => void {
 
   // save sends the whole form; Go answers with the values as stored, clamped.
   function save() {
-    const values = Object.fromEntries([...controls].map(([k, c]) => [k, c.get()])) as unknown as Settings;
+    const next = values();
+    refresh(next);
     saving = saving.then(async () => {
       try {
-        const stored = await Service.SaveSettings(values);
+        const stored = await Service.SaveSettings(next);
         savedValues = stored;
         for (const [k, c] of controls) c.set(stored[k]);
         setMessage("Saved");
@@ -139,6 +158,7 @@ export function setupSettings(): (s: State) => void {
         }
         setMessage(String(e).replace(/^Error: /, ""), true);
       }
+      refresh(values());
     });
   }
 
@@ -149,7 +169,7 @@ export function setupSettings(): (s: State) => void {
     let listening = false;
     const show = () => {
       button.classList.toggle("listening", listening);
-      button.replaceChildren(listening ? "Press a key or button" : value ? h("kbd", keyLabel(value)) : "Set key");
+      button.replaceChildren(listening ? "Press a key or button" : value ? h("kbd", keyLabel(value)) : f.optional ? "Off" : "Set key");
     };
     const stop = () => {
       listening = false;
@@ -199,12 +219,26 @@ export function setupSettings(): (s: State) => void {
       show();
     });
     button.addEventListener("blur", () => listening && stop());
+    if (!f.optional) {
+      return {
+        el: button,
+        input: button,
+        get: () => value,
+        set: (v) => { value = String(v); show(); },
+        enable: (on) => { button.disabled = !on; if (!on && listening) stop(); },
+      };
+    }
+    const clear = h("button", "Clear", "button");
+    clear.type = "button";
+    clear.addEventListener("click", () => take(""));
+    const box = h("div", "", "key-pair");
+    box.append(button, clear);
     return {
-      el: button,
+      el: box,
       input: button,
       get: () => value,
-      set: (v) => { value = String(v); show(); },
-      enable: (on) => { button.disabled = !on; if (!on && listening) stop(); },
+      set: (v) => { value = String(v); show(); clear.hidden = !value; },
+      enable: (on) => { button.disabled = clear.disabled = !on; if (!on && listening) stop(); },
     };
   }
 
@@ -371,13 +405,17 @@ export function setupSettings(): (s: State) => void {
         const c = control(f, data);
         c.set(data.values[f.key]);
         controls.set(f.key, c);
-        fs.append(row(`setting-${f.key}`, f.label, f.hint, c.el, c.input));
+        const r = row(`setting-${f.key}`, f.label, f.hint, c.el, c.input);
+        if (f.when) conditional.push({ row: r, when: f.when });
+        fs.append(r);
       }
       return fs;
     });
+    refresh(data.values);
     const look = h("fieldset");
     look.append(h("legend", "Theme"), picker, row("setting-sounds", "Theme sounds", "Each theme greets a catch with its own sound", sound, sound));
-    form.replaceChildren(message, ...sections.slice(0, 2), look, ...sections.slice(2));
+    const user = groups.findIndex((g) => g.title === "Data sharing");
+    form.replaceChildren(message, ...sections.slice(0, user), look, ...sections.slice(user));
     lock();
   }
 

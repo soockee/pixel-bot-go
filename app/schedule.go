@@ -2,8 +2,6 @@ package app
 
 import (
 	"errors"
-	"fmt"
-	"image"
 	"math/rand/v2"
 	"time"
 
@@ -36,8 +34,6 @@ type playSchedule struct {
 	confirmed  bool
 	logoutOnly bool
 	logout     byte
-	world      *image.RGBA
-	character  *image.RGBA
 	screen     func(wantWorld bool) bool
 	tap        func(vk byte, wantWorld bool) (sent bool, err error)
 }
@@ -68,29 +64,15 @@ func (a *app) prepareSchedule() (*playSchedule, error) {
 	if !ok {
 		return nil, errors.New("set a valid Logout key")
 	}
-	for _, other := range []string{cfg.CastKey, cfg.InteractKey, cfg.StopKey, cfg.IdleKey, cfg.RepositionKey, cfg.TargetPlayerKey, c.View.State().StopKey} {
+	for _, other := range []string{cfg.CastKey, cfg.InteractKey, cfg.StopKey, cfg.TargetPlayerKey, c.View.State().StopKey} {
 		if vk, ok := action.ParseVK(other); ok && key == vk {
 			return nil, errors.New("the Logout key must differ from the other Go Fish keys")
 		}
 	}
 	if cfg.ESP32Port != "" && !esp32.SupportsKey(key) {
-		return nil, errors.New("ESP32 requires a keyboard binding for Logout")
+		return nil, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Logout")
 	}
-	world, err := readSchedulePNG(cfg.InWorldPNG)
-	if err != nil {
-		return nil, fmt.Errorf("in-game image: %w", err)
-	}
-	character, err := readSchedulePNG(cfg.CharacterPNG)
-	if err != nil {
-		return nil, fmt.Errorf("character screen image: %w", err)
-	}
-	if containsScreenPatch(world, character) || containsScreenPatch(character, world) {
-		return nil, errors.New("choose distinct controls for the two screen images")
-	}
-	return &playSchedule{
-		logout: key, world: world, character: character,
-		screen: a.scheduleScreen, tap: a.tapScheduledKey,
-	}, nil
+	return &playSchedule{logout: key, screen: a.scheduleScreen, tap: a.tapScheduledKey}, nil
 }
 
 func (a *app) setSchedulePhase(phase schedulePhase, until time.Time, status string) {
@@ -166,7 +148,7 @@ func (a *app) tickSchedule(now time.Time) {
 		if wantWorld {
 			expected = "the logged-in game"
 		}
-		a.stopSchedule("Schedule stopped: could not confirm " + expected + ". Check focus and the saved screen image.")
+		a.stopSchedule("Schedule stopped: could not confirm " + expected + ". Check focus and that Bobber Marker is up to date.")
 		return
 	}
 	if now.Before(s.nextCheck) || c.FSM.Current() != fishing.StateHalt {
@@ -211,14 +193,15 @@ func (a *app) scheduleScreen(wantWorld bool) bool {
 	if area == nil {
 		return false
 	}
-	frame, err := c.frames().Grab(*area)
+	signal := fishing.WorldSignalArea.Add(area.Min)
+	if !signal.In(*area) {
+		return false
+	}
+	frame, err := c.frames().Grab(signal)
 	if err != nil {
 		return false
 	}
-	s := a.schedule
-	world := containsScreenPatch(frame.Image, s.world)
-	character := containsScreenPatch(frame.Image, s.character)
-	return world == wantWorld && character != wantWorld
+	return fishing.InWorld(frame.Image) == wantWorld
 }
 
 func (a *app) scheduleKey(vk byte, wantWorld bool, next schedulePhase, status string) {
@@ -244,6 +227,9 @@ func (a *app) tapScheduledKey(vk byte, wantWorld bool) (bool, error) {
 		if err == nil {
 			err = keyboard.Open(port)
 		}
+		if err == nil {
+			err = keyboard.PrepareButtons()
+		}
 		if err != nil {
 			return false, err
 		}
@@ -256,11 +242,10 @@ func (a *app) tapScheduledKey(vk byte, wantWorld bool) (bool, error) {
 	case c.Config.DryRun:
 		a.logger.Info("dry-run scheduled key", "vk", vk)
 	case c.Config.ESP32Port != "":
-		usage, ok := esp32.ForegroundUsage(vk)
-		if !ok || !c.gameFocused() || a.scheduleStop.Load() {
+		if !c.gameFocused() || a.scheduleStop.Load() {
 			return false, nil
 		}
-		if err := keyboard.Tap(usage); err != nil {
+		if err := keyboard.Press(vk, 0); err != nil {
 			return false, err
 		}
 	default:

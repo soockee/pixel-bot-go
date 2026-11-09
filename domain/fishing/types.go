@@ -45,6 +45,8 @@ func (s FishingState) String() string {
 type ActionCallbacks struct {
 	PressKey   func(vk byte) bool
 	MoveCursor func(x, y int)
+	// CursorPos reads the pointer, where a between-catch wander starts.
+	CursorPos  func() (x, y int, ok bool)
 	ClickRight func() bool
 	ParseVK    func(key string) (byte, bool)
 	// CanAct checks focus just before dispatching an optional action.

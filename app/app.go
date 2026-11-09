@@ -260,7 +260,7 @@ func (a *app) toggleCapture() {
 			c.View.SetStatus("Cannot start: " + err.Error())
 			return
 		}
-		if c.Config.RepositionKey != "" && !c.Config.Schedule {
+		if c.Config.Reposition && !c.Config.Schedule {
 			if _, err := a.prepareSchedule(); err != nil {
 				c.View.SetStatus("Cannot enable repositioning: " + err.Error())
 				return

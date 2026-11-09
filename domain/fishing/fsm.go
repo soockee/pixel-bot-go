@@ -308,11 +308,14 @@ func (f *FishingFSM) deadlineReached() {
 				f.startReposition()
 				return
 			}
-			if f.cfg.IdleKey != "" && rand.IntN(12) == 0 {
+			if f.cfg.IdleMoves && rand.IntN(12) == 0 {
 				f.idleTried = true
-				if f.activity(f.cfg.IdleKey, "between-catch action") || f.state == StateCooldown {
-					f.arm(time.Duration(300+rand.IntN(601)) * time.Millisecond)
+				if f.actions.CanAct != nil && !f.actions.CanAct() {
+					f.transition(StateWaitingFocus)
+					return
 				}
+				f.idleMove()
+				f.arm(time.Duration(300+rand.IntN(601)) * time.Millisecond)
 				return
 			}
 		}
@@ -354,7 +357,7 @@ func (f *FishingFSM) castFailed() {
 
 func (f *FishingFSM) planReposition() {
 	f.nextReposition = 0
-	if f.cfg.RepositionKey != "" {
+	if f.cfg.Reposition {
 		f.nextReposition = f.stats.reels.Load() + int32(45+rand.IntN(11))
 	}
 }
@@ -390,35 +393,26 @@ func (f *FishingFSM) startReposition() {
 }
 
 func (f *FishingFSM) moveForReposition() bool {
-	key := f.cfg.RepositionKey
-	if key == config.RepositionAuto {
-		// Reverse each pair of steps before trying the other axis.
-		direction := f.repositionDirection % 4
-		key = string("WSAD"[direction^(f.repositionAttempt%4)])
-		cameraAttempt := f.repositionAttempt - 2
-		if f.repositionDirection < 4 {
-			cameraAttempt = f.repositionAttempt
+	// Reverse each pair of steps before trying the other axis.
+	direction := f.repositionDirection % 4
+	key := string("WSAD"[direction^(f.repositionAttempt%4)])
+	cameraAttempt := f.repositionAttempt - 2
+	if f.repositionDirection < 4 {
+		cameraAttempt = f.repositionAttempt
+	}
+	if drag := f.cameraDrag(); drag != nil && cameraAttempt >= 0 && cameraAttempt < 2 {
+		dx := f.repositionDX
+		if dx == 0 {
+			dx = 12
 		}
-		var drag func(int) (bool, bool)
-		if f.hardwareKeyboard() {
-			drag = f.actions.DragHardwareCamera
-		} else if f.cfg.ReelMethod != config.ReelInteractKey {
-			drag = f.actions.DragCamera
+		if cameraAttempt == 1 {
+			dx = -dx
 		}
-		if drag != nil && cameraAttempt >= 0 && cameraAttempt < 2 {
-			dx := f.repositionDX
-			if dx == 0 {
-				dx = 12
+		if attempted, moved := drag(dx); attempted {
+			if moved {
+				f.logger.Info("reposition camera drag", "dx", dx)
 			}
-			if cameraAttempt == 1 {
-				dx = -dx
-			}
-			if attempted, moved := drag(dx); attempted {
-				if moved {
-					f.logger.Info("reposition camera drag", "dx", dx)
-				}
-				return moved
-			}
+			return moved
 		}
 	}
 	return f.activity(key, "reposition action executed")
