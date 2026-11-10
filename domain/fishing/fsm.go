@@ -50,6 +50,9 @@ type FishingFSM struct {
 	detectorAt          time.Time
 	reelDelay           time.Duration
 	idleTried           bool
+	outcomesShown       bool          // Bobber Marker showed its outcome blocks this run
+	awaitOutcome        bool          // the cooldown about to start follows a reel that should bring an outcome
+	castPause           time.Duration // the pause before the next cast while the cooldown waits for the outcome
 	nextReposition      int32
 	checkingReposition  bool
 	repositionAttempt   int
@@ -182,6 +185,7 @@ func (f *FishingFSM) handle(ev any) {
 			f.stats.gotAway.Store(0)
 			f.stats.notHooked.Store(0)
 			f.stats.failedInRow.Store(0)
+			f.outcomesShown = false
 			f.checkingReposition = false
 			f.repositionLogout.Store(false)
 			f.planReposition()
@@ -198,6 +202,13 @@ func (f *FishingFSM) handle(ev any) {
 	case evtForceCast:
 		if !f.checkingReposition && (f.state == StateSearching || f.state == StateMonitoring || f.state == StateCooldown) {
 			f.recast()
+		}
+	case evtOutcome:
+		f.outcomesShown = true
+		f.countOutcome(e.o)
+		if e.o != OutcomeNone && f.state == StateCooldown && f.castPause > 0 {
+			f.arm(f.castPause)
+			f.castPause = 0
 		}
 	case evtDeadline:
 		if e.gen == f.gen {
@@ -226,6 +237,7 @@ type (
 	evtForceCast         struct{}
 	evtAddListener       struct{ l FishingStateListener }
 	evtDeadline          struct{ gen uint64 }
+	evtOutcome           struct{ o Outcome }
 )
 
 // arm replaces the pending deadline with one d from now.
@@ -306,6 +318,7 @@ func (f *FishingFSM) deadlineReached() {
 	case StateReeling:
 		f.finishReel()
 	case StateCooldown:
+		f.castPause = 0 // the outcome did not come in time
 		if !f.idleTried && time.Now().Before(f.sessionEnd) {
 			if f.nextReposition != 0 && f.stats.reels.Load() >= f.nextReposition {
 				f.startReposition()
@@ -496,6 +509,11 @@ func (f *FishingFSM) transition(next FishingState) {
 		f.reelTiming = ReelTiming{}
 		if cooldown == 0 {
 			cooldown = f.pause()
+		}
+		f.castPause = 0
+		if f.awaitOutcome {
+			f.awaitOutcome = false
+			f.castPause, cooldown = cooldown, outcomeWait
 		}
 		f.arm(cooldown)
 	}
@@ -707,6 +725,8 @@ func (f *FishingFSM) finishReel() {
 	f.stats.reels.Add(1)
 	f.stats.failedInRow.Store(0)
 	f.logger.Info("reel action executed", "x", f.coordX, "y", f.coordY, "method", f.cfg.ReelMethod)
+	// A cast before the loot opens loses the catch's outcome, so wait for it.
+	f.awaitOutcome = f.outcomesShown
 	f.transition(StateCooldown)
 }
 
@@ -749,6 +769,10 @@ func (f *FishingFSM) pause() time.Duration {
 }
 
 const quickPauseMin, quickPauseMax = 400 * time.Millisecond, 1200 * time.Millisecond
+
+// outcomeWait is how long a cooldown waits for Bobber Marker's outcome after a
+// reel before it casts anyway. The loot opens up to about a second after it.
+const outcomeWait = 3 * time.Second
 
 func (f *FishingFSM) interactVK(cfg config.Config) (byte, bool) {
 	vk, ok := f.actions.ParseVK(cfg.InteractKey)
@@ -811,6 +835,10 @@ func (f *FishingFSM) EventFishBite()                 { f.send(evtFishBite{at: ti
 func (f *FishingFSM) EventFocusAcquired()            { f.send(evtFocusAcquired{}) }
 func (f *FishingFSM) EventFocusLost()                { f.send(evtFocusLost{}) }
 func (f *FishingFSM) ForceCast()                     { f.send(evtForceCast{}) }
+
+// EventOutcome reports a reading of Bobber Marker's outcome blocks: a new
+// outcome, or OutcomeNone when they still show an earlier one.
+func (f *FishingFSM) EventOutcome(o Outcome) { f.send(evtOutcome{o: o}) }
 
 // EventAwaitFocus starts a run with a copy of the current config. Call it from
 // the goroutine that owns the config.

@@ -121,6 +121,38 @@ func TestCooldownEndsWithACast(t *testing.T) {
 	})
 }
 
+// Once Bobber Marker shows outcomes, a cast waits for the reel's outcome, as a
+// cast before the loot opens loses the catch; it casts anyway after outcomeWait.
+func TestCooldownWaitsForTheOutcome(t *testing.T) {
+	reel := func(t *testing.T, m *FishingFSM) {
+		startMonitoring(t, m)
+		m.EventOutcome(OutcomeNone) // the blocks show an earlier run's outcome
+		m.EventFishBite()
+		time.Sleep(reelClickDelay)
+		wantState(t, m, StateCooldown)
+	}
+	fsmTest(t, func(t *testing.T, m *FishingFSM, _ *actionLog) {
+		reel(t, m)
+		time.Sleep(2 * time.Second)
+		wantState(t, m, StateCooldown) // the 1 s pause is over, the loot is not open
+		m.EventOutcome(OutcomeCaught)
+		time.Sleep(time.Second - time.Millisecond)
+		wantState(t, m, StateCooldown)
+		time.Sleep(time.Millisecond)
+		wantState(t, m, StateSearching)
+		if s := m.Stats(); s.Caught != 1 || s.Reels != 1 {
+			t.Fatalf("stats = %+v, want one reel and one catch", s)
+		}
+	})
+	fsmTest(t, func(t *testing.T, m *FishingFSM, _ *actionLog) {
+		reel(t, m)
+		time.Sleep(outcomeWait - time.Millisecond)
+		wantState(t, m, StateCooldown)
+		time.Sleep(time.Millisecond)
+		wantState(t, m, StateSearching)
+	})
+}
+
 func TestSearchTimeoutCasts(t *testing.T) {
 	fsmTest(t, func(t *testing.T, m *FishingFSM, log *actionLog) {
 		m.EventAwaitFocus()
