@@ -567,11 +567,17 @@ function handlers.UI_ERROR_MESSAGE(arg1, arg2)
 	OnErrorText(nil, type(arg2) == "string" and arg2 or arg1);
 end
 
-function handlers.LOOT_OPENED()
-	if IsFishingLoot and IsFishingLoot() then
+-- A fast-loot addon takes everything on LOOT_READY, and LOOT_OPENED may then
+-- never come, so both report the catch; the second within a second is the same loot.
+local lastCatchAt = 0;
+local function OnLoot()
+	if IsFishingLoot and IsFishingLoot() and GetTime() - lastCatchAt >= 1 then
+		lastCatchAt = GetTime();
 		ShowOutcome(OUTCOME_CAUGHT);
 	end
 end
+handlers.LOOT_READY = OnLoot;
+handlers.LOOT_OPENED = OnLoot;
 
 handlers.NAME_PLATE_UNIT_ADDED = Evaluate;
 handlers.PLAYER_SOFT_INTERACT_CHANGED = Evaluate;

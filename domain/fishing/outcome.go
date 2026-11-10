@@ -84,7 +84,8 @@ func (w *outcomes) see(seq uint8, o Outcome, ok bool) Outcome {
 }
 
 // pollOutcome reads Bobber Marker's outcome blocks four times a second and
-// counts each new outcome in the run's stats.
+// passes each reading to the FSM, which counts new outcomes and waits for them
+// before it casts again.
 func (r *run) pollOutcome(window image.Rectangle) {
 	now := time.Now()
 	if now.Before(r.outcomePoll) {
@@ -104,8 +105,10 @@ func (r *run) pollOutcome(window image.Rectangle) {
 		return
 	}
 	seq, o, ok := readOutcome(frame.Image)
-	if o = r.outcomes.see(seq, o, ok); o != OutcomeNone {
-		e.fsm.countOutcome(o)
+	if o = r.outcomes.see(seq, o, ok); ok {
+		e.fsm.EventOutcome(o)
+	}
+	if o != OutcomeNone {
 		e.logger.Info("fishing outcome", "outcome", o.String())
 	}
 }
