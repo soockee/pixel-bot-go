@@ -19,7 +19,8 @@ import (
 func CaptureAudio(ctx context.Context, pid uint32, emit func(pcm []byte, at time.Time) error) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	if err := windows.CoInitializeEx(0, windows.COINIT_MULTITHREADED); err != nil {
+	// S_FALSE (1) means COM was already started on this thread, which is fine.
+	if err := windows.CoInitializeEx(0, windows.COINIT_MULTITHREADED); err != nil && err != syscall.Errno(1) {
 		return fmt.Errorf("start COM: %w", err)
 	}
 	defer windows.CoUninitialize()
