@@ -252,8 +252,9 @@ func now100ns() uint64 {
 
 // comCall calls method index of a COM object.
 func comCall(obj unsafe.Pointer, method int, args ...uintptr) uintptr {
-	vtbl := *(**[16]uintptr)(obj)
-	hr, _, _ := syscall.SyscallN(vtbl[method], append([]uintptr{uintptr(obj)}, args...)...)
+	vtable := *(*unsafe.Pointer)(obj)
+	fn := *(*uintptr)(unsafe.Add(vtable, method*int(unsafe.Sizeof(uintptr(0)))))
+	hr, _, _ := syscall.SyscallN(fn, append([]uintptr{uintptr(obj)}, args...)...)
 	return hr
 }
 

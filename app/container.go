@@ -45,6 +45,10 @@ type AppContainer struct {
 	gameWindow atomic.Pointer[capture.WindowIdentity]
 	// background is the run's Config.Background, fixed when the run binds the window.
 	background atomic.Bool
+	// stream captures the game in a background run, nil without Windows
+	// Graphics Capture, where PrintWindow stands in.
+	stream atomic.Pointer[capture.WindowStream]
+	logger *slog.Logger
 }
 
 // TraceOptions configures desktop tracing and the optional reel timing profile.
@@ -62,7 +66,7 @@ type TraceOptions struct {
 func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions, emit func(desktop.State)) *AppContainer {
 	botLog := recorder.NewBotLog(logger.Handler())
 	logger = slog.New(botLog) // everything built here logs through it
-	c := &AppContainer{Config: cfg, Capture: &model.CaptureModel{}, Frames: desktop.NewFrames(), botLog: botLog}
+	c := &AppContainer{Config: cfg, Capture: &model.CaptureModel{}, Frames: desktop.NewFrames(), botLog: botLog, logger: logger}
 	c.View = desktop.NewView(c.Frames, emit)
 	c.Recordings = desktop.NewRecordings(func() string { return cfg.RecordDir })
 	inFront, canAct := c.gameFocused, c.canAct
@@ -275,6 +279,9 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		}
 		focusWatcher.OnState(prev, next)
 		c.CapturePresenter.OnState(prev, next)
+		if next == fishing.StateHalt {
+			c.closeStream()
+		}
 	})
 	c.Loop = presenter.NewLoop(
 		presenter.NewSessionPresenter(model.NewSessionModel(), c.Capture, c.View),
@@ -342,10 +349,12 @@ func (c *AppContainer) beginKeyHold(vk byte) func() {
 }
 
 // gameFrames captures the game window the person picked: from the screen, or
-// from the window's own drawing in a background run, where it may be covered.
+// in a background run, where it may be covered, from Windows Graphics Capture
+// or, where that is missing, the window's own drawing.
 type gameFrames struct {
 	target     func() *capture.WindowIdentity
 	background func() bool
+	stream     func() *capture.WindowStream
 }
 
 func (g gameFrames) Window() (image.Rectangle, error) {
@@ -355,6 +364,9 @@ func (g gameFrames) Window() (image.Rectangle, error) {
 	return image.Rectangle{}, errors.New("select a game window")
 }
 func (g gameFrames) Grab(area image.Rectangle) (capture.Frame, error) {
+	if s := g.stream(); s != nil && g.background() {
+		return s.Grab(area) // about 1 ms for a bobber's box
+	}
 	// PrintWindow costs about 40 ms whatever the area, the screen copy 10 ms.
 	if w := g.target(); w != nil && g.background() && !w.Focused() {
 		return w.Print(area)
@@ -363,7 +375,27 @@ func (g gameFrames) Grab(area image.Rectangle) (capture.Frame, error) {
 }
 
 func (c *AppContainer) frames() gameFrames {
-	return gameFrames{target: c.gameWindow.Load, background: c.background.Load}
+	return gameFrames{target: c.gameWindow.Load, background: c.background.Load, stream: c.stream.Load}
+}
+
+// openStream starts Windows Graphics Capture of target for a background run.
+func (c *AppContainer) openStream(target capture.WindowIdentity) {
+	c.closeStream()
+	if !c.background.Load() {
+		return
+	}
+	s, err := capture.OpenWindowStream(target)
+	if err != nil {
+		c.logger.Warn("Windows Graphics Capture unavailable; background capture uses PrintWindow at about 12 fps", "error", err)
+		return
+	}
+	c.stream.Store(s)
+}
+
+func (c *AppContainer) closeStream() {
+	if s := c.stream.Swap(nil); s != nil {
+		s.Close()
+	}
 }
 
 // gameArea is the game window's client area, or nil when it is not open. The
@@ -388,6 +420,7 @@ func (c *AppContainer) bindGameWindow() error {
 	}
 	c.gameWindow.Store(&target)
 	c.background.Store(c.Config.Background)
+	c.openStream(target)
 	return nil
 }
 
