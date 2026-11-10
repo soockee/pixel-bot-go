@@ -58,6 +58,7 @@ func Record(ctx context.Context, frames FrameSource, locator detect.Locator, dir
 	ticker := time.NewTicker(recordInterval)
 	defer ticker.Stop()
 	written := 0
+	lastMS := int64(-1)
 	var lastFull time.Time
 	var kept *image.RGBA
 	for {
@@ -77,6 +78,11 @@ func Record(ctx context.Context, frames FrameSource, locator detect.Locator, dir
 		if err != nil {
 			return written, err
 		}
+		ms := frame.CapturedAt.Sub(start).Milliseconds()
+		if frame.CapturedAt.Before(start) || ms <= lastMS {
+			continue // the window stream can return a frame it already delivered
+		}
+		lastMS = ms
 		img := frame.Image
 		if frame.CapturedAt.Sub(lastFull) >= fullEvery {
 			lastFull = frame.CapturedAt
@@ -86,7 +92,7 @@ func Record(ctx context.Context, frames FrameSource, locator detect.Locator, dir
 		} else {
 			continue
 		}
-		if err := writeFrame(&encoder, dir, frame.CapturedAt.Sub(start).Milliseconds(), img); err != nil {
+		if err := writeFrame(&encoder, dir, ms, img); err != nil {
 			return written, err
 		}
 		written++

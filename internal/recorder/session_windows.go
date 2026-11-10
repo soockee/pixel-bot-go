@@ -1,4 +1,4 @@
-// Package recorder records a play session into one dataset directory: screen
+// Package recorder records a play session into one dataset directory: window
 // frames plus, when a window is named, the user's own mouse and key input in
 // that window and the sound its process plays. It only observes; it never sends
 // input, and the game stays audible.
@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/draw"
 	"io"
 	"sync"
 	"time"
@@ -22,7 +23,7 @@ import (
 // Session describes one recording.
 type Session struct {
 	Dir    string                       // new dataset directory
-	Frames dataset.FrameSource          // screen capture
+	Frames dataset.FrameSource          // frame source for a session without a window
 	Target *framecapture.WindowIdentity // exact selection from the desktop or CLI
 	Window string                       // exact title of the window to record input and sound from; empty records frames only
 	Live   bool                         // flush the input trace often, so a viewer can follow it
@@ -38,6 +39,7 @@ type Session struct {
 func (s Session) Run(parent context.Context) error {
 	var target windowTarget
 	var info dataset.SessionInfo
+	framesSource := s.Frames
 	if s.Window != "" {
 		selected := s.Target
 		if selected == nil {
@@ -52,7 +54,12 @@ func (s Session) Run(parent context.Context) error {
 			return err
 		}
 		target = windowTarget{handle: uintptr(selected.Handle), pid: selected.PID}
-		s.Frames = protectedFrames{source: s.Frames, window: *selected, area: area}
+		stream, err := framecapture.OpenWindowStream(*selected)
+		if err != nil {
+			return fmt.Errorf("start window recording: %w", err)
+		}
+		defer stream.Close()
+		framesSource = windowFrames{stream: stream, window: *selected, area: area}
 		// Full-client recording keeps the trace and frame origins aligned.
 	}
 	if err := dataset.Create(s.Dir); err != nil {
@@ -75,7 +82,7 @@ func (s Session) Run(parent context.Context) error {
 	var wg sync.WaitGroup
 	wg.Go(func() {
 		defer cancel()
-		frames, frameErr = dataset.Record(ctx, s.Frames, detect.NewMarkerLocator(), s.Dir, start)
+		frames, frameErr = dataset.Record(ctx, framesSource, detect.NewMarkerLocator(), s.Dir, start)
 	})
 	if s.Window != "" {
 		wg.Go(func() {
@@ -105,26 +112,32 @@ func recordAudio(ctx context.Context, pid uint32, dir string, start time.Time) (
 	return framecapture.CaptureAudio(ctx, pid, w.Write)
 }
 
-type protectedFrames struct {
-	source dataset.FrameSource
+type windowFrames struct {
+	stream *framecapture.WindowStream
 	window framecapture.WindowIdentity
 	area   image.Rectangle
 }
 
-func (p protectedFrames) Next() (framecapture.Frame, error) {
+func (p windowFrames) Next() (framecapture.Frame, error) {
 	if !p.window.Valid() {
 		return framecapture.Frame{}, errors.New("recording window closed")
 	}
-	if !p.window.RecordingClear(p.area) {
+	if area, err := p.window.Area(); err != nil || area != p.area {
 		return framecapture.Frame{}, framecapture.ErrFrameUnavailable
 	}
-	frame, err := p.source.Next()
+	frame, err := p.stream.Grab(p.area)
+	if area, areaErr := p.window.Area(); areaErr != nil || area != p.area {
+		return framecapture.Frame{}, framecapture.ErrFrameUnavailable
+	}
 	if err != nil {
 		return framecapture.Frame{}, err
 	}
-	if frame.Image == nil || frame.Image.Bounds().Size() != p.area.Size() ||
-		frame.Origin != p.area.Min || !p.window.RecordingClear(p.area) {
-		return framecapture.Frame{}, framecapture.ErrFrameUnavailable
+	if frame.Image.Bounds().Size() != p.area.Size() || frame.Origin != p.area.Min {
+		// DWM can crop a client edge. Pad to keep saved pixels aligned with input.
+		client := image.NewRGBA(p.area.Sub(p.area.Min))
+		dst := frame.Image.Bounds().Add(frame.Origin.Sub(p.area.Min))
+		draw.Draw(client, dst, frame.Image, frame.Image.Bounds().Min, draw.Src)
+		frame.Image, frame.Origin = client, p.area.Min
 	}
 	return frame, nil
 }
@@ -169,7 +182,7 @@ func run(parent context.Context, target windowTarget, out string, status io.Writ
 	go func() {
 		defer close(events)
 		finished <- capture(ctx, target, start, events, func() {
-			fmt.Fprintln(status, "Recorder armed. Focus the selected window. Press Ctrl+C in this terminal to stop.")
+			fmt.Fprintln(status, "Recorder armed. Focus the selected window to record manual input. Press Ctrl+C to stop.")
 		}, recordKeys)
 	}()
 

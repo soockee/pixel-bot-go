@@ -449,17 +449,10 @@ func (c *AppContainer) prepareRecording() (presenter.RecordJob, error) {
 	if problem := c.startProblem(); problem != "" {
 		return presenter.RecordJob{}, errors.New(problem)
 	}
-	// A recording keeps the area it started with, so frame pixels and the saved
-	// window offset mean the same thing for the whole session.
 	target := *c.gameWindow.Load()
-	region, err := target.Area()
-	if err != nil {
-		return presenter.RecordJob{}, err
-	}
 	dir := filepath.Join(c.Config.RecordDir, time.Now().Format("20060102-150405"))
 	session := recorder.Session{
 		Dir:     dir,
-		Frames:  capture.Source{Region: func() *image.Rectangle { return &region }},
 		Window:  c.Capture.Window(),
 		Target:  &target,
 		Live:    true,
