@@ -188,6 +188,16 @@ const (
 	// background, at most soundLookback of them.
 	soundRise     = 1.5
 	soundLookback = 20 // 500 ms
+	// A bite sound can begin while another sound still plays, such as wind
+	// that began before the splash, so the level never falls back to the
+	// background between them. Once a sound has played soundSwell, a level of
+	// soundJumpOverPeak times its loudest step up to soundJump steps ago starts
+	// a new sound, dated at the quietest of those soundJump steps. The recorded
+	// bite sounds swell for up to 500 ms and later stay within 1.5 times their
+	// peak, so they still make one onset.
+	soundSwell        = 700 * time.Millisecond
+	soundJump         = 12 // 300 ms
+	soundJumpOverPeak = 2
 )
 
 // onsets finds where sounds start: a 50 ms level, measured every 25 ms, that is
@@ -201,6 +211,7 @@ type onsets struct {
 	times    []time.Time // when each of levels ended
 	loud     bool
 	audible  time.Time // when the game last made any sound
+	reported time.Time // when the current sound's onset was found
 }
 
 // add takes a packet whose first sample played at t and reports the time of an onset inside it.
@@ -227,8 +238,14 @@ func (o *onsets) add(pcm []byte, t time.Time) (time.Time, bool) {
 		// A sound stays one sound until it falls back near the background, so
 		// the swells inside one bite sound do not start new ones.
 		loud := ok && (level >= soundMinLevel && level >= soundOverGround*background || o.loud && level > soundRise*background)
-		if loud && !o.loud && !found {
-			at, found = o.riseStart(now, background), true
+		switch {
+		case found:
+		case loud && !o.loud:
+			at, found, o.reported = o.riseStart(now, background), true, now
+		case o.loud && level >= soundMinLevel && now.Sub(o.reported) >= soundSwell:
+			if start, ok := o.jumpStart(level); ok {
+				at, found, o.reported = start, true, now
+			}
 		}
 		o.loud = loud
 		o.levels = append(o.levels, level)
@@ -262,6 +279,25 @@ func (o *onsets) riseStart(now time.Time, background float64) time.Time {
 		start = o.times[j]
 	}
 	return start
+}
+
+// jumpStart reports whether level is soundJumpOverPeak times the current
+// sound's loudest step before the last soundJump, and then the end of the
+// quietest of those last steps, where the new sound began.
+func (o *onsets) jumpStart(level float64) (time.Time, bool) {
+	n := len(o.levels) - soundJump
+	if n <= 0 {
+		return time.Time{}, false
+	}
+	peak := 0.0
+	for i, t := range o.times[:n] {
+		if !t.Before(o.reported) {
+			peak = max(peak, o.levels[i])
+		}
+	}
+	window := o.levels[n:]
+	i := n + slices.Index(window, slices.Min(window))
+	return o.times[i], peak > 0 && level >= soundJumpOverPeak*peak
 }
 
 // brightening compares each frame of the watched box with a baseline that

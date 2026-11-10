@@ -7,7 +7,7 @@ order: 3
 | Command | Effect |
 | --- | --- |
 | `/bobbermarker` | Shows how far the box sits from the bobber's marker spot, in pixels. |
-| `/bobbermarker y <pixels>` | Moves the box up or down. Negative numbers move it down. The default is `-40`. |
+| `/bobbermarker y <pixels>` | Moves the box up or down. Negative numbers move it down. The default is `-40`, for the camera zoomed all the way out; the addon moves the box further down and makes it bigger as you zoom in. |
 
 The setting is saved with your other addon settings and kept between sessions.
 
