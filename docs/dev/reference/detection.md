@@ -12,7 +12,7 @@ The bobber is whatever an addon marks with four corner brackets, so other player
 | -------- | ----- |
 | Colour | Magenta (255, 0, 255): red and blue at least 200, green at most 60. Or Glimmer's salmon, which blends with the scene: red at least 230, green at least 50 below it, green and blue within 35 |
 | Bracket | Two arms of at least 10 px from one outer corner; Bobber Marker draws 20 px arms, 3 px thick |
-| Box | 30 to 400 px per side, with at least 3 of 4 corners visible; Bobber Marker draws 96 px |
+| Box | 30 to 400 px per side, with at least 3 of 4 corners visible; Bobber Marker draws 96 px at full zoom-out, scaled with the camera distance |
 
 ### Bobber Marker addon
 
@@ -21,7 +21,7 @@ For WoW: Forever (Interface 16001). It shows the brackets only while you channel
 | Item | Value |
 | ---- | ----- |
 | Look | Opaque magenta brackets, sized in screen pixels whatever the UI scale |
-| Position | Base centre 40 px below the bobber's nameplate. Each cast adds an offset of up to 2 px per axis and keeps it through any reattach. `/bobbermarker y <pixels>` changes the base vertical offset (negative is down) in `BobberMarkerDB` |
+| Position | Base centre 40 px below the bobber's nameplate. Box and offset hold at 15 yd of camera distance (`GetCameraZoom`) and scale by (15 + 20) / (zoom + 20), clamped to 0.5 to 4, because the bobber looks bigger and further below its nameplate up close; a change over 5 % reattaches the marker. Each cast adds an offset of up to 2 px per axis and keeps it through any reattach. `/bobbermarker y <pixels>` changes the base vertical offset (negative is down) in `BobberMarkerDB` |
 | Set once, the first time you fish | `SoftTargetInteract` 3, `SoftTargetIconGameObject` 1, `SoftTargetInteractOnlyInRange` 0, `SoftTargetInteractRange` 60 |
 | Set while you fish | `SoftTargetNameplateInteract` 1, then back to your value |
 | Keys | `Keys.lua` is written by `addon.Install` from the config, not carried: `BobberMarkerKeys = { cast, interact }` in the game's binding names (`addon.BindingKey`). The Interact key is set only for the `interact_key` reel method. `addon.State` compares it, so a changed key makes the addon outdated |

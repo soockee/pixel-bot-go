@@ -20,6 +20,12 @@ local ARM = 20;
 local THICKNESS = 3;
 local DEFAULT_Y = -40; -- the bobber sits this far below its nameplate's centre
 local OFFSET_RADIUS = 2;
+-- The bobber looks bigger and further below its nameplate as the camera
+-- comes closer, so BOX and the offset hold at REF_ZOOM yards of camera
+-- distance and scale with (REF_ZOOM + CAST_DISTANCE) / (zoom + CAST_DISTANCE).
+local REF_ZOOM = 15;      -- the game's full zoom-out without the extended camera
+local CAST_DISTANCE = 20; -- roughly how far in front of you the bobber lands
+local MIN_SCALE, MAX_SCALE = 0.5, 4; -- keeps the box within Go Fish's 30 to 400 pixels
 local COLOR = { 1, 0, 1 }; -- opaque magenta: exact over any background, and rare in the world
 
 local POLL = 0.1; -- seconds between checks while fishing
@@ -40,6 +46,8 @@ local fishing = false;
 local offsetX, offsetY = 0, 0;
 local plateBefore; -- your SoftTargetNameplateInteract while the marker had it on
 local anchor;      -- the nameplate the marker hangs on
+local scale = 1;   -- the zoom scale the marker was attached with
+local attachedPx = 1; -- PixelSize(marker) when it was attached
 
 local function Readable(value)
 	return value ~= nil and not (issecretvalue and issecretvalue(value));
@@ -244,9 +252,19 @@ end
 if UIErrorsFrame then
     hooksecurefunc(UIErrorsFrame, "AddMessage", OnErrorText);
 end
+-- How much bigger the bobber looks than at REF_ZOOM; 1 on a client without GetCameraZoom.
+local function ZoomScale()
+	local ok, zoom = pcall(GetCameraZoom);
+	if not ok or not Readable(zoom) or type(zoom) ~= "number" then
+		return 1;
+	end
+	local s = (REF_ZOOM + CAST_DISTANCE) / (zoom + CAST_DISTANCE);
+	return math.min(math.max(s, MIN_SCALE), MAX_SCALE);
+end
+
 local function Layout()
 	local px = PixelSize(marker);
-	marker:SetSize(BOX * px, BOX * px);
+	marker:SetSize(BOX * scale * px, BOX * scale * px);
 	local i = 1;
 	for _, corner in ipairs({ "TOPLEFT", "TOPRIGHT", "BOTTOMLEFT", "BOTTOMRIGHT" }) do
 		for _, size in ipairs({ { ARM, THICKNESS }, { THICKNESS, ARM } }) do
@@ -272,16 +290,20 @@ end
 local function Attach(plate)
 	marker:SetParent(plate);
 	marker:SetIgnoreParentAlpha(true);
+	if marker.SetIgnoreParentScale then
+		marker:SetIgnoreParentScale(true); -- the plate grows as it settles, the box must not
+	end
 	local ok, level = pcall(plate.GetFrameLevel, plate);
 	if ok and Readable(level) then
 		marker:SetFrameLevel(level + 10); -- above the nameplate's own parts
 	end
+	scale = ZoomScale();
 	Layout();
 	marker:ClearAllPoints();
 	local px = PixelSize(marker);
-	marker:SetPoint("CENTER", plate, "CENTER", offsetX * px, (db.y + offsetY) * px);
+	marker:SetPoint("CENTER", plate, "CENTER", offsetX * px, (db.y * scale + offsetY) * px);
 	marker:Show();
-	anchor = plate;
+	anchor, attachedPx = plate, px;
 end
 
 local function IsBobber(unit)
@@ -301,7 +323,10 @@ local function Evaluate()
 	if not ok or not Readable(plate) or not plate then
 		return Release();
 	end
-	if plate ~= anchor then
+	-- Small steps are ignored, so the watched box stays put through camera jitter.
+	-- The pixel check covers a client without SetIgnoreParentScale.
+	if plate ~= anchor or math.abs(ZoomScale() - scale) > 0.05 * scale
+		or math.abs(PixelSize(marker) - attachedPx) > 0.05 * attachedPx then
 		Release();
 		Attach(plate);
 	end
@@ -584,7 +609,7 @@ SlashCmdList.BOBBERMARKER = function(input)
 			Attach(plate);
 		end
 	end
-	print(("|cffff00ffBobber Marker:|r the base vertical offset from the nameplate's centre is %d pixels. Move it with /bobbermarker y <pixels>, negative is down (default %d)."):format(db.y, DEFAULT_Y));
+	print(("|cffff00ffBobber Marker:|r the base vertical offset from the nameplate's centre is %d pixels at full zoom-out. Move it with /bobbermarker y <pixels>, negative is down (default %d). At this zoom the box and offset are x%.2f."):format(db.y, DEFAULT_Y, ZoomScale()));
 	for _, problem in ipairs(keyProblems) do
 		print("|cffff00ffBobber Marker:|r " .. problem);
 	end

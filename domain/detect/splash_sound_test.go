@@ -173,12 +173,15 @@ func TestSplashSoundKeepsNeedingTheSoundAfterACalmCast(t *testing.T) {
 }
 
 // game plays the bite sound clip at gain from soundAt on, over a hum of
-// game sound at level hum, as 10 ms packets from time zero.
+// game sound at level hum, as 10 ms packets from time zero. Wind of level
+// wind blows from windAt on.
 type game struct {
 	clip    []byte
 	gain    float64
 	hum     float64
 	soundAt time.Duration
+	wind    float64
+	windAt  time.Duration
 	rng     *rand.Rand
 }
 
@@ -203,6 +206,9 @@ func (g *game) packet(at time.Duration) []byte {
 	pcm := make([]byte, frames*capture.AudioFrameBytes)
 	for k := range frames {
 		v := g.rng.NormFloat64() * g.hum
+		if g.wind > 0 && at >= g.windAt {
+			v += g.rng.NormFloat64() * g.wind
+		}
 		if j := first + k - clipStart; j >= 0 && j < len(g.clip)/capture.AudioFrameBytes {
 			v += float64(int16(binary.LittleEndian.Uint16(g.clip[j*capture.AudioFrameBytes:]))) * g.gain
 		}
@@ -275,6 +281,22 @@ func TestSplashSoundHearsRecordedBiteSounds(t *testing.T) {
 		t.Run(name+" started before the splash", func(t *testing.T) {
 			if at, fired := listenGame(NewSplashSoundDetector(nil), newGame(t, name, 0.1, 6, splash-300*time.Millisecond), splash); fired {
 				t.Errorf("fired at %v on a sound that began before the splash", at)
+			}
+		})
+	}
+}
+
+// Wind that rose before the splash still blows when the bite sound starts, as
+// in a recorded cast whose bite was missed: the bite sound is a new sound.
+func TestSplashSoundHearsABiteSoundOverEarlierWind(t *testing.T) {
+	const splash = 4 * time.Second
+	for _, name := range biteSounds {
+		t.Run(name, func(t *testing.T) {
+			g := newGame(t, name, 0.1, 6, splash+300*time.Millisecond)
+			g.wind, g.windAt = 20, splash-750*time.Millisecond
+			at, fired := listenGame(NewSplashSoundDetector(nil), g, splash)
+			if !fired || at < splash+300*time.Millisecond || at > splash+time.Second {
+				t.Errorf("fired = %v at %v, want soon after the sound at %v", fired, at, splash+300*time.Millisecond)
 			}
 		})
 	}
