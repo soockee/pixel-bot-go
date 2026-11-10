@@ -282,3 +282,24 @@ func TestShrinkKeepsPreviewsSmall(t *testing.T) {
 		t.Error("a narrow capture was copied")
 	}
 }
+
+func TestBackgroundSettings(t *testing.T) {
+	base := config.DefaultConfig()
+	values := settingsOf(base)
+	values.Background = true
+	if got, err := values.apply(*base); err != nil || got.Background {
+		t.Errorf("background with the right-click reel = %v, %v; want it off", got.Background, err)
+	}
+	values.ReelMethod, values.InteractKey = config.ReelInteractKey, "f"
+	if got, err := values.apply(*base); err != nil || !got.Background {
+		t.Errorf("background with the Interact reel = %v, %v; want it on", got.Background, err)
+	}
+	values.ESP32Port = "auto"
+	if got, err := values.apply(*base); err != nil || got.Background {
+		t.Errorf("background with the ESP32 = %v, %v; want it off", got.Background, err)
+	}
+	values.ESP32Port, values.InteractKey = "", "Mouse4"
+	if _, err := values.apply(*base); err == nil {
+		t.Error("background accepted a mouse button for Interact")
+	}
+}

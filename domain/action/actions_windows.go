@@ -240,3 +240,42 @@ func ForegroundWindowTitle() (string, error) {
 	}
 	return windowTitle(uintptr(hwnd)), nil
 }
+
+var (
+	procPostMessage = user32.NewProc("PostMessageW")
+	procMapVirtual  = user32.NewProc("MapVirtualKeyW")
+)
+
+// BeginPostedKeyHold presses a key in window hwnd's message queue, so it
+// reaches the window while another one is in front, and returns its mandatory
+// release. Mouse side buttons cannot be posted and return nil.
+func BeginPostedKeyHold(hwnd uintptr, vk byte) func() {
+	if xButton(vk) != 0 {
+		slog.Warn("mouse side buttons cannot be sent to a background window", "vk", vk)
+		return nil
+	}
+	down, up := uintptr(0x0100), uintptr(0x0101) // WM_KEYDOWN, WM_KEYUP
+	if vk == 0x79 {
+		down, up = 0x0104, 0x0105 // Windows sends F10 as WM_SYSKEYDOWN; the game ignores WM_KEYDOWN F10
+	}
+	scan, _, _ := procMapVirtual.Call(uintptr(vk), 0) // MAPVK_VK_TO_VSC
+	lp := 1 | scan<<16
+	if ok, _, err := procPostMessage.Call(hwnd, down, uintptr(vk), lp); ok == 0 {
+		slog.Error("PostMessage failed", "error", err)
+		return nil
+	}
+	return func() {
+		procPostMessage.Call(hwnd, up, uintptr(vk), lp|1<<30|1<<31) // previous state down, transition up
+	}
+}
+
+// PostKey presses and releases a key in window hwnd's message queue.
+func PostKey(hwnd uintptr, vk byte) bool {
+	release := BeginPostedKeyHold(hwnd, vk)
+	if release == nil {
+		return false
+	}
+	time.Sleep(40 * time.Millisecond)
+	release()
+	return true
+}

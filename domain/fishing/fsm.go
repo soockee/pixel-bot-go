@@ -311,7 +311,7 @@ func (f *FishingFSM) deadlineReached() {
 				f.startReposition()
 				return
 			}
-			if f.cfg.IdleMoves && rand.IntN(12) == 0 {
+			if f.cfg.IdleMoves && !f.cfg.Background && rand.IntN(12) == 0 { // a background run leaves the pointer to the person
 				f.idleTried = true
 				if f.actions.CanAct != nil && !f.actions.CanAct() {
 					f.transition(StateWaitingFocus)

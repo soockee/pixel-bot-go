@@ -20,7 +20,7 @@ Each cast follows the same steps: cast, find the bobber, watch, reel in, pause, 
 
 - **Stop button.** Click **Stop** in Go Fish to end the run.
 - **Limits.** It stops by itself after the session length, or after a few casts in a row without a catch, so it never fishes on for hours after something went wrong.
-- **Only in the game.** It only presses keys and clicks while the game is the window in front. Switch to another window and it waits.
+- **Only in the game.** It only presses keys and clicks while the game is the window in front. Switch to another window and it waits. With **Fish in the background** on, it sends its keys to the game window alone, so they never land in the window you're using, and it leaves your mouse alone.
 - **Only what you see.** It looks at the game window and nothing else on your screen.
 
 ## No administrator needed
