@@ -1,31 +1,96 @@
 ---
 layout: default
+body_class: home
 ---
-<section class="hero">
-  <div class="hero-inner">
-    <h1>Go Fish fishes for you in World of Warcraft: Forever</h1>
-    <p class="lead">Three steps, about five minutes.</p>
-    <ol class="steps">
-      <li><span class="num">1</span><p><a href="https://github.com/{{ site.repository }}/releases/latest">Download Go Fish</a> and start it while the game is open.</p></li>
-      <li><span class="num">2</span><p>Confirm your cast key, click <strong>Install addon</strong>, then type <code>/reload</code> in the game.</p></li>
-      <li><span class="num">3</span><p>Stand at the water, click <strong>Start fishing</strong> and switch to the game.</p></li>
-    </ol>
-    <p class="note">Click <strong>Stop</strong> in Go Fish to end the run.</p>
-    <div class="actions">
-      <a class="button primary" href="https://github.com/{{ site.repository }}/releases/latest">Download</a>
-      <a class="button" href="{{ '/tutorials/first-catch/' | relative_url }}">Step-by-step guide</a>
+<main>
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-inner">
+      <p class="section-label">World of Warcraft: Forever</p>
+      <h1 id="hero-title">Cast. Watch.<br>Reel.</h1>
+      <p class="lead">Go Fish finds your bobber, waits for a bite and reels it in for you.</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/{{ site.repository }}/releases/latest">Download for Windows</a>
+        <a class="button" href="#showcase">Watch the demo <span aria-hidden="true">↓</span></a>
+      </div>
     </div>
-  </div>
-</section>
-<main class="cards">
-  {% for s in site.sections %}
-  {% assign dir = s.id | append: "/" %}
-  {% assign list = site.pages | where_exp: "p", "p.path contains dir" | sort: "order" %}
-  <section class="card" id="{{ s.id }}">
-    <h2>{{ s.title }}</h2>
-    <ul>
-      {% for p in list %}<li><a href="{{ p.url | relative_url }}">{{ p.title }}</a></li>{% endfor %}
-    </ul>
   </section>
-  {% endfor %}
+
+  <section class="showcase home-width" id="showcase" aria-labelledby="showcase-title">
+    <div class="showcase-copy">
+      <p class="section-label">The fishing cycle</p>
+      <h2 id="showcase-title">From bobber to bite</h2>
+      <dl class="cycle">
+        <div>
+          <dt><span class="num" aria-hidden="true">1</span> Find the bobber</dt>
+          <dd>The addon draws pink brackets around your bobber so Go Fish knows where to look.</dd>
+        </div>
+        <div>
+          <dt><span class="num" aria-hidden="true">2</span> Watch for the bite</dt>
+          <dd>Go Fish watches that small patch of water for a splash. It also listens for the bite when game sounds are on.</dd>
+        </div>
+        <div>
+          <dt><span class="num" aria-hidden="true">3</span> Reel it in</dt>
+          <dd>When a fish bites, Go Fish reels it in, pauses and casts again.</dd>
+        </div>
+      </dl>
+    </div>
+    <figure class="replay">
+      <video id="fishing-demo" autoplay muted loop playsinline controls width="768" height="432"
+        poster="{{ '/assets/fishing-demo.webp' | relative_url }}" aria-label="In-game fishing clip from bobber to reel" aria-describedby="replay-caption">
+        <source src="{{ '/assets/fishing-demo.mp4' | relative_url }}" type="video/mp4">
+        <a href="{{ '/assets/fishing-demo.mp4' | relative_url }}">Open the in-game fishing video</a>
+      </video>
+      <figcaption>
+        <span id="replay-caption">In-game recording · Silent</span>
+        <button class="replay-toggle" type="button" aria-controls="fishing-demo" hidden>Pause demo</button>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section class="app-preview home-width" id="app-preview" aria-labelledby="app-preview-title">
+    <p class="section-label">The Windows app</p>
+    <h2 id="app-preview-title">Inside Go Fish</h2>
+    <div class="app-screens">
+      <figure>
+        <a href="{{ '/assets/go-fish-setup.webp' | relative_url }}" aria-label="Open the full-size setup screenshot">
+          <img src="{{ '/assets/go-fish-setup.webp' | relative_url }}" width="1164" height="721" loading="lazy" alt="Go Fish setup wizard with World of Warcraft selected and F3 ready to confirm as the cast key">
+        </a>
+        <figcaption><strong>Set up fishing</strong><p>Find the game window, confirm your cast key and install Bobber Marker.</p></figcaption>
+      </figure>
+      <figure>
+        <a href="{{ '/assets/go-fish-fishing.webp' | relative_url }}" aria-label="Open the full-size Fishing screenshot">
+          <img src="{{ '/assets/go-fish-fishing.webp' | relative_url }}" width="1164" height="721" loading="lazy" alt="Go Fish watching a marked bobber in a simulator dry run, with the current step, catch count and Stop button visible">
+        </a>
+        <figcaption><strong>Watch a run</strong><p>The Fishing view shows the marked bobber, current step and run totals. Shown in a simulator dry run.</p></figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="quickstart home-width" aria-labelledby="quickstart-title">
+    <p class="section-label">Three steps · About five minutes</p>
+    <h2 id="quickstart-title">Ready for your first cast?</h2>
+    <ol class="steps" role="list">
+      <li><span class="num" aria-hidden="true">1</span><div><h3>Open Go Fish</h3><p><a href="https://github.com/{{ site.repository }}/releases/latest">Download Go Fish</a> and start it while the game is open.</p></div></li>
+      <li><span class="num" aria-hidden="true">2</span><div><h3>Install the addon</h3><p>Confirm your cast key, click <strong>Install addon</strong>, then type <code>/reload</code> in the game.</p></div></li>
+      <li><span class="num" aria-hidden="true">3</span><div><h3>Start fishing</h3><p>Stand at the water, click <strong>Start fishing</strong> and switch to the game. Click <strong>Stop</strong> in Go Fish to end the run.</p></div></li>
+    </ol>
+    <a class="button" href="{{ '/tutorials/first-catch/' | relative_url }}">Step-by-step guide <span aria-hidden="true">→</span></a>
+  </section>
+
+  <section class="guide home-width" aria-labelledby="guide-title">
+    <p class="section-label">The player guide</p>
+    <h2 id="guide-title">Learn the ropes</h2>
+    <div class="cards">
+      {% for s in site.sections %}
+      {% assign dir = s.id | append: "/" %}
+      {% assign list = site.pages | where_exp: "p", "p.path contains dir" | sort: "order" %}
+      <section class="card" id="{{ s.id }}">
+        <h3>{{ s.title }}</h3>
+        <ul>
+          {% for p in list %}<li><a href="{{ p.url | relative_url }}">{{ p.title }}</a></li>{% endfor %}
+        </ul>
+      </section>
+      {% endfor %}
+    </div>
+  </section>
 </main>
