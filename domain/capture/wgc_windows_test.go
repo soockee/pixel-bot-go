@@ -139,3 +139,24 @@ func TestWindowStreamGrabsClientCoordinates(t *testing.T) {
 		}
 	}
 }
+
+// A window that draws nothing new keeps grabbing: when frames stop for a
+// second, the stream starts a new session, which delivers the window as it is.
+func TestWindowStreamRestartsWhenFramesStop(t *testing.T) {
+	w := openTestWindow(t)
+	s, err := OpenWindowStream(w)
+	if err != nil {
+		t.Skip("Windows Graphics Capture unavailable:", err)
+	}
+	defer s.Close()
+	client, err := w.Area()
+	if err != nil {
+		t.Fatal(err)
+	}
+	area := testSquare.Add(client.Min)
+	for end := time.Now().Add(3 * staleAfter); time.Now().Before(end); time.Sleep(100 * time.Millisecond) {
+		if _, err := s.Grab(area); err != nil {
+			t.Fatal(err) // the still window sends no new frame
+		}
+	}
+}

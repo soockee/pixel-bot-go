@@ -286,7 +286,10 @@ func (r *run) step() {
 		}
 		return
 	}
-	r.lastErr = ""
+	if r.lastErr != "" {
+		e.logger.Info("capture recovered")
+		r.lastErr = ""
+	}
 	r.pollOutcome(window)
 	if !watching {
 		r.endWatch()

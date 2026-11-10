@@ -94,6 +94,8 @@ type WindowStream struct {
 	frameAt time.Time
 	content image.Point // its content size
 
+	restartedAt time.Time // when the session was last restarted for going quiet
+
 	staging     unsafe.Pointer // CPU-readable ID3D11Texture2D
 	stagingSize image.Point
 	mta         chan struct{} // closed by Close; keeps the process's MTA alive
@@ -113,8 +115,9 @@ func OpenWindowStream(w WindowIdentity) (_ *WindowStream, err error) {
 	// the free-threaded frame pool.
 	ready := make(chan struct{})
 	go func() {
+		// Never unlocked: the thread ends with the goroutine, so it never
+		// returns to Go with COM still started on it.
 		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
 		procRoInitialize.Call(1) // RO_INIT_MULTITHREADED; an earlier MTA init is fine too
 		close(ready)
 		<-s.mta
@@ -157,18 +160,25 @@ func OpenWindowStream(w WindowIdentity) (_ *WindowStream, err error) {
 		return nil, hresultError("capture: GraphicsCaptureItem.Size", hr)
 	}
 	s.size = image.Pt(int(size[0]), int(size[1]))
-
-	statics, err := factory("Windows.Graphics.Capture.Direct3D11CaptureFramePool", &iidFramePoolStatics2)
-	if err != nil {
+	if err := s.startSession(); err != nil {
 		return nil, err
 	}
-	hr = comCall(statics, slotWinRT, uintptr(s.winrt), formatB8G8R8A8, framePoolBuffers, packSize(s.size), uintptr(unsafe.Pointer(&s.pool)))
+	return s, nil
+}
+
+// startSession creates the frame pool and the capture session and starts it.
+func (s *WindowStream) startSession() error {
+	statics, err := factory("Windows.Graphics.Capture.Direct3D11CaptureFramePool", &iidFramePoolStatics2)
+	if err != nil {
+		return err
+	}
+	hr := comCall(statics, slotWinRT, uintptr(s.winrt), formatB8G8R8A8, framePoolBuffers, packSize(s.size), uintptr(unsafe.Pointer(&s.pool)))
 	comRelease(statics)
 	if failed(hr) {
-		return nil, hresultError("capture: CreateFreeThreaded", hr)
+		return hresultError("capture: CreateFreeThreaded", hr)
 	}
 	if hr := comCall(s.pool, slotPoolCreateSession, uintptr(s.item), uintptr(unsafe.Pointer(&s.session))); failed(hr) {
-		return nil, hresultError("capture: CreateCaptureSession", hr)
+		return hresultError("capture: CreateCaptureSession", hr)
 	}
 	// The pointer must not hide the bobber, and the yellow border is only
 	// optional on Windows 11; older versions keep it.
@@ -181,9 +191,9 @@ func OpenWindowStream(w WindowIdentity) (_ *WindowStream, err error) {
 		comRelease(s3)
 	}
 	if hr := comCall(s.session, slotWinRT); failed(hr) { // StartCapture
-		return nil, hresultError("capture: StartCapture", hr)
+		return hresultError("capture: StartCapture", hr)
 	}
-	return s, nil
+	return nil
 }
 
 // Grab copies area, in screen coordinates, out of the window's latest frame.
@@ -220,7 +230,10 @@ func (s *WindowStream) Grab(area image.Rectangle) (Frame, error) {
 // latest takes the newest frame the pool holds, waiting a moment for the
 // first one, and releases the frame it replaces.
 func (s *WindowStream) latest() error {
-	deadline := time.Now().Add(firstFrameWait)
+	deadline := time.Now()
+	if s.frame == nil {
+		deadline = deadline.Add(firstFrameWait)
+	}
 	for {
 		var newest unsafe.Pointer
 		for {
@@ -237,17 +250,37 @@ func (s *WindowStream) latest() error {
 		if newest != nil {
 			return s.hold(newest)
 		}
-		if s.frame != nil {
-			if time.Since(s.frameAt) > staleAfter {
-				return errStaleFrame
-			}
+		stale := s.frame != nil && time.Since(s.frameAt) > staleAfter
+		if s.frame != nil && !stale {
 			return nil
 		}
+		// A session can stop delivering while the game still draws (seen right
+		// after a reel), and a new one gets frames at once.
+		if stale && time.Since(s.restartedAt) > staleAfter {
+			if err := s.restart(); err != nil {
+				return err
+			}
+			deadline = time.Now().Add(firstFrameWait)
+			continue
+		}
 		if time.Now().After(deadline) {
+			if stale {
+				return errStaleFrame
+			}
 			return errNoFrame
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
+}
+
+// restart replaces the frame pool and the session. The current frame stays
+// until a new one comes.
+func (s *WindowStream) restart() error {
+	s.restartedAt = time.Now()
+	closeFrame(s.session)
+	closeFrame(s.pool)
+	s.session, s.pool = nil, nil
+	return s.startSession()
 }
 
 // hold makes f the current frame. A frame of a resized window comes from
@@ -279,6 +312,11 @@ func (s *WindowStream) hold(f unsafe.Pointer) error {
 	closeFrame(s.frame)
 	s.frame, s.texture = f, texture
 	s.frameAt = time.Now().Add(-time.Duration(int64(now100ns())-ticks) * 100) // SystemRelativeTime is QPC time in 100 ns
+	// A new session's first frame keeps the time the window last changed, but
+	// it shows the window as it is now.
+	if s.frameAt.Before(s.restartedAt) {
+		s.frameAt = s.restartedAt
+	}
 	got := image.Pt(int(size[0]), int(size[1]))
 	s.content = image.Rectangle{Max: got}.Intersect(image.Rectangle{Max: s.size}).Size()
 	if got != s.size && got.X > 0 && got.Y > 0 {
