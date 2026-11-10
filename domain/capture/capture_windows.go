@@ -96,7 +96,19 @@ func Grab(area image.Rectangle) (Frame, error) {
 // captureRect performs BitBlt into a top-down DIB section and returns a
 // newly allocated *image.RGBA containing the captured pixels.
 func captureRect(r image.Rectangle) (*image.RGBA, error) {
-	w, h := r.Dx(), r.Dy()
+	return drawDIB(r.Size(), image.Rectangle{Max: r.Size()}, func(memDC, screenDC uintptr) error {
+		ok, _, err := procBitBlt.Call(memDC, 0, 0, uintptr(r.Dx()), uintptr(r.Dy()), screenDC, uintptr(r.Min.X), uintptr(r.Min.Y), srccopy)
+		if ok == 0 {
+			return fmt.Errorf("capture: BitBlt failed for %v: %w", r, err)
+		}
+		return nil
+	})
+}
+
+// drawDIB lets draw paint a size-sized top-down DIB section and returns the
+// crop part of it as a newly allocated *image.RGBA.
+func drawDIB(size image.Point, crop image.Rectangle, draw func(memDC, screenDC uintptr) error) (*image.RGBA, error) {
+	w, h := size.X, size.Y
 
 	// Acquire screen DC.
 	screenDC, _, err := procGetDC.Call(0)
@@ -134,27 +146,20 @@ func captureRect(r image.Rectangle) (*image.RGBA, error) {
 	if prev == 0 || prev == ^uintptr(0) { // failure or GDI_ERROR
 		return nil, fmt.Errorf("capture: SelectObject failed: %w", err)
 	}
-
-	// BitBlt into memory DC at requested offset.
-	ok, _, err := procBitBlt.Call(memDC, 0, 0, uintptr(w), uintptr(h), screenDC, uintptr(r.Min.X), uintptr(r.Min.Y), srccopy)
-	if ok == 0 {
-		return nil, fmt.Errorf("capture: BitBlt failed for %v: %w", r, err)
+	if err := draw(memDC, screenDC); err != nil {
+		return nil, err
 	}
 
-	// Copy & convert BGRA in DIB to RGBA in Go heap slice.
-	pixLen := w * h * 4
-	src := unsafe.Slice((*byte)(bitsPtr), pixLen)
-	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	// dst.Pix layout already contiguous stride = w*4
-	for i := 0; i < pixLen; i += 4 {
-		b := src[i+0]
-		g := src[i+1]
-		r8 := src[i+2]
-		// src[i+3] alpha (undefined); force opaque
-		dst.Pix[i+0] = r8
-		dst.Pix[i+1] = g
-		dst.Pix[i+2] = b
-		dst.Pix[i+3] = 0xFF
+	// Copy & convert the crop's BGRA rows in the DIB to RGBA in a Go heap slice.
+	src := unsafe.Slice((*byte)(bitsPtr), w*h*4)
+	dst := image.NewRGBA(image.Rect(0, 0, crop.Dx(), crop.Dy()))
+	for y := range crop.Dy() {
+		row := src[((crop.Min.Y+y)*w+crop.Min.X)*4:][:crop.Dx()*4]
+		out := dst.Pix[y*dst.Stride:][:crop.Dx()*4]
+		for i := 0; i < len(row); i += 4 {
+			// row[i+3] alpha (undefined); force opaque
+			out[i], out[i+1], out[i+2], out[i+3] = row[i+2], row[i+1], row[i], 0xFF
+		}
 	}
 	return dst, nil
 }
@@ -220,4 +225,33 @@ func (w WindowIdentity) Area() (image.Rectangle, error) {
 		return image.Rectangle{}, fmt.Errorf("window %q has no client area", title)
 	}
 	return area, nil
+}
+
+var procPrintWindow = user32.NewProc("PrintWindow")
+
+// Print captures area, in screen coordinates, from the window's own drawing,
+// so it works while other windows cover the game. It fails while the window
+// is minimized. PrintWindow draws the whole client area, so a small area costs
+// about as much as the window.
+func (w WindowIdentity) Print(area image.Rectangle) (Frame, error) {
+	client, err := w.Area()
+	if err != nil {
+		return Frame{}, err
+	}
+	r := area.Intersect(client)
+	if r.Empty() {
+		return Frame{}, fmt.Errorf("capture: area %v is outside the window %v", area, client)
+	}
+	defer physicalPixels()()
+	img, err := drawDIB(client.Size(), r.Sub(client.Min), func(memDC, _ uintptr) error {
+		const clientOnly, renderFullContent = 1, 2 // PW_RENDERFULLCONTENT also reads DirectX windows
+		if ok, _, err := procPrintWindow.Call(uintptr(w.Handle), memDC, clientOnly|renderFullContent); ok == 0 {
+			return fmt.Errorf("capture: PrintWindow failed: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return Frame{}, err
+	}
+	return Frame{Image: img, Origin: r.Min, CapturedAt: time.Now()}, nil
 }

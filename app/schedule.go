@@ -185,7 +185,7 @@ func (a *app) tickSchedule(now time.Time) {
 
 func (a *app) scheduleScreen(wantWorld bool) bool {
 	c := a.container
-	if a.scheduleStop.Load() || !c.gameFocused() || c.startProblem() != "" {
+	if a.scheduleStop.Load() || !c.canAct() || c.startProblem() != "" {
 		return false
 	}
 	area := c.gameArea()
@@ -234,7 +234,7 @@ func (a *app) tapScheduledKey(vk byte, wantWorld bool) (bool, error) {
 		}
 		defer keyboard.Close()
 	}
-	if !a.scheduleScreen(wantWorld) || !c.gameFocused() || a.scheduleStop.Load() {
+	if !a.scheduleScreen(wantWorld) || !c.canAct() || a.scheduleStop.Load() {
 		return false, nil
 	}
 	switch {
@@ -248,7 +248,7 @@ func (a *app) tapScheduledKey(vk byte, wantWorld bool) (bool, error) {
 			return false, err
 		}
 	default:
-		release := action.BeginKeyHold(vk)
+		release := c.beginKeyHold(vk)
 		if release == nil {
 			return false, errors.New("the game key press was blocked")
 		}
@@ -261,4 +261,13 @@ func (a *app) tapScheduledKey(vk byte, wantWorld bool) (bool, error) {
 func (c *AppContainer) gameFocused() bool {
 	target := c.gameWindow.Load()
 	return target != nil && target.Focused()
+}
+
+// canAct gates keys and the run itself: the game in front, or in a background
+// run open and not minimized. The pointer always needs gameFocused.
+func (c *AppContainer) canAct() bool {
+	if c.background.Load() {
+		return c.gameArea() != nil
+	}
+	return c.gameFocused()
 }

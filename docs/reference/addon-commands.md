@@ -15,7 +15,7 @@ The setting is saved with your other addon settings and kept between sessions.
 
 | Setting | Set to | When |
 | --- | --- | --- |
-| Enable Interact Key (soft targeting) | on | The first time you fish; stays as you leave it |
-| Nameplates for world objects | on | The first time you fish; stays as you leave it |
-| Interact range limit | off, 60 yards | The first time you fish; stays as you leave it |
+| Enable Interact Key (soft targeting) | on | Each time you start fishing |
+| Nameplates for world objects | on | Each time you start fishing |
+| Interact range limit | off, 60 yards | Each time you start fishing |
 | Nameplate on the interact target | on | Only while you fish; then back to your setting |

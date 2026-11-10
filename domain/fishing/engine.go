@@ -5,6 +5,7 @@ import (
 	"errors"
 	"image"
 	"log/slog"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -160,18 +161,22 @@ func (e *Engine) Preview() *Preview { return e.preview.Load() }
 
 // run holds the state of one Start to Stop span. Only its goroutine touches it.
 type run struct {
-	engine                 *Engine
-	locator                detect.Locator
-	bite                   detect.BiteDetector
-	listener               detect.SoundBiteDetector // bite, when it also listens
-	target                 image.Rectangle          // locked area in screen coordinates; the last bobber's while searching
-	targetWindow           image.Rectangle          // client area when the target was found
-	searchStart            time.Time                // when this search began, zero outside searching
-	markerGone             bool                     // no marker has been seen since this search began
-	window                 capture.Frame            // the last capture of the whole game window
-	lastSearch             time.Time
-	searches               int
-	monitoring             bool
+	engine       *Engine
+	locator      detect.Locator
+	bite         detect.BiteDetector
+	listener     detect.SoundBiteDetector // bite, when it also listens
+	target       image.Rectangle          // locked area in screen coordinates; the last bobber's while searching
+	targetWindow image.Rectangle          // client area when the target was found
+	searchStart  time.Time                // when this search began, zero outside searching
+	markerGone   bool                     // no marker has been seen since this search began
+	window       capture.Frame            // the last capture of the whole game window
+	lastSearch   time.Time
+	searches     int
+	monitoring   bool
+	// The watched frames of the current cast, logged when it ends.
+	watchFrames            int
+	watchFrom, lastSeen    time.Time
+	longestGap             time.Duration
 	interact               bool
 	lastErr                string
 	watchPlayer            bool
@@ -196,6 +201,16 @@ func (r *run) loop(ctx context.Context, done chan<- struct{}, closeKeyboard func
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// A step can take 60 ms (PrintWindow of a covered game) while sound
+			// comes every 10 ms, so hear what waits first or the buffer overflows.
+			for drained := false; !drained; {
+				select {
+				case p := <-sounds:
+					r.hear(p)
+				default:
+					drained = true
+				}
+			}
 			r.step()
 		case p := <-sounds:
 			r.hear(p)
@@ -274,6 +289,7 @@ func (r *run) step() {
 	r.lastErr = ""
 	r.pollOutcome(window)
 	if !watching {
+		r.endWatch()
 		r.window = frame
 		r.monitoring = false
 		if state == StateSearching {
@@ -344,6 +360,19 @@ func (r *run) search(frame capture.Frame, window image.Rectangle) {
 	}
 }
 
+// endWatch logs how steadily the cast that just ended was watched: a bite is
+// only seen when its splash falls between frames often enough.
+func (r *run) endWatch() {
+	if r.watchFrames < 2 {
+		r.watchFrames = 0
+		return
+	}
+	span := r.lastSeen.Sub(r.watchFrom)
+	r.engine.logger.Debug("watch frames", "frames", r.watchFrames,
+		"fps", math.Round(float64(r.watchFrames-1)/span.Seconds()*10)/10, "longest_gap_ms", r.longestGap.Milliseconds())
+	r.watchFrames, r.longestGap = 0, 0
+}
+
 func (r *run) monitor(frame capture.Frame) *image.RGBA {
 	e := r.engine
 	box := r.target.Sub(frame.Origin)
@@ -355,6 +384,13 @@ func (r *run) monitor(frame capture.Frame) *image.RGBA {
 		r.bite.Reset()
 		r.monitoring = true
 	}
+	if r.watchFrames == 0 {
+		r.watchFrom = frame.CapturedAt
+	} else {
+		r.longestGap = max(r.longestGap, frame.CapturedAt.Sub(r.lastSeen))
+	}
+	r.watchFrames++
+	r.lastSeen = frame.CapturedAt
 	roi := frame.Image.SubImage(box).(*image.RGBA)
 	if r.bite.Feed(roi, frame.CapturedAt) {
 		e.fsm.EventFishBite()

@@ -10,6 +10,7 @@ import (
 type Guard struct {
 	Logger       *slog.Logger
 	InFront      func() bool                // the selected window has focus
+	CanPress     func() bool                // keys reach the game: InFront, or a background run's open window
 	Area         func() *image.Rectangle    // capture area in screen coordinates
 	CursorPos    func() (x, y int, ok bool) // where the pointer is now
 	OnTakeover   func()                     // the user moved the pointer
@@ -22,19 +23,19 @@ type Guard struct {
 	hasTarget    bool
 }
 
-// PressKey sends the key if the selected window has focus.
+// PressKey sends the key if it can reach the game.
 func (g *Guard) PressKey(vk byte) bool {
-	if !g.InFront() {
+	if !g.CanPress() {
 		g.Logger.Warn("input dropped: selected window is not in front", "action", "press_key")
 		return false
 	}
 	return g.Press(vk)
 }
 
-// HoldKey starts a timed press if the selected window has focus. The caller
-// must release it even after focus loss.
+// HoldKey starts a timed press if it can reach the game. The caller must
+// release it even after focus loss.
 func (g *Guard) HoldKey(vk byte) func() {
-	if !g.InFront() {
+	if !g.CanPress() {
 		g.Logger.Warn("input dropped: selected window is not in front", "action", "hold_key")
 		return nil
 	}

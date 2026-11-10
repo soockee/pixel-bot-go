@@ -43,6 +43,8 @@ type AppContainer struct {
 	Loop       *presenter.Loop
 	trace      *liveTrace
 	gameWindow atomic.Pointer[capture.WindowIdentity]
+	// background is the run's Config.Background, fixed when the run binds the window.
+	background atomic.Bool
 }
 
 // TraceOptions configures desktop tracing and the optional reel timing profile.
@@ -63,15 +65,15 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	c := &AppContainer{Config: cfg, Capture: &model.CaptureModel{}, Frames: desktop.NewFrames(), botLog: botLog}
 	c.View = desktop.NewView(c.Frames, emit)
 	c.Recordings = desktop.NewRecordings(func() string { return cfg.RecordDir })
-	inFront := c.gameFocused
+	inFront, canAct := c.gameFocused, c.canAct
 
-	callbacks := fishing.ActionCallbacks{ParseVK: action.ParseVK, CanAct: inFront}
+	callbacks := fishing.ActionCallbacks{ParseVK: action.ParseVK, CanAct: canAct}
 	dryRun := cfg.DryRun
 	if dryRun {
 		logger.Warn("dry-run enabled: input actions are logged, not injected")
 		callbacks.PressKey, callbacks.MoveCursor, callbacks.ClickRight = action.DryRun(logger)
 		callbacks.HoldInteract = func(vk byte) func() {
-			if !inFront() {
+			if !canAct() {
 				return nil
 			}
 			callbacks.PressKey(vk)
@@ -82,7 +84,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			callbacks.ObserveCast, callbacks.ObserveReel = c.trace.cast, c.trace.bite
 		}
 		if trace.Output != nil || trace.Timing != nil {
-			callbacks.CanSimulateReel = inFront
+			callbacks.CanSimulateReel = canAct
 			if trace.Output != nil {
 				callbacks.ObserveReelTiming = c.trace.reelTiming
 			}
@@ -178,8 +180,8 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			Logger: logger, InFront: inFront, Area: c.gameArea, CursorPos: action.CursorPos,
 			// The guard runs on the FSM goroutine, which must not wait on its own queue.
 			OnTakeover: func() { go c.FSM.EventHaltBecause("the mouse was moved") },
-			Press:      action.PressKey, Move: move, Click: click,
-			BeginHold: action.BeginRightHold, BeginKeyHold: action.BeginKeyHold,
+			CanPress:   canAct, Press: c.pressKey, Move: move, Click: click,
+			BeginHold: action.BeginRightHold, BeginKeyHold: c.beginKeyHold,
 		}
 		callbacks.PressKey, callbacks.MoveCursor, callbacks.ClickRight = guard.PressKey, guard.MoveCursor, guard.ClickRight
 		callbacks.CursorPos = action.CursorPos
@@ -266,7 +268,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 
 	c.CapturePresenter = presenter.NewCapturePresenter(c.Capture, c.Engine, c.FSM, c.View)
 	c.RecordPresenter = presenter.NewRecordPresenter(c.prepareRecording, c.View)
-	focusWatcher := presenter.NewFocusWatcher(c.FSM, inFront)
+	focusWatcher := presenter.NewFocusWatcher(c.FSM, canAct)
 	c.FSM.AddListener(func(prev, next fishing.FishingState) {
 		if dryRun && trace.Output != nil && (next == fishing.StateHalt || next == fishing.StateWaitingFocus) {
 			c.trace.timingGap(next)
@@ -323,9 +325,27 @@ func cursorSteps(path []cursormotion.Step) ([]fishing.CursorStep, bool) {
 	return steps, len(steps) > 0
 }
 
-// gameFrames captures the game window the person picked.
+// pressKey and beginKeyHold send keys to the game window in a background
+// run, and to the window in front otherwise.
+func (c *AppContainer) pressKey(vk byte) bool {
+	if w := c.gameWindow.Load(); w != nil && c.background.Load() {
+		return action.PostKey(uintptr(w.Handle), vk)
+	}
+	return action.PressKey(vk)
+}
+
+func (c *AppContainer) beginKeyHold(vk byte) func() {
+	if w := c.gameWindow.Load(); w != nil && c.background.Load() {
+		return action.BeginPostedKeyHold(uintptr(w.Handle), vk)
+	}
+	return action.BeginKeyHold(vk)
+}
+
+// gameFrames captures the game window the person picked: from the screen, or
+// from the window's own drawing in a background run, where it may be covered.
 type gameFrames struct {
-	target func() *capture.WindowIdentity
+	target     func() *capture.WindowIdentity
+	background func() bool
 }
 
 func (g gameFrames) Window() (image.Rectangle, error) {
@@ -335,10 +355,16 @@ func (g gameFrames) Window() (image.Rectangle, error) {
 	return image.Rectangle{}, errors.New("select a game window")
 }
 func (g gameFrames) Grab(area image.Rectangle) (capture.Frame, error) {
+	// PrintWindow costs about 40 ms whatever the area, the screen copy 10 ms.
+	if w := g.target(); w != nil && g.background() && !w.Focused() {
+		return w.Print(area)
+	}
 	return capture.Grab(area)
 }
 
-func (c *AppContainer) frames() gameFrames { return gameFrames{target: c.gameWindow.Load} }
+func (c *AppContainer) frames() gameFrames {
+	return gameFrames{target: c.gameWindow.Load, background: c.background.Load}
+}
 
 // gameArea is the game window's client area, or nil when it is not open. The
 // guard keeps every cursor move inside it.
@@ -361,6 +387,7 @@ func (c *AppContainer) bindGameWindow() error {
 		return err
 	}
 	c.gameWindow.Store(&target)
+	c.background.Store(c.Config.Background)
 	return nil
 }
 

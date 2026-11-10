@@ -28,7 +28,7 @@ When Go Fish stops without you pressing Stop, the status bar says **Stopped:** a
 
 ## It sits on "Focus"
 
-Go Fish only fishes while the game is the window in front. Click into the game.
+Go Fish only fishes while the game is the window in front. Click into the game. With [Fish in the background](settings.md#fish-in-the-background) on, it waits here only while the game is minimized.
 
 ## Nothing happens in the game
 

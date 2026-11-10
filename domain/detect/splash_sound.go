@@ -129,6 +129,7 @@ func (s *SplashSoundDetector) Feed(roi *image.RGBA, t time.Time) bool {
 	}
 	if s.splash.IsZero() || t.Sub(s.splash) > soundAfterSplash {
 		s.splashFrom = t // a new splash
+		s.logger.Debug("splash seen", "share", math.Round(share*100)/100, "centre", b.centre, "all", b.all)
 	}
 	s.splash = t
 	// Spray of a splash elsewhere in the box, such as another player's bobber,
@@ -166,6 +167,9 @@ func (s *SplashSoundDetector) Hear(pcm []byte, t time.Time) bool {
 	}
 	gap := at.Sub(s.splashFrom)
 	s.fired = gap >= 0 && at.Sub(s.splash) <= soundAfterSplash
+	if !s.fired {
+		s.logger.Debug("sound outside the splash", "after_first_ms", gap.Milliseconds(), "after_last_ms", at.Sub(s.splash).Milliseconds())
+	}
 	if s.fired {
 		s.heardBite = true
 		s.logger.Info("bite detected", "detector", "splash_sound", "sound_after_splash_ms", gap.Milliseconds())

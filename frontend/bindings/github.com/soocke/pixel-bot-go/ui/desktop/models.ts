@@ -45,6 +45,7 @@ export interface Settings {
     "reelMethod": string;
     "interactKey": string;
     "esp32Port": string;
+    "background": boolean;
     "idleMoves": boolean;
     "reposition": boolean;
     "targetPlayerKey": string;
