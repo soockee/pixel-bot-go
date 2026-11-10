@@ -4,7 +4,7 @@ summary: "Record frames, input and sound from the game, and compare detectors on
 order: 4
 ---
 
-A recording saves the screen and your input together, on the same clock, and sends no input. The Recorder tab is a developer tool: it appears with `"debug": true` in `pixle_bot_config.json`.
+A recording saves the selected game window, its sound and your input on the same clock, and sends no input. The Recorder tab is a developer tool: it appears with `"debug": true` in `pixle_bot_config.json`.
 
 1. Start the app. On the **Fishing** tab, pick the game window (the list reloads when you open it).
 2. Open the **Recorder** tab and click **Record**. The new recording opens and follows your input live.
@@ -13,7 +13,9 @@ A recording saves the screen and your input together, on the same clock, and sen
 
 Each recording gets a new timestamped folder holding `frames/`, `input.jsonl` and the game's sound in `audio.wav`. You still hear the game while it records, and music or voice chat from other programs is not recorded. Set **Recording folder** and **Record keys** on the **Settings** tab (debug mode). The default `datasets/` folder is ignored by git. A recording can also run while the bot fishes: then `bot.jsonl` holds what the bot did, one JSON object per log entry with `ms` on the recording's clock (state changes, `bite detected` with the path that fired it, casts, reels, and `fishing outcome`).
 
-For scripts and agents, the same recording runs without a window: `pixel-bot-go.exe -record <dir> -window "<title>"`, stopped with Ctrl+C. It records the window's client area where it is at the start. Add `-record-keys` to capture keyboard input locally. `-list-windows` prints the titles.
+The Recorder uses Windows Graphics Capture for the selected window, even when another window covers it. Keep the game open at its starting size and position. Frame capture pauses if the game stops drawing or the window is moved, resized or minimized. Recording requires Windows Graphics Capture to be available.
+
+For scripts and agents, the same recording runs without a window: `pixel-bot-go.exe -record <dir> -window "<title>"`, stopped with Ctrl+C. Add `-record-keys` to capture keyboard input locally. `-list-windows` prints the titles.
 
 The recorder stores client-area cursor positions, relative mouse counts, both wheel axes, and press and release events for left, right, middle, Mouse 4, and Mouse 5. It also records key down and up with virtual-key and scan codes, repeat status, and shortcuts such as Shift+B. Mouse capture requires the pointer over the selected client area. Keyboard capture follows the selected foreground window, including its chat or text fields. Keyboard capture is off unless requested. Keyboard input Windows marks as injected is skipped.
 

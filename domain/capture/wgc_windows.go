@@ -21,6 +21,7 @@ import (
 var (
 	d3d11                     = windows.NewLazySystemDLL("d3d11.dll")
 	combase                   = windows.NewLazySystemDLL("combase.dll")
+	procDwmAttribute          = windows.NewLazySystemDLL("dwmapi.dll").NewProc("DwmGetWindowAttribute")
 	procD3D11CreateDevice     = d3d11.NewProc("D3D11CreateDevice")
 	procCreateWinRTD3DDevice  = d3d11.NewProc("CreateDirect3D11DeviceFromDXGIDevice")
 	procRoInitialize          = combase.NewProc("RoInitialize")
@@ -40,8 +41,8 @@ var (
 	iidClosable             = mustGUID("{30d5a829-7fa4-4026-83bb-d75bae4ea99e}")
 	iidDxgiInterfaceAccess  = mustGUID("{a9b3d012-3df2-4ee3-b8d1-8695f457d3c1}")
 	iidD3D11Texture2D       = mustGUID("{6f15aaf2-d208-4e89-9ab4-489535d34f9c}")
-	errNoFrame              = errors.New("capture: the game has drawn no frame yet")
-	errStaleFrame           = errors.New("capture: the game has drawn no new frame for a second")
+	errNoFrame              = fmt.Errorf("%w: the game has drawn no frame yet", ErrFrameUnavailable)
+	errStaleFrame           = fmt.Errorf("%w: the game has drawn no new frame for a second", ErrFrameUnavailable)
 	staleAfter              = time.Second
 	firstFrameWait          = 500 * time.Millisecond
 	formatB8G8R8A8          = uintptr(87) // DXGI_FORMAT_B8G8R8A8_UNORM, also the WinRT DirectXPixelFormat value
@@ -102,7 +103,7 @@ type WindowStream struct {
 }
 
 // OpenWindowStream starts capturing w. It fails on Windows before 10 1903 or
-// without a hardware Direct3D 11 device; callers fall back to PrintWindow.
+// without a hardware Direct3D 11 device.
 func OpenWindowStream(w WindowIdentity) (_ *WindowStream, err error) {
 	s := &WindowStream{window: w, mta: make(chan struct{})}
 	defer func() {

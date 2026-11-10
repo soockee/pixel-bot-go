@@ -133,10 +133,12 @@ func TestRecordKeepsOnlyTheBobberBetweenWholeFrames(t *testing.T) {
 		}
 		return img
 	}
-	// A whole frame, one with the bobber, one without, and fullEvery later a whole one.
-	images := []*image.RGBA{scene(true), scene(true), scene(false), scene(false)}
+	// Window capture can return a frame from before start or repeat a frame.
+	// Neither should change the set of saved frames.
+	bobberFrame, emptyFrame := scene(true), scene(false)
+	images := []*image.RGBA{emptyFrame, bobberFrame, bobberFrame, bobberFrame, emptyFrame, emptyFrame}
 	last := 100 + fullEvery.Milliseconds()
-	ms := []int64{100, 200, 300, last}
+	ms := []int64{-100, 100, 200, 200, 300, last}
 
 	dir := filepath.Join(t.TempDir(), "session")
 	if err := Create(dir); err != nil {
@@ -160,10 +162,10 @@ func TestRecordKeepsOnlyTheBobberBetweenWholeFrames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bobber.Bounds() != images[1].Bounds() {
-		t.Fatalf("bobber frame is %v, want the window's %v", bobber.Bounds(), images[1].Bounds())
+	if bobber.Bounds() != bobberFrame.Bounds() {
+		t.Fatalf("bobber frame is %v, want the window's %v", bobber.Bounds(), bobberFrame.Bounds())
 	}
-	if got := bobber.RGBAAt(530, 330); got != images[1].RGBAAt(530, 330) {
+	if got := bobber.RGBAAt(530, 330); got != bobberFrame.RGBAAt(530, 330) {
 		t.Errorf("inside the bobber square: %v, want the scene", got)
 	}
 	if got := bobber.RGBAAt(10, 10); got.R != 0 || got.A != 0 {

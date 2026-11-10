@@ -6,7 +6,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"image"
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
@@ -19,7 +18,6 @@ import (
 	"github.com/soocke/pixel-bot-go/app"
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/action"
-	"github.com/soocke/pixel-bot-go/domain/capture"
 	"github.com/soocke/pixel-bot-go/internal/cursormotion"
 	"github.com/soocke/pixel-bot-go/internal/inputtiming"
 	"github.com/soocke/pixel-bot-go/internal/playtrace"
@@ -200,16 +198,6 @@ func recordSession(ctx context.Context, session recorder.Session) error {
 	if session.Window == "" {
 		return errors.New("-record needs -window, the game window to record")
 	}
-	target, err := capture.ResolveWindow(session.Window)
-	if err != nil {
-		return err
-	}
-	region, err := target.Area()
-	if err != nil {
-		return err
-	}
-	session.Target = &target
-	session.Frames = capture.Source{Region: func() *image.Rectangle { return &region }}
-	fmt.Fprintln(session.Status, "Recording", region, "to", session.Dir, "- press Ctrl+C to stop")
+	fmt.Fprintln(session.Status, "Recording", session.Window, "to", session.Dir, "- press Ctrl+C to stop")
 	return session.Run(ctx)
 }
