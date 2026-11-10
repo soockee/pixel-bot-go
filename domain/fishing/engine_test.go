@@ -539,3 +539,57 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 // deaf hides Hear, so the engine does not listen and the detector takes the
 // game as silent.
 type deaf struct{ detect.BiteDetector }
+
+// slowFrames takes as long per capture as PrintWindow of a covered game.
+type slowFrames struct{ *sceneFrames }
+
+func (s slowFrames) Grab(area image.Rectangle) (capture.Frame, error) {
+	time.Sleep(60 * time.Millisecond)
+	return s.sceneFrames.Grab(area)
+}
+
+// countingEar counts the packets it hears and never reports a bite.
+type countingEar struct {
+	detect.BiteDetector
+	heard *atomic.Int32
+}
+
+func (c countingEar) Hear([]byte, time.Time) bool { c.heard.Add(1); return false }
+
+// A background run captures at about 60 ms a frame; the sound between frames
+// must still all reach the detector, or it never hears a bite start.
+func TestEngineHearsEverySoundPacketWhileCaptureIsSlow(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		engine, fsm, frames, _ := newSceneEngine(t, recordingActions(&actionLog{}))
+		defer fsm.Close()
+		engine.frames = slowFrames{frames}
+		var heard, sent atomic.Int32
+		engine.detectors = func(config.Config) (detect.Locator, detect.BiteDetector, error) {
+			return detect.NewMarkerLocator(), countingEar{detect.NewSplashSoundDetector(nil), &heard}, nil
+		}
+		engine.sound = func(ctx context.Context, emit func([]byte, time.Time) error) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-time.After(10 * time.Millisecond):
+					if fsm.Current() == StateMonitoring {
+						sent.Add(1)
+					}
+					emit([]byte{0}, time.Now())
+				}
+			}
+		}
+		startEngine(t, engine)
+		defer engine.Stop()
+		fsm.EventAwaitFocus()
+		fsm.EventFocusAcquired()
+		time.Sleep(3 * time.Second)
+		wantState(t, fsm, StateMonitoring)
+
+		// The first frame of a watch starts hearing, a few packets after the state changes.
+		if h, s := heard.Load(), sent.Load(); h < s*9/10 {
+			t.Errorf("heard %d of %d sound packets while watching", h, s)
+		}
+	})
+}
