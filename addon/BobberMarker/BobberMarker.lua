@@ -31,7 +31,8 @@ local COLOR = { 1, 0, 1 }; -- opaque magenta: exact over any background, and rar
 local POLL = 0.1; -- seconds between checks while fishing
 
 -- Soft targeting must be on for the bobber to become the soft target. These
--- are set once, the first time you fish, and stay as you set them afterwards.
+-- are checked each time you start fishing: the game keeps some per character,
+-- and a copied WTF folder can carry another account's saved variables.
 local NEEDED = {
 	SoftTargetInteract = "3",            -- the game's "Enable Interact Key"
 	SoftTargetIconGameObject = "1",      -- world objects can get a nameplate
@@ -355,11 +356,10 @@ local function StartFishing()
 		offsetY = math.random(-OFFSET_RADIUS, OFFSET_RADIUS);
 	end
 	fishing = true;
-	if not db.prepared and not InCombatLockdown() then
+	if not InCombatLockdown() then
 		for name, value in pairs(NEEDED) do
 			SetCVarValue(name, value);
 		end
-		db.prepared = true;
 	end
 	if plateBefore == nil then
 		plateBefore = GetCVarValue(PLATE);
