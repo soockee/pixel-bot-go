@@ -19,4 +19,18 @@
     for (const a of document.querySelectorAll(".sidebar a[data-text]")) a.hidden = q !== "" && !a.dataset.text.includes(q);
   });
 
+  const video = document.getElementById("fishing-demo");
+  const toggle = document.querySelector(".replay-toggle");
+  if (video && toggle) {
+    const updateLabel = () => { toggle.textContent = video.paused ? "Play demo" : "Pause demo"; };
+    video.addEventListener("play", updateLabel);
+    video.addEventListener("pause", updateLabel);
+    toggle.addEventListener("click", () => {
+      if (video.paused) video.play().catch(updateLabel);
+      else video.pause();
+    });
+    updateLabel();
+    toggle.hidden = false;
+    video.controls = false;
+  }
 })();

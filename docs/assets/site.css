@@ -95,12 +95,72 @@ a:hover { text-decoration: underline; }
 .button.primary:hover { background: #f5b55a; }
 
 /* Home */
-.hero { padding: 72px 24px 48px; }
-.hero-inner { max-width: 1040px; margin: 0 auto; }
-.hero h1 { max-width: 760px; margin: 0; font-size: clamp(36px, 6vw, 52px); font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; }
-.lead { margin: 16px 0 24px; color: var(--text-2); font-size: 17px; }
-.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; list-style: none; margin: 0 0 16px; padding: 0; }
-.steps li { display: flex; gap: 12px; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); }
+.home {
+  --night: #0b121c;
+  --panel: #101b28;
+  --text: #f1eee7;
+  --text-2: #b3bfca;
+  --text-3: #909fae;
+  --display: Georgia, "Times New Roman", serif;
+  background: var(--night);
+}
+.home .top { background: #0b121c; backdrop-filter: none; }
+.home :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.home-width, .hero-inner { width: min(100% - 64px, 1200px); margin-inline: auto; }
+.hero {
+  display: grid;
+  align-items: center;
+  min-height: clamp(540px, 72svh, 800px);
+  padding-block: 64px;
+  background:
+    linear-gradient(90deg, #0b121c 0%, #0b121cd9 18%, #0b121c60 52%, transparent 76%),
+    linear-gradient(0deg, var(--night), transparent 32%),
+    url("night-lake.webp") 64% 58% / cover no-repeat;
+}
+.section-label { margin: 0 0 12px; color: var(--accent); font: 400 13px/1.5 var(--mono); }
+.hero h1, .home main h2 { margin: 0; font-family: var(--display); font-weight: 400; letter-spacing: -0.04em; }
+.hero h1 { font-size: clamp(64px, 9vw, 144px); line-height: 0.9; }
+.home main h2 { font-size: clamp(36px, 4.2vw, 64px); line-height: 1.05; }
+.lead { max-width: 31ch; margin: 24px 0; color: var(--text-2); font-size: clamp(17px, 2vw, 20px); }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.home .actions .button { padding: 12px 16px; }
+.home .actions .button:not(.primary) { background: #0b121c; }
+.showcase {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  align-items: center;
+  gap: clamp(32px, 6vw, 88px);
+  padding-block: 72px;
+}
+.cycle { display: grid; gap: 16px; margin: 28px 0 0; }
+.cycle div { padding-top: 16px; border-top: 1px solid var(--line); }
+.cycle dt { display: flex; align-items: center; gap: 12px; font-weight: 600; }
+.cycle dd { margin: 4px 0 0 40px; color: var(--text-2); }
+.replay { min-width: 0; margin: 0; text-align: center; }
+.replay video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: var(--night); }
+.replay figcaption { display: inline-block; color: var(--text-3); font: 400 12px/1.5 var(--mono); }
+.replay-toggle {
+  min-height: 32px;
+  margin-left: 8px;
+  padding: 0 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 500 12px var(--font);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.app-preview, .quickstart, .guide { padding-block: 64px; border-top: 1px solid var(--line); }
+.app-screens { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-top: 28px; }
+.app-screens figure { margin: 0; }
+.app-screens a, .app-screens img { display: block; }
+.app-screens img { width: 100%; height: auto; }
+.app-screens figcaption { margin-top: 16px; }
+.app-screens p { margin: 4px 0 0; color: var(--text-2); }
+.steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; list-style: none; margin: 28px 0 24px; padding: 0; }
+.steps li { display: flex; align-items: flex-start; gap: 12px; padding-top: 20px; border-top: 1px solid var(--line-strong); }
+.steps h3 { margin: 0 0 4px; font-size: 16px; font-weight: 600; }
 .steps p { margin: 0; color: var(--text-2); }
 .steps strong { color: var(--text); font-weight: 500; }
 .steps code, kbd { padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 5px; color: var(--text); font: 0.88em var(--mono); }
@@ -120,8 +180,6 @@ a:hover { text-decoration: underline; }
     linear-gradient(var(--marker), var(--marker)) 100% 100% / 2px 8px;
   background-repeat: no-repeat;
 }
-.note { margin: 0 0 32px; color: var(--text-3); font-size: 14px; }
-.actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .filter input {
   width: 100%;
   padding: 12px 16px;
@@ -141,14 +199,11 @@ a:hover { text-decoration: underline; }
 .cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-  width: 100%;
-  max-width: 1088px;
-  margin: 0 auto;
-  padding: 0 24px 64px;
+  gap: 16px;
+  margin-top: 28px;
 }
-.card { padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--panel); scroll-margin-top: 80px; }
-.card h2 { margin: 0 0 16px; font-size: 20px; font-weight: 500; }
+.card { padding: 24px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.card h3 { margin: 0 0 16px; font-size: 20px; font-weight: 500; }
 .card ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
 .card li a {
   display: flex;
@@ -219,10 +274,24 @@ a:hover { text-decoration: underline; }
   .top { gap: 16px; padding: 12px 16px; }
   .top nav { display: none; }
   .top .button { margin-left: auto; }
-  .hero { padding: 48px 16px 32px; }
+  .home-width, .hero-inner { width: calc(100% - 48px); }
+  .showcase { grid-template-columns: 1fr; padding-block: 48px; }
+  .app-preview, .quickstart, .guide { padding-block: 48px; }
+  .app-screens { grid-template-columns: 1fr; }
   .steps { grid-template-columns: 1fr; }
-  .cards { grid-template-columns: 1fr; padding: 0 16px 48px; }
   .docs { grid-template-columns: 1fr; gap: 24px; padding: 24px 16px 48px; }
   .sidebar { position: static; max-height: none; }
   .page h1 { font-size: 28px; }
+}
+
+@media (max-width: 520px) {
+  .hero {
+    align-items: end;
+    min-height: 560px;
+    padding-block: 48px;
+    background:
+      linear-gradient(0deg, var(--night) 2%, #0b121ce8 30%, #0b121c50 66%, transparent),
+      url("night-lake.webp") 76% top / auto 76% no-repeat;
+  }
+  .cards { grid-template-columns: 1fr; }
 }
