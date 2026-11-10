@@ -24,6 +24,22 @@ func TestDefaultPathStaysInClientAndEndsOnTarget(t *testing.T) {
 	}
 }
 
+// A reach never pauses long enough to read as two in a dry-run trace, even
+// while its slow end stays on one pixel.
+func TestDefaultPathHasNoLongPause(t *testing.T) {
+	bounds := image.Rect(0, 0, 3440, 1440)
+	for i := range 20000 {
+		start, target := image.Pt(i%3440, i%1440), image.Pt((i*7919)%3440, (i*104729)%1440)
+		previous := time.Duration(0)
+		for _, step := range DefaultPath(start, target, bounds, false) {
+			if gap := step.After - previous; gap >= 50*time.Millisecond {
+				t.Fatalf("%v to %v pauses %v before %+v", start, target, gap, step)
+			}
+			previous = step.After
+		}
+	}
+}
+
 // A long reach sometimes passes the target before it settles, and two reaches
 // rarely share a waypoint.
 func TestDefaultPathVaries(t *testing.T) {

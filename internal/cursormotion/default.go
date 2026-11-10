@@ -84,7 +84,7 @@ func reach(start, end image.Point, duration, after time.Duration, free bool, cla
 		tremor = min(2.5, length*0.01)
 	}
 	var steps []Step
-	last := start
+	last, lastAt := start, time.Duration(0)
 	for at := time.Duration(0); ; {
 		at += time.Duration(8000+rand.IntN(4001)) * time.Microsecond // a pointer reports about every 10 ms
 		if at >= duration-6*time.Millisecond {
@@ -103,13 +103,19 @@ func reach(start, end image.Point, duration, after time.Duration, free bool, cla
 			start.X+int(math.Round(dx*progress+(dx*along-dy*lateral)/length)),
 			start.Y+int(math.Round(dy*progress+(dy*along+dx*lateral)/length)),
 		))
-		if point != last && point != end {
+		if point != last && point != end || len(steps) == 0 || at-lastAt >= heldWaypoint {
 			steps = append(steps, Step{After: after + at, Point: point})
-			last = point
+			last, lastAt = point, at
 		}
 	}
 	return steps
 }
+
+// heldWaypoint repeats a waypoint while the pointer moves too slowly to change
+// pixel, and the first sample is always a waypoint, so a dry-run trace reports
+// a reach as it is timed: readers take a pause of 60 ms for a new reach, and
+// the first waypoint for one step after the reach began.
+const heldWaypoint = 30 * time.Millisecond
 
 // minJerk is the smooth 0 to 1 progress of a single movement at time t of 1.
 func minJerk(t float64) float64 {
