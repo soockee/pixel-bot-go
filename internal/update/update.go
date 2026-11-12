@@ -30,6 +30,14 @@ const (
 	AssetName = "pixel-bot-go-windows-amd64.exe"
 	sumsName  = "CHECKSUMS.txt"
 	maxSize   = 256 << 20 // refuse anything larger than any plausible build
+
+	// InstallPathEnv is set by the fish-named launcher so updates replace the
+	// stable executable instead of the temporary copy that is currently running.
+	InstallPathEnv = "PIXELBOT_INSTALL_EXE"
+	// FishChildEnv marks the temporary fish-named process started by the launcher.
+	FishChildEnv = "PIXELBOT_FISH_CHILD"
+	// FishNameEnv carries the selected species into the app for its window title.
+	FishNameEnv = "PIXELBOT_FISH_NAME"
 )
 
 // Client talks to the GitHub Releases API of one repository.
@@ -247,6 +255,22 @@ func parse(tag string) (v [3]int, ok bool) {
 	return v, true
 }
 
+// Executable returns the stable install path when running from a fish-named
+// temporary copy, and the current executable path for direct developer runs.
+func Executable() (string, error) {
+	if exe := os.Getenv(InstallPathEnv); exe != "" {
+		info, err := os.Stat(exe)
+		if err != nil {
+			return "", fmt.Errorf("inspect install executable: %w", err)
+		}
+		if info.IsDir() {
+			return "", errors.New("install executable path is a directory")
+		}
+		return exe, nil
+	}
+	return os.Executable()
+}
+
 // Install puts the verified build at next in place of the executable exe.
 // Windows keeps a running executable locked but lets it be renamed, so exe
 // moves to exe.old, which Cleanup removes on the next start.
@@ -276,5 +300,17 @@ func Cleanup(exe string) error {
 func Restart(exe string) error {
 	cmd := exec.Command(exe, os.Args[1:]...)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	cmd.Env = restartEnvironment(os.Environ())
 	return cmd.Start()
+}
+
+func restartEnvironment(env []string) []string {
+	clean := make([]string, 0, len(env))
+	for _, entry := range env {
+		key, _, _ := strings.Cut(entry, "=")
+		if !strings.EqualFold(key, InstallPathEnv) && !strings.EqualFold(key, FishChildEnv) && !strings.EqualFold(key, FishNameEnv) {
+			clean = append(clean, entry)
+		}
+	}
+	return clean
 }

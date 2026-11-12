@@ -18,7 +18,7 @@ const updateEvery = time.Hour
 // newer release now and every updateEvery. Local builds, whose version is not
 // a release tag, skip it.
 func (a *app) checkUpdate() {
-	exe, err := os.Executable()
+	exe, err := update.Executable()
 	if err != nil {
 		a.logger.Warn("update check skipped", "error", err)
 		return
@@ -144,7 +144,7 @@ func (a *app) installUpdate() error {
 }
 
 func (a *app) tryUpdate(r update.Release) error {
-	exe, err := os.Executable()
+	exe, err := update.Executable()
 	if err != nil {
 		return err
 	}
