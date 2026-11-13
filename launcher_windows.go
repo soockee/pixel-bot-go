@@ -6,6 +6,7 @@ import (
 	"math/rand/v2"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"time"
@@ -34,8 +35,18 @@ func launchFishProcess() (int, error) {
 	if err != nil {
 		return 1, err
 	}
-	_ = process.Release()
-	return 0, nil
+	if len(os.Args) == 1 {
+		_ = process.Release()
+		return 0, nil
+	}
+	// Runs with flags come from scripts, which need the child's exit code.
+	// Ctrl+C reaches the child on the shared console; wait for it to finish.
+	signal.Ignore(os.Interrupt)
+	state, err := process.Wait()
+	if err != nil {
+		return 1, err
+	}
+	return state.ExitCode(), nil
 }
 
 func startFishCopy(exe string, args []string) (*os.Process, string, error) {
@@ -110,12 +121,5 @@ func copyExecutable(src, dst string) error {
 }
 
 func childEnvironment(exe, species string) []string {
-	env := make([]string, 0, len(os.Environ())+3)
-	for _, entry := range os.Environ() {
-		key, _, _ := strings.Cut(entry, "=")
-		if !strings.EqualFold(key, update.InstallPathEnv) && !strings.EqualFold(key, update.FishChildEnv) && !strings.EqualFold(key, update.FishNameEnv) {
-			env = append(env, entry)
-		}
-	}
-	return append(env, update.InstallPathEnv+"="+exe, update.FishChildEnv+"=1", update.FishNameEnv+"="+species)
+	return append(update.CleanEnvironment(os.Environ()), update.InstallPathEnv+"="+exe, update.FishChildEnv+"=1", update.FishNameEnv+"="+species)
 }

@@ -300,11 +300,13 @@ func Cleanup(exe string) error {
 func Restart(exe string) error {
 	cmd := exec.Command(exe, os.Args[1:]...)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
-	cmd.Env = restartEnvironment(os.Environ())
+	cmd.Env = CleanEnvironment(os.Environ())
 	return cmd.Start()
 }
 
-func restartEnvironment(env []string) []string {
+// CleanEnvironment returns env without the launcher's variables, so a restart
+// or a new fish-named copy starts from the installed executable's view.
+func CleanEnvironment(env []string) []string {
 	clean := make([]string, 0, len(env))
 	for _, entry := range env {
 		key, _, _ := strings.Cut(entry, "=")

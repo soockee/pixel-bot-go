@@ -590,7 +590,7 @@ func (f *FishingFSM) startReel() {
 			f.finishMiss("forgot to reel")
 			return
 		case 1:
-			if f.cfg.ReelMethod == config.ReelInteractKey || f.missAim == nil || (!f.hardwareKeyboard() && f.actions.HoldRight == nil) {
+			if f.cfg.ReelMethod == config.ReelInteractKey || f.missAim == nil {
 				f.finishMiss("no off-target reel available")
 				return
 			}
@@ -686,10 +686,6 @@ func (f *FishingFSM) finishReel() {
 					f.releaseInput = f.actions.HoldInteract(vk)
 				}
 			}
-		} else if f.reelTiming.Hold > 0 && f.actions.HoldRight != nil {
-			f.stats.reelAttempts.Add(1)
-			needsRelease = true
-			f.releaseInput = f.actions.HoldRight()
 		} else {
 			f.stats.reelAttempts.Add(1)
 			if !f.actions.ClickRight() {

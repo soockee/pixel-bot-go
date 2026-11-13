@@ -55,7 +55,7 @@ With `debug: true` the WebView2 DevTools listen on `localhost:9222`. `curl -s lo
 ## 4. Stop
 
 ```bash
-taskkill //IM pixel-bot-go.exe //F; taskkill //IM fakegame.exe //F
+taskkill //IM pixel-bot-go.exe //T //F; taskkill //IM fakegame.exe //F
 ```
 
 ## 5. Read the signals

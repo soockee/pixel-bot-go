@@ -60,14 +60,14 @@ func TestExecutableRejectsMissingStableInstallPath(t *testing.T) {
 }
 
 func TestRestartEnvironmentDropsFishChildMarkers(t *testing.T) {
-	got := restartEnvironment([]string{
+	got := CleanEnvironment([]string{
 		"PATH=C:\\Windows",
 		"pixelbot_fish_child=1",
 		"PIXELBOT_INSTALL_EXE=C:\\GoFish\\app.exe",
 		"PIXELBOT_FISH_NAME=loach",
 	})
 	if len(got) != 1 || got[0] != "PATH=C:\\Windows" {
-		t.Fatalf("restartEnvironment() = %#v", got)
+		t.Fatalf("CleanEnvironment() = %#v", got)
 	}
 }
 

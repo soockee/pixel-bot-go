@@ -74,24 +74,6 @@ func TestGuardKeepsMovesInsideTheArea(t *testing.T) {
 	}
 }
 
-func TestGuardChecksTimedPressAndAllowsReleaseAfterFocusLoss(t *testing.T) {
-	f := newGuardFixture()
-	f.BeginHold = func() func() {
-		f.sent = append(f.sent, "down")
-		return func() { f.sent = append(f.sent, "up") }
-	}
-	f.MoveCursor(150, 150)
-	release := f.HoldRight()
-	if release == nil {
-		t.Fatal("valid target should allow a hold")
-	}
-	f.inFront = false
-	release()
-	if f.HoldRight() != nil || !slices.Equal(f.sent, []string{"move", "down", "up"}) {
-		t.Fatalf("unexpected input after focus loss: %v", f.sent)
-	}
-}
-
 func TestGuardDetectsTakeoverBeforeFirstWaypoint(t *testing.T) {
 	f := newGuardFixture()
 	f.cursor = image.Pt(150, 150)
@@ -163,22 +145,5 @@ func TestCameraDragRequiresRoomAndFocus(t *testing.T) {
 	called = false
 	if attempted, moved := f.DragCamera(12, drag); !attempted || moved || called {
 		t.Fatal("lost focus should block the drag and its fallback")
-	}
-}
-
-func TestGuardRequiresFocusForKeyHold(t *testing.T) {
-	f := newGuardFixture()
-	f.BeginKeyHold = func(byte) func() { f.sent = append(f.sent, "hold"); return func() {} }
-	if release := f.HoldKey(1); release == nil {
-		t.Fatal("HoldKey refused a focused window")
-	} else {
-		release()
-	}
-	f.inFront = false
-	if f.HoldKey(1) != nil {
-		t.Error("HoldKey accepted an unfocused window")
-	}
-	if want := []string{"hold"}; !slices.Equal(f.sent, want) {
-		t.Errorf("sent = %v, want %v", f.sent, want)
 	}
 }

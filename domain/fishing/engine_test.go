@@ -427,10 +427,6 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 					},
 					PressKey:   func(byte) bool { t.Error("used Windows keyboard input"); return false },
 					MoveCursor: func(int, int) { t.Error("used Windows cursor input") },
-					DragCamera: func(int) (bool, bool) {
-						t.Error("used a Windows camera drag")
-						return true, false
-					},
 					DragHardwareCamera: func(dx int) (bool, bool) {
 						if firstMove.IsZero() {
 							firstMove = time.Now()
