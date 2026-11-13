@@ -10,7 +10,8 @@ type Step = State["setup"][number];
 /** How often to look for the game, which may start after Go Fish. */
 const CHECK_MS = 4000;
 
-export function setupWizard(finishSaving: () => Promise<void>) {
+/** useBoard saves the found board as the Auto choice, through Settings. */
+export function setupWizard(finishSaving: () => Promise<void>, useBoard: () => Promise<void>) {
   const panel = $("setup");
   const preview = $("fishing-preview");
   const list = $("setup-list");
@@ -29,14 +30,18 @@ export function setupWizard(finishSaving: () => Promise<void>) {
   setInterval(check, CHECK_MS);
   $("setup-check").addEventListener("click", check);
   let activeID = "";
+  let activeFields: string[] = [];
   install.addEventListener("click", async () => {
     install.disabled = true;
     keys.inert = true;
     error.hidden = true;
     try {
       await finishSaving();
-      if (activeID === "cast") {
-        await Service.ChooseCastKey();
+      if (activeID === "board") {
+        await Service.FindBoard();
+        await useBoard();
+      } else if (activeID === "keys") {
+        await Service.ChooseKeys();
       } else if (activeID === "addon") {
         await Service.InstallAddon();
         reload.hidden = false;
@@ -71,8 +76,9 @@ export function setupWizard(finishSaving: () => Promise<void>) {
     const active = steps.findIndex((step) => !step.done);
     const action = steps[active]?.action;
     activeID = steps[active]?.id ?? "";
+    activeFields = (steps[active]?.fields ?? []).filter((f) => f !== "");
     install.hidden = panel.hidden || !action;
-    keys.hidden = install.hidden || activeID !== "cast";
+    keys.hidden = panel.hidden || activeFields.length === 0;
     if (action) install.textContent = action;
     // Rebuild only on a change, so a click is not lost to a redraw.
     const key = JSON.stringify(s.setup);
@@ -82,5 +88,5 @@ export function setupWizard(finishSaving: () => Promise<void>) {
     list.replaceChildren(...steps.map((step, index) => row(step, index, index === active)));
   }
 
-  return { render, keysSlot: () => keys.hidden ? undefined : keys };
+  return { render, slot: () => (keys.hidden ? undefined : keys), fields: () => activeFields };
 }

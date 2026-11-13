@@ -33,7 +33,7 @@ function show(tab: Tab) {
   }
   if (tab === "recorder") recorder.shown();
   if (tab === "settings") void Service.CheckAddon(); // the game may have started since
-  settings.mountCastKey(tab === "live" ? wizard.keysSlot() : undefined);
+  settings.mountSetup(tab === "live" ? wizard.slot() : undefined, wizard.fields());
 }
 
 for (const t of tabs) $(`tab-${t}`).addEventListener("click", () => show(t));
@@ -56,7 +56,7 @@ $("report-problem").addEventListener("click", () => void Service.ReportProblem()
 const live = setupLive();
 const moveOverlay = setupMoveOverlay();
 const settings = setupSettings();
-const wizard = setupWizard(settings.finishSaving);
+const wizard = setupWizard(settings.finishSaving, () => settings.setValue("esp32Port", "AUTO"));
 const updates = setupUpdates();
 show(wanted);
 let theme = "";
@@ -85,7 +85,7 @@ function render(s: State) {
   }
   live(s);
   wizard.render(s);
-  settings.mountCastKey(current === "live" ? wizard.keysSlot() : undefined);
+  settings.mountSetup(current === "live" ? wizard.slot() : undefined, wizard.fields());
   moveOverlay(s);
   if (recorderShown) recorder.onState(s);
   settings.render(s);

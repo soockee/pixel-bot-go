@@ -93,6 +93,7 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		CheckAddon:    a.checkAddon,
 		InstallAddon:  a.installAddon,
 		MoveOverlay:   a.setOverlayMove,
+		FindBoard:     findBoard,
 		SetTheme:      a.setTheme,
 	}, c.Recordings, cfg, config.FilePath, logger)
 
@@ -152,6 +153,7 @@ func (a *app) Run() error {
 		a.setWindow(cfg.AutoWindow)
 	}
 	c.View.SetInfo(cfg.DryRun, cfg.Debug)
+	c.View.SetInput(cfg)
 	c.View.SetTheme(cfg.Theme)
 	c.View.SetOverlay(cfg.OverlayX, cfg.OverlayY, false)
 	c.View.SetAddonVersion(addon.Version())

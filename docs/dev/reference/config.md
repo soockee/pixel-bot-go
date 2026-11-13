@@ -12,7 +12,7 @@ order: 2
 | MinScale/MaxScale/ScaleStep | Scale search range                          | Wide + tiny step = heavier workload    |
 | CastKey (`cast_key`)        | Unmodified key that casts: F1 to F12, a letter, a top-row digit, `Mouse4` or `Mouse5` | An unknown key halts the run           |
 | ReelMethod (`reel_method`)  | How to interact with the bobber             | `right_click` by default, or `interact_key` with the marker locator |
-| InteractKey (`interact_key`) | Native Interact binding for key-based reeling, using the same supported keys as CastKey | Empty by default. Key-based reeling requires a binding distinct from Cast and Stop. |
+| InteractKey (`interact_key`) | Native Interact binding for key-based reeling, using the same supported keys as CastKey | F10 by default; the addon binds it only with the Interact reel. Key-based reeling requires a binding distinct from Cast and Stop. |
 | ESP32Port (`esp32_port`) | Serial port for the ESP32 BLE keyboard and mouse, such as `COM3`, or `auto` | Required for live input; an empty setting prevents a live run. `auto` tries each USB serial port with the firmware handshake and uses the first that answers. Keys go through the board as HID taps, and pointer movement and right-click reeling require firmware that answers `POINTER`. Mouse 4 and 5 bindings require firmware that answers `BUTTONS`. |
 | Reposition (`reposition`) | Movement script after 45–55 acknowledged reels | Off by default. Presses W, A, S or D through `activity`, and drags the camera through ESP32 firmware that answers `MOUSE`. Requires the Logout key, which a failed sequence uses. Replaces `reposition_key`. |
 | IdleMoves (`idle_moves`) | Between-catch movement, one in 12 cooldowns | Off by default. A camera nudge (one in three, where `cameraDrag` allows) or a cursor wander along `wanderPath` from `CursorPos`. Replaces `idle_key`. |
@@ -32,4 +32,4 @@ order: 2
 | SupportMilestone / SupportMuted (`support_milestone`, `support_muted`) | The catch milestone the thank-you card last asked at, and whether the person said they support Go Fish already or not to ask again | The card asks at 100, 500, 1000, 2500, 5000 and every 5000 catches, only after a run with a catch and at most one "not hooked" per four catches (`ui/desktop/support.go`). Older `support_asked_at` and `support_opened_at` are ignored. Not settings form fields |
 | Theme (`theme`)             | Window look, one of `config.Themes`: `graphite`, `tavern`, `arcane`, `frost`, `fel`, `tide` | Default `graphite`; unknown values fall back to it. Replaces `dark_mode`. Settings → Theme |
 
-Set the Cast key in the setup wizard or under **Settings → Fishing keys**.
+Set the board and the keys the run uses (Cast, Interact with the Interact reel, Target passing player, Logout with breaks or Change spot) in the setup wizard, or under **Settings**. Defaults: `cast_key` F9, `interact_key` F10, `logout_key` F12; `target_player_key` stays empty (F11 suggested).

@@ -7,7 +7,7 @@ order: 1
 Go Fish needs its small **Bobber Marker** addon in the game. It draws pink brackets around your bobber so Go Fish can find it, and it sets up your cast key. You don't download it: Go Fish brings it along.
 
 1. Start the game first, then Go Fish.
-2. On the **Fishing** tab, **Set up fishing** first asks for your cast key. Keep it or pick another and click **Use this key**, then click **Install addon**.
+2. On the **Fishing** tab, **Set up fishing** asks for your game keys. Keep the suggested F9 to F12 or pick others and click **Use these keys**, then click **Install addon**.
 3. In the game, type `/reload` and press Enter.
 
 To check it, cast Fishing in the game. Pink brackets appear around your bobber.

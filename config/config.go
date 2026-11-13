@@ -124,13 +124,17 @@ var Themes = []string{"graphite", "tavern", "arcane", "frost", "fel", "tide"}
 // DefaultConfig returns a Config populated with standard defaults.
 func DefaultConfig() *Config {
 	return &Config{
-		MinScale:               0.90,
-		MaxScale:               1.20,
-		ScaleStep:              0.05,
-		Threshold:              0.73,
-		Stride:                 6,
-		Refine:                 true,
-		CastKey:                "F3",
+		MinScale:  0.90,
+		MaxScale:  1.20,
+		ScaleStep: 0.05,
+		Threshold: 0.73,
+		Stride:    6,
+		Refine:    true,
+		// F9 to F12 are free in WoW's default bindings; Target passing player
+		// (F11 suggested) stays off until it is set.
+		CastKey:                "F9",
+		InteractKey:            "F10",
+		LogoutKey:              "F12",
 		ReelMethod:             ReelRightClick,
 		MaxFailedCasts:         5,
 		MaxSessionMinutes:      60,

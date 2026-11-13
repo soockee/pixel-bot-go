@@ -10,7 +10,7 @@ Go Fish is a Windows app for studying visual event detection and response timing
 
 1. Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest) (`CHECKSUMS.txt` beside it lists its SHA-256). Connect and pair a [Go Fish ESP32 Probe](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe), then start the game and the exe.
 2. In **Settings → ESP32 board**, choose **Auto** or the board's COM port. The paired board sends all live game input over Bluetooth.
-3. In **Set up fishing** on the Fishing tab, confirm your cast key with **Use this key**, then click **Install addon** to put the Bobber Marker addon into the game, then type `/reload` in the game.
+3. In **Set up fishing** on the Fishing tab, click **Find the board**, confirm the suggested F9 to F12 keys with **Use these keys**, then click **Install addon** to put the Bobber Marker addon into the game, then type `/reload` in the game.
 4. Stand at the water and press **Start fishing**. Click **Stop** in Go Fish to end the run.
 
 Go Fish updates itself: it checks GitHub at start and every hour, and **Update to vX.Y.Z** in the top bar or **Settings → Updates** installs a new release after checking its checksum.

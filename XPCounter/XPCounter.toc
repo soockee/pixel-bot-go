@@ -1,0 +1,10 @@
+## Interface: 16001
+## Title: XP Counter
+## Notes: Clean XP tracker: current XP, XP to level, XP per hour, time to level, a session timer and XP waiting in completed quests.
+## Version: 1.2.0
+## IconTexture: Interface\Icons\INV_Misc_PocketWatch_01
+## SavedVariables: XPCounterDB
+## SavedVariablesPerCharacter: XPCounterCharDB
+
+XPCounter.lua
+Settings.lua

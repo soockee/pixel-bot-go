@@ -43,10 +43,10 @@ export function CheckUpdate(): $CancellablePromise<void> {
 }
 
 /**
- * ChooseCastKey confirms the saved Cast key in setup, so the addon step comes next.
+ * ChooseKeys confirms the saved game keys in setup, so the addon step comes next.
  */
-export function ChooseCastKey(): $CancellablePromise<void> {
-    return $Call.ByID(576283656);
+export function ChooseKeys(): $CancellablePromise<void> {
+    return $Call.ByID(2613292094);
 }
 
 /**
@@ -69,6 +69,16 @@ export function ESP32Ports(): $CancellablePromise<string[] | null> {
  */
 export function Exit(): $CancellablePromise<void> {
     return $Call.ByID(1811592007);
+}
+
+/**
+ * FindBoard looks for the ESP32 board on the saved port, or on every USB
+ * serial port when none is saved, and returns the port it answered on. The
+ * frontend then saves the choice through SaveSettings. A run holds the port,
+ * so it refuses during one.
+ */
+export function FindBoard(): $CancellablePromise<string> {
+    return $Call.ByID(4017809172);
 }
 
 /**

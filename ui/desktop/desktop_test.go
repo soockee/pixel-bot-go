@@ -68,7 +68,7 @@ func TestInteractKeySettings(t *testing.T) {
 	}
 	values = settingsOf(&saved)
 	values.ReelMethod = config.ReelInteractKey
-	for _, key := range []string{"", "Ctrl", "F3"} {
+	for _, key := range []string{"", "Ctrl", "F9"} {
 		values.InteractKey = key
 		if _, err := values.apply(*base); err == nil {
 			t.Errorf("Interact key %q accepted", key)
@@ -95,6 +95,19 @@ func TestLogoutKeySettings(t *testing.T) {
 	values.LogoutKey = "L"
 	if got, err := values.apply(*base); err != nil || got.LogoutKey != "L" {
 		t.Fatalf("Logout key L = %+v, %v", got, err)
+	}
+}
+
+func TestTargetPlayerKeySettings(t *testing.T) {
+	base := config.DefaultConfig()
+	values := settingsOf(base)
+	values.TargetPlayerKey = "Ctrl"
+	if _, err := values.apply(*base); err == nil {
+		t.Error("a Target passing player key the board cannot press was accepted")
+	}
+	values.TargetPlayerKey = "F11"
+	if got, err := values.apply(*base); err != nil || got.TargetPlayerKey != "F11" {
+		t.Fatalf("Target passing player F11 = %+v, %v", got, err)
 	}
 }
 

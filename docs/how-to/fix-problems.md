@@ -8,7 +8,7 @@ The status bar at the bottom of Go Fish usually says what is wrong. These are th
 
 ## Start fishing is greyed out
 
-Something in **Set up fishing** is still missing. Usually the game isn't open, or the addon needs an install or update. Follow the list; see [Install the addon](install-addon.md).
+Something in **Set up fishing** is still missing. Usually the game isn't open, the ESP32 board isn't found, or the addon needs an install or update. Follow the list; see [Install the addon](install-addon.md).
 
 ## It stopped by itself
 
@@ -34,7 +34,7 @@ Go Fish sends live input through the ESP32 to the window in front. Click into th
 
 - Check that the Go Fish ESP32 Probe is paired in Windows Bluetooth settings, plugged in over USB, and selected under **Settings → ESP32 board**. If **Auto** doesn't find it, choose its COM port.
 - Check that the board has the current Go Fish firmware and that no other program has its COM port open.
-- If you changed the **Cast key**, click **Update addon** in **Set up fishing** and type `/reload` in the game.
+- If you changed a key, click **Update addon** in **Set up fishing** and type `/reload` in the game.
 
 ## It reels too early, or misses bites
 

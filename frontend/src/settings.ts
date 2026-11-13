@@ -28,7 +28,7 @@ const groups: { title: string; show?: "debug"; fields: Field[] }[] = [
   {
     title: "Reeling",
     fields: [
-      { key: "interactKey", label: "Interact key", hint: "Optional. Set it to the same binding as Interact With Target in WoW to unlock the Interact reel method.", kind: "key" },
+      { key: "interactKey", label: "Interact key", hint: "A spare key for the Interact reel method. Bobber Marker binds it to Interact With Target in WoW.", kind: "key" },
       { key: "reelMethod", label: "Reel method", hint: "Right-click the bobber, or press the game's Interact key without moving the cursor", kind: "reelMethod" },
     ],
   },
@@ -52,7 +52,7 @@ const groups: { title: string; show?: "debug"; fields: Field[] }[] = [
     fields: [
       { key: "idleMoves", label: "Move the mouse", hint: "Now and then, drift the cursor a little or nudge the camera", kind: "switch" },
       { key: "reposition", label: "Change spot", hint: "Every 45 to 55 catches, take a step with WASD or turn the camera, then check the next cast. Logs out if no spot works.", kind: "switch" },
-      { key: "targetPlayerKey", label: "Target passing player", hint: "An unused key Bobber Marker binds to select a friendly player who walks by. Update the addon after setting it.", kind: "key", optional: true },
+      { key: "targetPlayerKey", label: "Target passing player", hint: "Optional. An unused key, F11 suggested, that Bobber Marker binds to select a friendly player who walks by. Update the addon after setting it.", kind: "key", optional: true },
     ],
   },
   {
@@ -137,19 +137,29 @@ export function setupSettings() {
   let saving = Promise.resolve();
   let saveFailed = false;
   let savedValues: Settings | undefined;
-  let castRow: HTMLElement | undefined;
-  let castHome: HTMLElement | undefined;
-  let castSlot: HTMLElement | undefined;
+  // Setup shows some rows in its own panel; a marker keeps each row's place here.
+  const homes = new Map<string, { row: HTMLElement; anchor: Comment }>();
+  let setupSlot: HTMLElement | undefined;
+  let setupFields: string[] = [];
+  let placed = "";
 
-  function placeCastKey() {
-    if (!castRow || !castHome) return;
-    const parent = castSlot ?? castHome;
-    if (castRow.parentElement === parent) return;
-    if (castSlot) {
-      castSlot.append(castRow, message);
-    } else {
-      castHome.firstElementChild?.after(castRow);
-      form.prepend(message);
+  function placeSetup() {
+    if (homes.size === 0) return;
+    const fields = setupSlot ? setupFields.filter((k) => homes.has(k)) : [];
+    const key = fields.join();
+    if (key === placed) return; // render calls this on every state
+    placed = key;
+    for (const [k, { row, anchor }] of homes) if (!fields.includes(k)) anchor.before(row);
+    if (setupSlot && fields.length > 0) setupSlot.append(...fields.map((k) => homes.get(k)!.row), message);
+    else form.prepend(message);
+  }
+
+  async function finishSaving() {
+    await built;
+    await saving;
+    if (saveFailed) {
+      saveFailed = false;
+      throw new Error(message.textContent || "Could not save the settings");
     }
   }
 
@@ -425,12 +435,10 @@ export function setupSettings() {
         c.set(data.values[f.key]);
         controls.set(f.key, c);
         const r = row(`setting-${f.key}`, f.label, f.hint, c.el, c.input);
-        if (f.key === "castKey") {
-          castRow = r;
-          castHome = fs;
-        }
         if (f.when) conditional.push({ row: r, when: f.when });
-        fs.append(r);
+        const anchor = document.createComment(f.key);
+        fs.append(r, anchor);
+        homes.set(f.key, { row: r, anchor });
       }
       return fs;
     });
@@ -439,7 +447,7 @@ export function setupSettings() {
     look.append(h("legend", "Theme"), picker, row("setting-sounds", "Theme sounds", "Each theme greets a catch with its own sound", sound, sound));
     const user = groups.findIndex((g) => g.show); // the theme ends the user groups
     form.replaceChildren(message, ...sections.slice(0, user), look, ...sections.slice(user));
-    placeCastKey();
+    placeSetup();
     lock();
   }
 
@@ -459,17 +467,19 @@ export function setupSettings() {
 
   return {
     render,
-    mountCastKey(slot?: HTMLElement) {
-      castSlot = slot;
-      placeCastKey();
+    /** mountSetup shows the rows of fields in slot, and the rest in Settings. */
+    mountSetup(slot: HTMLElement | undefined, fields: string[]) {
+      setupSlot = slot;
+      setupFields = fields;
+      placeSetup();
     },
-    async finishSaving() {
+    finishSaving,
+    /** setValue changes one setting as if the person had, and waits for the save. */
+    async setValue(key: Key, value: Value) {
       await built;
-      await saving;
-      if (saveFailed) {
-        saveFailed = false;
-        throw new Error(message.textContent || "Could not save fishing keys");
-      }
+      controls.get(key)?.set(value);
+      save();
+      await finishSaving();
     },
   };
 }

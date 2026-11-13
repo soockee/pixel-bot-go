@@ -4,6 +4,8 @@ import (
 	"image"
 	"path/filepath"
 	"time"
+
+	"github.com/soocke/pixel-bot-go/config"
 )
 
 // View implements the presenters' view interfaces by updating one State, and
@@ -109,8 +111,16 @@ func (v *View) SetWindow(title string) { v.state.Window = title }
 // SetGameFound shows whether the selected window is open.
 func (v *View) SetGameFound(found bool) { v.state.GameFound = found }
 
-// SetCastKeyChosen marks the Cast key setup step as done.
-func (v *View) SetCastKeyChosen() { v.state.CastKeyChosen = true }
+// SetKeysChosen marks the game keys setup step as done.
+func (v *View) SetKeysChosen() { v.state.KeysChosen = true }
+
+// SetInput shows the saved board port and the keys the next run uses.
+func (v *View) SetInput(c *config.Config) {
+	v.state.ESP32Port, v.state.Keys = c.ESP32Port, setupKeys(c)
+}
+
+// SetBoardFound shows the port setup found the board on.
+func (v *View) SetBoardFound(port string) { v.state.BoardFound = port }
 
 // SetUpdate shows the newer release on offer, "" when none, and whether it
 // is being installed.

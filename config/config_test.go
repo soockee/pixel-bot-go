@@ -31,7 +31,7 @@ func TestValidateClamps(t *testing.T) {
 		{"cooldown floor", func(c *Config) { c.CooldownSeconds = -1 }, func(c *Config) any { return c.CooldownSeconds }, 0},
 		{"cooldown ceiling", func(c *Config) { c.CooldownSeconds = 999 }, func(c *Config) any { return c.CooldownSeconds }, 60},
 		{"negative screen", func(c *Config) { c.Screen = -1 }, func(c *Config) any { return c.Screen }, 0},
-		{"empty cast key", func(c *Config) { c.CastKey = "" }, func(c *Config) any { return c.CastKey }, "F3"},
+		{"empty cast key", func(c *Config) { c.CastKey = "" }, func(c *Config) any { return c.CastKey }, "F9"},
 		{"failed casts unset", func(c *Config) { c.MaxFailedCasts = 0 }, func(c *Config) any { return c.MaxFailedCasts }, 5},
 		{"empty locator", func(c *Config) { c.Locator = "" }, func(c *Config) any { return c.Locator }, "marker"},
 		{"empty bite detector", func(c *Config) { c.BiteDetector = "" }, func(c *Config) any { return c.BiteDetector }, "splash_sound"},
@@ -141,7 +141,7 @@ func TestLoadKeepsOldReelKey(t *testing.T) {
 	if got.CastKey != "R" {
 		t.Errorf("CastKey = %q, want R", got.CastKey)
 	}
-	if got.ReelMethod != ReelRightClick || got.InteractKey != "" {
+	if got.ReelMethod != ReelRightClick || got.InteractKey != DefaultConfig().InteractKey {
 		t.Errorf("old config reel settings = %q, %q", got.ReelMethod, got.InteractKey)
 	}
 }

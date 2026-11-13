@@ -80,7 +80,7 @@ export interface SettingsForm {
  */
 export interface SetupStep {
     /**
-     * "game", "cast" or "addon"; "" for an unused slot
+     * "game", "board", "keys" or "addon"; "" for an unused slot
      */
     "id": string;
     "title": string;
@@ -95,6 +95,12 @@ export interface SetupStep {
      * the label of the button that does it, "" when there is nothing to click
      */
     "action": string;
+
+    /**
+     * Fields are the settings shown with the step while it is the current one,
+     * by their Settings JSON names; "" for an unused slot.
+     */
+    "fields": string[];
 }
 
 /**
@@ -240,9 +246,24 @@ export interface State {
     "gameFound": boolean;
 
     /**
-     * the person confirmed the Cast key in setup this session
+     * the person confirmed the game keys in setup this session
      */
-    "castKeyChosen": boolean;
+    "keysChosen": boolean;
+
+    /**
+     * the key settings the next run uses, see setupKeys
+     */
+    "keys": string[];
+
+    /**
+     * the saved board port, "AUTO", or "" when none is chosen
+     */
+    "esp32Port": string;
+
+    /**
+     * the port setup found the board on this session, or ""
+     */
+    "boardFound": string;
 
     /**
      * what the bot still needs, see setupSteps

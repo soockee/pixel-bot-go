@@ -7,6 +7,7 @@ import (
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/detect"
+	"github.com/soocke/pixel-bot-go/internal/esp32"
 	"github.com/soocke/pixel-bot-go/internal/recorder"
 )
 
@@ -34,6 +35,10 @@ type Commands struct {
 	SetTheme func(theme string)
 	// MoveOverlay starts or ends placing the overlay; ending saves its place.
 	MoveOverlay func(on bool) error
+	// FindBoard asks for the Go Fish firmware on port, or on every USB serial
+	// port for esp32.AutoPort, and returns the port that answered. It runs on
+	// the caller's goroutine, as the handshake takes a while, and sends no input.
+	FindBoard func(port string) (string, error)
 }
 
 // Service is what the frontend calls. Every method runs on the UI loop, so
@@ -154,6 +159,7 @@ func (s *Service) SaveSettings(values Settings) (saved Settings, err error) {
 			return
 		}
 		*s.cfg = next
+		s.view.SetInput(s.cfg)
 		if s.cmds.CheckAddon != nil {
 			s.cmds.CheckAddon() // the addon binds the Cast and Interact keys, so a change makes it outdated
 		}
@@ -202,8 +208,33 @@ func (s *Service) ReleaseNotes() { _ = s.do(s.cmds.ReleaseNotes) }
 // with the version, Windows and app details filled in.
 func (s *Service) ReportProblem() { _ = s.do(s.cmds.ReportProblem) }
 
-// ChooseCastKey confirms the saved Cast key in setup, so the addon step comes next.
-func (s *Service) ChooseCastKey() { _ = s.do(s.view.SetCastKeyChosen) }
+// ChooseKeys confirms the saved game keys in setup, so the addon step comes next.
+func (s *Service) ChooseKeys() { _ = s.do(s.view.SetKeysChosen) }
+
+// FindBoard looks for the ESP32 board on the saved port, or on every USB
+// serial port when none is saved, and returns the port it answered on. The
+// frontend then saves the choice through SaveSettings. A run holds the port,
+// so it refuses during one.
+func (s *Service) FindBoard() (found string, err error) {
+	port := esp32.AutoPort
+	if doErr := s.do(func() {
+		if s.cmds.Running() {
+			err = errors.New("stop the run to look for the board")
+		} else if s.cfg.ESP32Port != "" {
+			port = s.cfg.ESP32Port
+		}
+	}); doErr != nil {
+		return "", doErr
+	}
+	if err != nil {
+		return "", err
+	}
+	if found, err = s.cmds.FindBoard(port); err != nil {
+		return "", err
+	}
+	_ = s.do(func() { s.view.SetBoardFound(found) })
+	return found, nil
+}
 
 // CheckAddon looks whether the Bobber Marker addon is installed and current.
 func (s *Service) CheckAddon() { _ = s.do(s.cmds.CheckAddon) }

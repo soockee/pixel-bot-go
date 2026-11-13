@@ -44,7 +44,9 @@ func launchFishProcess() (int, error) {
 	signal.Ignore(os.Interrupt)
 	state, err := process.Wait()
 	if err != nil {
-		return 1, err
+		// The copy is running, so an error here must not make main start a second app.
+		fmt.Fprintln(os.Stderr, "wait for fish-named app:", err)
+		return 1, nil
 	}
 	return state.ExitCode(), nil
 }

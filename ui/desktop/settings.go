@@ -118,6 +118,11 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Logout")
 		}
 	}
+	if s.TargetPlayerKey != "" {
+		if vk, ok := action.ParseVK(s.TargetPlayerKey); !ok || !esp32.SupportsKey(vk) {
+			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Target passing player")
+		}
+	}
 	c.MinScale, c.MaxScale, c.ScaleStep, c.Threshold = s.MinScale, s.MaxScale, s.ScaleStep, s.Threshold
 	c.Stride, c.Refine, c.CastKey = s.Stride, s.Refine, s.CastKey
 	c.ReelMethod, c.InteractKey, c.ESP32Port = s.ReelMethod, s.InteractKey, port
