@@ -10,7 +10,7 @@ Go Fish goes round these steps; the Fishing tab highlights the current one.
 
 | Step | Meaning |
 | --- | --- |
-| Focus | Waiting for the game to be the window in front. Go Fish does nothing while you're in another window. With **Fish in the background** on, it waits here only while the game is minimized. |
+| Focus | Waiting for the game to be the window in front. Live input goes through the ESP32, so Go Fish waits while another window is active. |
 | Search | Looking for the pink brackets around the bobber. |
 | Watch | Watching the box for the splash of a bite. |
 | Reel | A fish bit; clicking the bobber. |

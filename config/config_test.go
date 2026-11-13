@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,7 +31,7 @@ func TestValidateClamps(t *testing.T) {
 		{"cooldown floor", func(c *Config) { c.CooldownSeconds = -1 }, func(c *Config) any { return c.CooldownSeconds }, 0},
 		{"cooldown ceiling", func(c *Config) { c.CooldownSeconds = 999 }, func(c *Config) any { return c.CooldownSeconds }, 60},
 		{"negative screen", func(c *Config) { c.Screen = -1 }, func(c *Config) any { return c.Screen }, 0},
-		{"empty cast key", func(c *Config) { c.CastKey = "" }, func(c *Config) any { return c.CastKey }, "F3"},
+		{"empty cast key", func(c *Config) { c.CastKey = "" }, func(c *Config) any { return c.CastKey }, "F9"},
 		{"failed casts unset", func(c *Config) { c.MaxFailedCasts = 0 }, func(c *Config) any { return c.MaxFailedCasts }, 5},
 		{"empty locator", func(c *Config) { c.Locator = "" }, func(c *Config) any { return c.Locator }, "marker"},
 		{"empty bite detector", func(c *Config) { c.BiteDetector = "" }, func(c *Config) any { return c.BiteDetector }, "splash_sound"},
@@ -103,7 +104,7 @@ func TestLoadInvalidJSONReturnsError(t *testing.T) {
 
 func TestLoadKeepsDefaultsAndClampsValues(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "partial.json")
-	if err := os.WriteFile(path, []byte(`{"roi_size_px": 1000}`), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(`{"roi_size_px": 1000, "background": true}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got, err := Load(path)
@@ -115,6 +116,16 @@ func TestLoadKeepsDefaultsAndClampsValues(t *testing.T) {
 	}
 	if got.Threshold != DefaultConfig().Threshold {
 		t.Errorf("Threshold = %v, want the default", got.Threshold)
+	}
+	if err := got.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte(`"background"`)) {
+		t.Error("saved the retired background setting")
 	}
 }
 
@@ -130,7 +141,7 @@ func TestLoadKeepsOldReelKey(t *testing.T) {
 	if got.CastKey != "R" {
 		t.Errorf("CastKey = %q, want R", got.CastKey)
 	}
-	if got.ReelMethod != ReelRightClick || got.InteractKey != "" {
+	if got.ReelMethod != ReelRightClick || got.InteractKey != DefaultConfig().InteractKey {
 		t.Errorf("old config reel settings = %q, %q", got.ReelMethod, got.InteractKey)
 	}
 }

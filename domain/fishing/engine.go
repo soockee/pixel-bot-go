@@ -126,16 +126,16 @@ func (e *Engine) Start() error {
 		return err
 	}
 	var closeKeyboard func()
-	if cfg.ESP32Port != "" {
-		if !cfg.DryRun {
-			if e.fsm.actions.OpenKeyboard == nil || e.fsm.actions.TapKeyboard == nil {
-				return errors.New("ESP32 keyboard backend unavailable")
-			}
-			closeKeyboard, err = e.fsm.actions.OpenKeyboard(cfg)
-			if err != nil {
-				return err
-			}
+	if !cfg.DryRun && e.fsm.actions.OpenKeyboard != nil {
+		if e.fsm.actions.TapKeyboard == nil {
+			return errors.New("ESP32 keyboard backend unavailable")
 		}
+		closeKeyboard, err = e.fsm.actions.OpenKeyboard(cfg)
+		if err != nil {
+			return err
+		}
+	} else if !cfg.DryRun && cfg.ESP32Port != "" {
+		return errors.New("ESP32 keyboard backend unavailable")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel, e.done = cancel, make(chan struct{})

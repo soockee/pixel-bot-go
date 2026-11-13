@@ -208,8 +208,8 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 				actions := recordingActions(log)
 				actions.ParseVK = func(key string) (byte, bool) {
 					switch key {
-					case "F3":
-						return 0x72, true
+					case "F9":
+						return 0x78, true
 					case "F":
 						return 'F', true
 					default:
@@ -225,7 +225,7 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 				}
 				actions.TapKeyboard = func(vk byte, _ time.Duration) error {
 					switch vk {
-					case 0x72:
+					case 0x78:
 						log.add("cast")
 					case 'F':
 						log.add("reel")
@@ -414,8 +414,8 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				actions := ActionCallbacks{
 					ParseVK: func(key string) (byte, bool) {
 						switch key {
-						case "F3":
-							return 0x72, true
+						case "F9":
+							return 0x78, true
 						}
 						if len(key) == 1 {
 							return key[0], true
@@ -427,10 +427,6 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 					},
 					PressKey:   func(byte) bool { t.Error("used Windows keyboard input"); return false },
 					MoveCursor: func(int, int) { t.Error("used Windows cursor input") },
-					DragCamera: func(int) (bool, bool) {
-						t.Error("used a Windows camera drag")
-						return true, false
-					},
 					DragHardwareCamera: func(dx int) (bool, bool) {
 						if firstMove.IsZero() {
 							firstMove = time.Now()
@@ -444,7 +440,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 						case 'F':
 							reels++
 							frames.set(fakegame.PhaseEmpty)
-						case 0x72:
+						case 0x78:
 							if reels != 0 {
 								trialCasts++
 							}

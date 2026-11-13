@@ -297,12 +297,12 @@ func TestOffTargetReel(t *testing.T) {
 				aim := image.Pt(52, 100)
 				at := image.Point{}
 				actions.MoveCursor = func(x, y int) { at = image.Pt(x, y) }
-				actions.HoldRight = func() func() {
+				actions.ClickRight = func() bool {
 					if at != aim {
 						log.add("wrong click point")
 					}
-					log.add("down")
-					return func() { log.add("up") }
+					log.add("click")
+					return true
 				}
 				m := NewFSM(nil, cfg, actions)
 				defer m.Close()
@@ -326,7 +326,7 @@ func TestOffTargetReel(t *testing.T) {
 					wantState(t, m, StateReeling)
 					time.Sleep(reelClickDelay + interactHold)
 					wantState(t, m, StateCooldown)
-					wantActions(t, log, "down", "up")
+					wantActions(t, log, "click")
 				}
 				if got := m.Stats(); got.Reels != 0 || got.FailedInRow != 1 {
 					t.Fatalf("intentional miss produced stats %+v", got)
@@ -436,32 +436,6 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 	}
 }
 
-func TestAutomaticRepositionPairsOppositeMoves(t *testing.T) {
-	var keys []byte
-	var drags []int
-	f := &FishingFSM{
-		cfg:                 config.Config{Reposition: true},
-		logger:              testLogger,
-		repositionDirection: 4,
-		actions: ActionCallbacks{
-			ParseVK:  func(key string) (byte, bool) { return key[0], true },
-			PressKey: func(vk byte) bool { keys = append(keys, vk); return true },
-			DragCamera: func(dx int) (bool, bool) {
-				drags = append(drags, dx)
-				return true, true
-			},
-		},
-	}
-	for f.repositionAttempt = 0; f.repositionAttempt < 4; f.repositionAttempt++ {
-		if !f.moveForReposition() {
-			t.Fatalf("attempt %d did not move", f.repositionAttempt)
-		}
-	}
-	if string(keys) != "WS" || !slices.Equal(drags, []int{12, -12}) {
-		t.Fatalf("moves = %q, camera drags = %v", keys, drags)
-	}
-}
-
 func TestAutomaticRepositionUsesOnlyESP32WhenSelected(t *testing.T) {
 	var taps []byte
 	f := &FishingFSM{
@@ -482,10 +456,6 @@ func TestAutomaticRepositionUsesOnlyESP32WhenSelected(t *testing.T) {
 			HoldInteract: func(byte) func() {
 				t.Fatal("ESP32 mode held a software key")
 				return nil
-			},
-			DragCamera: func(int) (bool, bool) {
-				t.Fatal("ESP32 mode attempted a software camera drag")
-				return false, false
 			},
 		},
 	}
@@ -512,10 +482,6 @@ func TestAutomaticRepositionDragsThroughESP32(t *testing.T) {
 			DragHardwareCamera: func(dx int) (bool, bool) {
 				drags = append(drags, dx)
 				return true, true
-			},
-			DragCamera: func(int) (bool, bool) {
-				t.Fatal("ESP32 mode called the Windows drag")
-				return false, false
 			},
 		},
 	}

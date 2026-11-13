@@ -68,7 +68,7 @@ func TestInteractKeySettings(t *testing.T) {
 	}
 	values = settingsOf(&saved)
 	values.ReelMethod = config.ReelInteractKey
-	for _, key := range []string{"", "Ctrl", "F3"} {
+	for _, key := range []string{"", "Ctrl", "F9"} {
 		values.InteractKey = key
 		if _, err := values.apply(*base); err == nil {
 			t.Errorf("Interact key %q accepted", key)
@@ -98,6 +98,19 @@ func TestLogoutKeySettings(t *testing.T) {
 	}
 }
 
+func TestTargetPlayerKeySettings(t *testing.T) {
+	base := config.DefaultConfig()
+	values := settingsOf(base)
+	values.TargetPlayerKey = "Ctrl"
+	if _, err := values.apply(*base); err == nil {
+		t.Error("a Target passing player key the board cannot press was accepted")
+	}
+	values.TargetPlayerKey = "F11"
+	if got, err := values.apply(*base); err != nil || got.TargetPlayerKey != "F11" {
+		t.Fatalf("Target passing player F11 = %+v, %v", got, err)
+	}
+}
+
 func TestESP32PortSettings(t *testing.T) {
 	base := config.DefaultConfig()
 	values := settingsOf(base)
@@ -122,6 +135,10 @@ func TestESP32PortSettings(t *testing.T) {
 	values.CastKey = "Mouse4"
 	if _, err := values.apply(*base); err != nil {
 		t.Errorf("Mouse 4 for Cast with the ESP32: %v", err)
+	}
+	values.ReelMethod, values.InteractKey = config.ReelInteractKey, "Mouse5"
+	if _, err := values.apply(*base); err != nil {
+		t.Errorf("Mouse 5 for Interact with the ESP32: %v", err)
 	}
 }
 
@@ -280,26 +297,5 @@ func TestShrinkKeepsPreviewsSmall(t *testing.T) {
 	small := image.NewRGBA(image.Rect(0, 0, 560, 420))
 	if shrink(small, previewWidth) != small {
 		t.Error("a narrow capture was copied")
-	}
-}
-
-func TestBackgroundSettings(t *testing.T) {
-	base := config.DefaultConfig()
-	values := settingsOf(base)
-	values.Background = true
-	if got, err := values.apply(*base); err != nil || got.Background {
-		t.Errorf("background with the right-click reel = %v, %v; want it off", got.Background, err)
-	}
-	values.ReelMethod, values.InteractKey = config.ReelInteractKey, "f"
-	if got, err := values.apply(*base); err != nil || !got.Background {
-		t.Errorf("background with the Interact reel = %v, %v; want it on", got.Background, err)
-	}
-	values.ESP32Port = "auto"
-	if got, err := values.apply(*base); err != nil || got.Background {
-		t.Errorf("background with the ESP32 = %v, %v; want it off", got.Background, err)
-	}
-	values.ESP32Port, values.InteractKey = "", "Mouse4"
-	if _, err := values.apply(*base); err == nil {
-		t.Error("background accepted a mouse button for Interact")
 	}
 }

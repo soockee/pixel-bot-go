@@ -28,7 +28,9 @@ Separate searching vs monitoring → lower cost post‑lock. Timers decouple cad
 
 ## Input Safety
 
-Input only goes out while it can land where it should. Every state has at most one deadline, and leaving the state cancels it, so nothing pending can act after Stop or a focus change. All input runs on the FSM goroutine. Outside dry-run, `action.Guard` checks each action: the selected window must be in front, moves must stay inside the game window, and the pointer must still be where the app left it, within 6 pixels: a sensitive mouse or the game can nudge it by a pixel or two between moves, and a bobber's box is several times wider. If it has moved further, the user has taken over and the run halts. The warning logs where the pointer was expected and where it was. A run also halts when the user clicks Stop, after too many failed casts in a row, and at the session limit.
+The app sends commands to the ESP32 over USB serial. The board emits the corresponding Bluetooth keyboard and mouse reports. Fishing actions run on the FSM goroutine. Leaving a state cancels its deadline, and the app checks that the selected game window has focus before sending an action. Scheduled login and logout recheck the screen and focus after opening the board's serial port.
+
+`action.Guard` checks pointer targets against the game window's bounds and detects when the pointer has moved more than 6 pixels from where Go Fish left it. Small changes from mouse sensitivity or the game are allowed. Larger moves stop the run and log the expected and actual positions. Runs also stop on request, after too many failed casts, or at the session limit.
 
 ## Extensibility Ideas
 

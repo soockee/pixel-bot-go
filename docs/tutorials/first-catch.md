@@ -1,10 +1,10 @@
 ---
 title: "Your first catch"
-summary: "Three steps: start Go Fish, follow Set up fishing to pick your cast key and install the addon, click Start fishing. About five minutes."
+summary: "Connect the Go Fish ESP32 Probe, then let Set up fishing find the game and the board, set your keys and install the addon."
 order: 1
 ---
 
-You need a Windows PC and World of Warcraft: Forever with a character who can fish.
+You need a Windows PC, World of Warcraft: Forever with a character who can fish, and a [Go Fish ESP32 Probe](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe) with the Go Fish firmware. Pair the board in Windows Bluetooth settings and leave its USB cable plugged in. Live input always goes through this board.
 
 ## 1. Start Go Fish
 
@@ -17,10 +17,11 @@ You need a Windows PC and World of Warcraft: Forever with a character who can fi
 The first time, Go Fish opens on **Set up fishing**, which walks you through what is missing.
 
 1. **Game window** ticks itself when Go Fish finds the game. If it doesn't, click **Check again**.
-2. **Cast key**: keep **F3**, or click the key and press another spare one. Click **Use this key**.
-3. **Bobber Marker addon**: click **Install addon**, then type `/reload` in the game's chat and press Enter.
+2. **ESP32 board**: click **Find the board**. If it isn't found, check the USB cable and the Bluetooth pairing, or choose its COM port.
+3. **Game keys**: Go Fish suggests **F9** to cast, and **F10**, **F11** and **F12** for the other keys it needs, because WoW leaves them free. Keep them, or click a key and press another spare one. Click **Use these keys**.
+4. **Bobber Marker addon**: click **Install addon**, then type `/reload` in the game's chat and press Enter.
 
-Then the picture of the game appears and you are ready. You don't bind anything in the game yourself: the addon puts Fishing on your cast key. If something goes wrong here, see [Install the addon](../how-to/install-addon.md).
+Then the picture of the game appears and you are ready. You don't bind anything in the game yourself: the addon binds your keys. If something goes wrong here, see [Install the addon](../how-to/install-addon.md).
 
 ## 3. Fish
 

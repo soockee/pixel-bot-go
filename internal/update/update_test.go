@@ -36,6 +36,41 @@ func TestNewer(t *testing.T) {
 	}
 }
 
+func TestExecutableUsesStableInstallPath(t *testing.T) {
+	want := filepath.Join(t.TempDir(), "pixel-bot-go.exe")
+	if err := os.WriteFile(want, []byte("app"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(InstallPathEnv, want)
+
+	got, err := Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("Executable() = %q, want %q", got, want)
+	}
+}
+
+func TestExecutableRejectsMissingStableInstallPath(t *testing.T) {
+	t.Setenv(InstallPathEnv, filepath.Join(t.TempDir(), "missing.exe"))
+	if _, err := Executable(); err == nil {
+		t.Fatal("Executable() accepted a missing install path")
+	}
+}
+
+func TestRestartEnvironmentDropsFishChildMarkers(t *testing.T) {
+	got := CleanEnvironment([]string{
+		"PATH=C:\\Windows",
+		"pixelbot_fish_child=1",
+		"PIXELBOT_INSTALL_EXE=C:\\GoFish\\app.exe",
+		"PIXELBOT_FISH_NAME=loach",
+	})
+	if len(got) != 1 || got[0] != "PATH=C:\\Windows" {
+		t.Fatalf("CleanEnvironment() = %#v", got)
+	}
+}
+
 // fakeGitHub serves a latest release whose build is exe and whose
 // CHECKSUMS.txt lists sum for it.
 func fakeGitHub(t *testing.T, tag string, exe []byte, sum string, assets func(base string) string) *Client {

@@ -5,6 +5,8 @@ import (
 	"image"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -91,6 +93,7 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		CheckAddon:    a.checkAddon,
 		InstallAddon:  a.installAddon,
 		MoveOverlay:   a.setOverlayMove,
+		FindBoard:     findBoard,
 		SetTheme:      a.setTheme,
 	}, c.Recordings, cfg, config.FilePath, logger)
 
@@ -99,11 +102,12 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 	assets.Handle(desktop.RecordingsPath, c.Recordings)
 	assets.Handle("/", application.BundledAssetFileServer(frontend.Dist()))
 	opts := application.Options{
-		Name:       title,
+		Name:       "Go Fish",
 		Services:   []application.Service{application.NewService(service)},
 		Assets:     application.AssetOptions{Handler: assets},
 		OnShutdown: a.shutdown,
 	}
+	opts.Windows.WebviewUserDataPath = webviewUserDataPath()
 	if cfg.Debug {
 		// Lets agents drive and inspect the UI over the DevTools protocol.
 		opts.Windows.AdditionalBrowserArgs = []string{"--remote-debugging-port=" + devtoolsPort}
@@ -129,6 +133,18 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 	return a
 }
 
+func webviewUserDataPath() string {
+	exe, err := update.Executable()
+	if err != nil {
+		return ""
+	}
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(configDir, filepath.Base(exe))
+}
+
 // Run starts the UI loop and blocks until the app quits.
 func (a *app) Run() error {
 	c := a.container
@@ -137,6 +153,7 @@ func (a *app) Run() error {
 		a.setWindow(cfg.AutoWindow)
 	}
 	c.View.SetInfo(cfg.DryRun, cfg.Debug)
+	c.View.SetInput(cfg)
 	c.View.SetTheme(cfg.Theme)
 	c.View.SetOverlay(cfg.OverlayX, cfg.OverlayY, false)
 	c.View.SetAddonVersion(addon.Version())

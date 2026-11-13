@@ -23,10 +23,19 @@ import (
 	"github.com/soocke/pixel-bot-go/internal/playtrace"
 	"github.com/soocke/pixel-bot-go/internal/recorder"
 	"github.com/soocke/pixel-bot-go/internal/traceobserver"
+	"github.com/soocke/pixel-bot-go/internal/update"
 )
 
 func main() {
 	attachConsole()
+	if os.Getenv(update.FishChildEnv) != "1" {
+		code, err := launchFishProcess()
+		if err == nil {
+			os.Exit(code)
+		}
+		fmt.Fprintln(os.Stderr, "fish-named launch unavailable; starting normally:", err)
+	}
+
 	cfg, loadErr := config.Load(config.FilePath)
 	if loadErr != nil {
 		cfg = config.DefaultConfig()
@@ -175,7 +184,7 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	runErr := app.NewApp("Go Fish", 1180, 760, cfg, logger, trace).Run()
+	runErr := app.NewApp(fishWindowTitle(), 1180, 760, cfg, logger, trace).Run()
 	if trace.Output != nil {
 		status := "complete"
 		if runErr != nil {
@@ -190,6 +199,13 @@ func main() {
 		logger.Error("app run failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+func fishWindowTitle() string {
+	if name := os.Getenv(update.FishNameEnv); name != "" {
+		return name
+	}
+	return "Go Fish"
 }
 
 // recordSession records the game window's client area, fixed where it is when

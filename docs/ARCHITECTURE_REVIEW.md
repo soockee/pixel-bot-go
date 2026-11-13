@@ -2,6 +2,8 @@
 
 Review of branch `feature/v1.1.0-prep` at commit `eb999ad` (2026-11-07), done before any new feature work. It lists every finding and the tasks that resolve them. The four Diataxis files describe the app as it is; this file is a work plan, so it stays separate and should be deleted or archived once the tasks are done.
 
+This historical review describes the former Windows input path. See the [current input design](dev/explanation/design.md#input-safety) for the ESP32 implementation.
+
 Goals from the brief: human-readable code, less code, best-practice architecture, KISS and DRY.
 
 ---

@@ -89,14 +89,10 @@ func (f *FishingFSM) idleMove() {
 	f.logger.Info("between-catch cursor wander", "from", start)
 }
 
-// cameraDrag is the drag the input mode allows, nil when it has none. Windows
-// input drags only in right-click mode, where the app owns the pointer anyway.
+// cameraDrag is the ESP32 camera drag, nil without the board.
 func (f *FishingFSM) cameraDrag() func(int) (bool, bool) {
 	if f.hardwareKeyboard() {
 		return f.actions.DragHardwareCamera
-	}
-	if f.cfg.ReelMethod != config.ReelInteractKey {
-		return f.actions.DragCamera
 	}
 	return nil
 }

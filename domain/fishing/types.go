@@ -51,8 +51,6 @@ type ActionCallbacks struct {
 	ParseVK    func(key string) (byte, bool)
 	// CanAct checks focus just before dispatching an optional action.
 	CanAct func() bool
-	// DragCamera makes a guarded horizontal drag when there is room in the client.
-	DragCamera func(dx int) (attempted, moved bool)
 	// DragHardwareCamera sends a drag through the ESP32 when supported.
 	DragHardwareCamera func(dx int) (attempted, moved bool)
 	// OpenKeyboard validates and opens the external keyboard for one run.
@@ -72,10 +70,9 @@ type ActionCallbacks struct {
 	Approach func(center image.Point, box image.Rectangle) (image.Point, bool)
 
 	// PlanReel schedules a timed hold and cooldown. A zero cooldown keeps the
-	// configured value. Without HoldRight, the button hold is simulated.
+	// configured value. A right-click reel without the board simulates the hold.
 	PlanReel          func(biteDetector string) ReelTiming
-	HoldRight         func() func()        // returns a mandatory release, nil if press failed
-	HoldInteract      func(vk byte) func() // same contract for the game's Interact binding
+	HoldInteract      func(vk byte) func() // returns a mandatory release, nil if press failed
 	ObserveReelTiming func(ReelTimingEvent)
 	CanSimulateReel   func() bool
 	Cursor            *CursorCallbacks

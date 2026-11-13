@@ -8,38 +8,25 @@ import (
 // Guard wraps real input and drops anything that could land in the wrong place.
 // Its methods run on the FSM goroutine, so its fields need no locking.
 type Guard struct {
-	Logger       *slog.Logger
-	InFront      func() bool                // the selected window has focus
-	CanPress     func() bool                // keys reach the game: InFront, or a background run's open window
-	Area         func() *image.Rectangle    // capture area in screen coordinates
-	CursorPos    func() (x, y int, ok bool) // where the pointer is now
-	OnTakeover   func()                     // the user moved the pointer
-	Press        func(vk byte) bool         // input that is sent when allowed
-	Move         func(x, y int) bool        //
-	Click        func() bool                //
-	BeginHold    func() func()              // starts a timed right-button hold
-	BeginKeyHold func(byte) func()          // starts a timed key or side-button hold
-	target       image.Point                // where the last Move left the pointer
-	hasTarget    bool
+	Logger     *slog.Logger
+	InFront    func() bool                // the selected window has focus
+	Area       func() *image.Rectangle    // capture area in screen coordinates
+	CursorPos  func() (x, y int, ok bool) // where the pointer is now
+	OnTakeover func()                     // the user moved the pointer
+	Press      func(vk byte) bool         // input that is sent when allowed
+	Move       func(x, y int) bool        //
+	Click      func() bool                //
+	target     image.Point                // where the last Move left the pointer
+	hasTarget  bool
 }
 
 // PressKey sends the key if it can reach the game.
 func (g *Guard) PressKey(vk byte) bool {
-	if !g.CanPress() {
+	if !g.InFront() {
 		g.Logger.Warn("input dropped: selected window is not in front", "action", "press_key")
 		return false
 	}
 	return g.Press(vk)
-}
-
-// HoldKey starts a timed press if it can reach the game. The caller must
-// release it even after focus loss.
-func (g *Guard) HoldKey(vk byte) func() {
-	if !g.CanPress() {
-		g.Logger.Warn("input dropped: selected window is not in front", "action", "hold_key")
-		return nil
-	}
-	return g.BeginKeyHold(vk)
 }
 
 // MoveCursor moves the pointer to a point inside the capture area.
@@ -111,14 +98,6 @@ func (g *Guard) DragCamera(dx int, drag func(int, func() bool) bool) (attempted,
 // ClickRight clicks if the pointer is still where MoveCursor left it.
 func (g *Guard) ClickRight() bool {
 	return g.canClick() && g.Click()
-}
-
-// HoldRight checks the press. The caller must release even after focus loss.
-func (g *Guard) HoldRight() func() {
-	if !g.canClick() {
-		return nil
-	}
-	return g.BeginHold()
 }
 
 func (g *Guard) canClick() bool {

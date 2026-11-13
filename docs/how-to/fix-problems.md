@@ -8,7 +8,7 @@ The status bar at the bottom of Go Fish usually says what is wrong. These are th
 
 ## Start fishing is greyed out
 
-Something in **Set up fishing** is still missing. Usually the game isn't open, or the addon needs an install or update. Follow the list; see [Install the addon](install-addon.md).
+Something in **Set up fishing** is still missing. Usually the game isn't open, the ESP32 board isn't found, or the addon needs an install or update. Follow the list; see [Install the addon](install-addon.md).
 
 ## It stopped by itself
 
@@ -28,12 +28,13 @@ When Go Fish stops without you pressing Stop, the status bar says **Stopped:** a
 
 ## It sits on "Focus"
 
-Go Fish only fishes while the game is the window in front. Click into the game. With [Fish in the background](settings.md#fish-in-the-background) on, it waits here only while the game is minimized.
+Go Fish sends live input through the ESP32 to the window in front. Click into the game to continue.
 
 ## Nothing happens in the game
 
-- If you start the game or Battle.net as administrator, Windows blocks Go Fish's key presses and clicks. Start the game normally, or close Go Fish and start it with **Run as administrator** too.
-- If you changed the **Cast key**, click **Update addon** in **Set up fishing** and type `/reload` in the game.
+- Check that the Go Fish ESP32 Probe is paired in Windows Bluetooth settings, plugged in over USB, and selected under **Settings → ESP32 board**. If **Auto** doesn't find it, choose its COM port.
+- Check that the board has the current Go Fish firmware and that no other program has its COM port open.
+- If you changed a key, click **Update addon** in **Set up fishing** and type `/reload` in the game.
 
 ## It reels too early, or misses bites
 

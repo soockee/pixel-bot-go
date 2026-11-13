@@ -43,12 +43,6 @@ type AppContainer struct {
 	Loop       *presenter.Loop
 	trace      *liveTrace
 	gameWindow atomic.Pointer[capture.WindowIdentity]
-	// background is the run's Config.Background, fixed when the run binds the window.
-	background atomic.Bool
-	// stream captures the game in a background run, nil without Windows
-	// Graphics Capture, where PrintWindow stands in.
-	stream atomic.Pointer[capture.WindowStream]
-	logger *slog.Logger
 }
 
 // TraceOptions configures desktop tracing and the optional reel timing profile.
@@ -66,18 +60,18 @@ type TraceOptions struct {
 func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions, emit func(desktop.State)) *AppContainer {
 	botLog := recorder.NewBotLog(logger.Handler())
 	logger = slog.New(botLog) // everything built here logs through it
-	c := &AppContainer{Config: cfg, Capture: &model.CaptureModel{}, Frames: desktop.NewFrames(), botLog: botLog, logger: logger}
+	c := &AppContainer{Config: cfg, Capture: &model.CaptureModel{}, Frames: desktop.NewFrames(), botLog: botLog}
 	c.View = desktop.NewView(c.Frames, emit)
 	c.Recordings = desktop.NewRecordings(func() string { return cfg.RecordDir })
-	inFront, canAct := c.gameFocused, c.canAct
+	inFront := c.gameFocused
 
-	callbacks := fishing.ActionCallbacks{ParseVK: action.ParseVK, CanAct: canAct}
+	callbacks := fishing.ActionCallbacks{ParseVK: action.ParseVK, CanAct: inFront}
 	dryRun := cfg.DryRun
 	if dryRun {
 		logger.Warn("dry-run enabled: input actions are logged, not injected")
 		callbacks.PressKey, callbacks.MoveCursor, callbacks.ClickRight = action.DryRun(logger)
 		callbacks.HoldInteract = func(vk byte) func() {
-			if !canAct() {
+			if !inFront() {
 				return nil
 			}
 			callbacks.PressKey(vk)
@@ -88,7 +82,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			callbacks.ObserveCast, callbacks.ObserveReel = c.trace.cast, c.trace.bite
 		}
 		if trace.Output != nil || trace.Timing != nil {
-			callbacks.CanSimulateReel = canAct
+			callbacks.CanSimulateReel = inFront
 			if trace.Output != nil {
 				callbacks.ObserveReelTiming = c.trace.reelTiming
 			}
@@ -105,26 +99,39 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		callbacks.ReelRoll = rand.IntN
 		callbacks.RepositionRoll = rand.IntN
 		var keyboard esp32.Keyboard
-		// hardware routes the guard's pointer input to the board for the run.
-		var hardware atomic.Bool
 		callbacks.OpenKeyboard = func(run config.Config) (func(), error) {
+			if run.ESP32Port == "" {
+				return nil, errors.New("select or connect the ESP32 board in Settings")
+			}
 			port, err := esp32.PortName(run.ESP32Port)
 			if err != nil {
 				return nil, err
 			}
 			keys := []string{run.CastKey}
+			if run.TargetPlayerKey != "" {
+				keys = append(keys, run.TargetPlayerKey)
+			}
+			if run.Schedule || run.Reposition {
+				keys = append(keys, run.LogoutKey)
+			}
 			if run.ReelMethod == config.ReelInteractKey {
 				keys = append(keys, run.InteractKey)
 			}
 			for _, key := range keys {
 				vk, valid := action.ParseVK(key)
 				if !valid || !esp32.SupportsKey(vk) {
-					return nil, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Cast and Interact")
+					return nil, errors.New("ESP32 supports letters, digits, F1–F12, Mouse 4 and Mouse 5 for configured keys")
 				}
 			}
 			if err := keyboard.Open(port); err != nil {
 				return nil, err
 			}
+			keepOpen := false
+			defer func() {
+				if !keepOpen {
+					keyboard.Close()
+				}
+			}()
 			if trace.Timing != nil {
 				if err := keyboard.PrepareTimedTaps(); err != nil {
 					return nil, err
@@ -135,29 +142,33 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 					return nil, err
 				}
 			}
-			if err := keyboard.PrepareButtons(); err != nil {
-				return nil, err
-			}
-			if run.ReelMethod != config.ReelInteractKey {
+			if run.ReelMethod != config.ReelInteractKey || run.IdleMoves {
 				if err := keyboard.PreparePointer(); err != nil {
 					return nil, err
 				}
+			}
+			if err := keyboard.PrepareButtons(); err != nil {
+				return nil, err
+			}
+			for _, key := range keys {
+				vk, _ := action.ParseVK(key)
+				if (vk == 0x05 || vk == 0x06) && !keyboard.CanPressButtons() {
+					return nil, errors.New("flash the current ESP32 firmware to press Mouse 4 and Mouse 5")
+				}
+			}
+			if run.ReelMethod != config.ReelInteractKey {
 				if !keyboard.CanPoint() {
-					keyboard.Close()
 					return nil, errors.New("flash the current ESP32 firmware to reel with a right click")
 				}
 			}
+			if run.IdleMoves && !keyboard.CanPoint() {
+				return nil, errors.New("flash the current ESP32 firmware to move the pointer")
+			}
 			logger.Info("ESP32 keyboard ready", "port", keyboard.Name(), "camera", keyboard.CanDragCamera(), "pointer", keyboard.CanPoint())
-			hardware.Store(true)
-			return func() {
-				hardware.Store(false)
-				keyboard.Close()
-			}, nil
+			keepOpen = true
+			return keyboard.Close, nil
 		}
 		move := func(x, y int) bool {
-			if !hardware.Load() {
-				return action.MoveCursor(x, y)
-			}
 			if err := keyboard.MoveTo(image.Pt(x, y), action.CursorPos); err != nil {
 				logger.Error("ESP32 pointer move failed", "error", err)
 				return false
@@ -165,11 +176,15 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			return true
 		}
 		click := func() bool {
-			if !hardware.Load() {
-				return action.ClickRight()
-			}
 			if err := keyboard.ClickRight(); err != nil {
 				logger.Error("ESP32 right click failed", "error", err)
+				return false
+			}
+			return true
+		}
+		press := func(vk byte) bool {
+			if err := keyboard.Press(vk, 0); err != nil {
+				logger.Error("ESP32 key press failed", "error", err)
 				return false
 			}
 			return true
@@ -184,14 +199,10 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			Logger: logger, InFront: inFront, Area: c.gameArea, CursorPos: action.CursorPos,
 			// The guard runs on the FSM goroutine, which must not wait on its own queue.
 			OnTakeover: func() { go c.FSM.EventHaltBecause("the mouse was moved") },
-			CanPress:   canAct, Press: c.pressKey, Move: move, Click: click,
-			BeginHold: action.BeginRightHold, BeginKeyHold: c.beginKeyHold,
+			Press:      press, Move: move, Click: click,
 		}
 		callbacks.PressKey, callbacks.MoveCursor, callbacks.ClickRight = guard.PressKey, guard.MoveCursor, guard.ClickRight
 		callbacks.CursorPos = action.CursorPos
-		callbacks.HoldInteract = guard.HoldKey
-		callbacks.HoldRight = guard.HoldRight
-		callbacks.DragCamera = func(dx int) (bool, bool) { return guard.DragCamera(dx, action.DragCamera) }
 		callbacks.DragHardwareCamera = func(dx int) (bool, bool) {
 			if !keyboard.CanDragCamera() || action.LeftMouseDown() {
 				return false, false
@@ -272,16 +283,13 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 
 	c.CapturePresenter = presenter.NewCapturePresenter(c.Capture, c.Engine, c.FSM, c.View)
 	c.RecordPresenter = presenter.NewRecordPresenter(c.prepareRecording, c.View)
-	focusWatcher := presenter.NewFocusWatcher(c.FSM, canAct)
+	focusWatcher := presenter.NewFocusWatcher(c.FSM, inFront)
 	c.FSM.AddListener(func(prev, next fishing.FishingState) {
 		if dryRun && trace.Output != nil && (next == fishing.StateHalt || next == fishing.StateWaitingFocus) {
 			c.trace.timingGap(next)
 		}
 		focusWatcher.OnState(prev, next)
 		c.CapturePresenter.OnState(prev, next)
-		if next == fishing.StateHalt {
-			c.closeStream()
-		}
 	})
 	c.Loop = presenter.NewLoop(
 		presenter.NewSessionPresenter(model.NewSessionModel(), c.Capture, c.View),
@@ -332,29 +340,9 @@ func cursorSteps(path []cursormotion.Step) ([]fishing.CursorStep, bool) {
 	return steps, len(steps) > 0
 }
 
-// pressKey and beginKeyHold send keys to the game window in a background
-// run, and to the window in front otherwise.
-func (c *AppContainer) pressKey(vk byte) bool {
-	if w := c.gameWindow.Load(); w != nil && c.background.Load() {
-		return action.PostKey(uintptr(w.Handle), vk)
-	}
-	return action.PressKey(vk)
-}
-
-func (c *AppContainer) beginKeyHold(vk byte) func() {
-	if w := c.gameWindow.Load(); w != nil && c.background.Load() {
-		return action.BeginPostedKeyHold(uintptr(w.Handle), vk)
-	}
-	return action.BeginKeyHold(vk)
-}
-
-// gameFrames captures the game window the person picked: from the screen, or
-// in a background run, where it may be covered, from Windows Graphics Capture
-// or, where that is missing, the window's own drawing.
+// gameFrames captures screen pixels within the selected game window.
 type gameFrames struct {
-	target     func() *capture.WindowIdentity
-	background func() bool
-	stream     func() *capture.WindowStream
+	target func() *capture.WindowIdentity
 }
 
 func (g gameFrames) Window() (image.Rectangle, error) {
@@ -363,39 +351,12 @@ func (g gameFrames) Window() (image.Rectangle, error) {
 	}
 	return image.Rectangle{}, errors.New("select a game window")
 }
-func (g gameFrames) Grab(area image.Rectangle) (capture.Frame, error) {
-	if s := g.stream(); s != nil && g.background() {
-		return s.Grab(area) // about 1 ms for a bobber's box
-	}
-	// PrintWindow costs about 40 ms whatever the area, the screen copy 10 ms.
-	if w := g.target(); w != nil && g.background() && !w.Focused() {
-		return w.Print(area)
-	}
+func (gameFrames) Grab(area image.Rectangle) (capture.Frame, error) {
 	return capture.Grab(area)
 }
 
 func (c *AppContainer) frames() gameFrames {
-	return gameFrames{target: c.gameWindow.Load, background: c.background.Load, stream: c.stream.Load}
-}
-
-// openStream starts Windows Graphics Capture of target for a background run.
-func (c *AppContainer) openStream(target capture.WindowIdentity) {
-	c.closeStream()
-	if !c.background.Load() {
-		return
-	}
-	s, err := capture.OpenWindowStream(target)
-	if err != nil {
-		c.logger.Warn("Windows Graphics Capture unavailable; background capture uses PrintWindow at about 12 fps", "error", err)
-		return
-	}
-	c.stream.Store(s)
-}
-
-func (c *AppContainer) closeStream() {
-	if s := c.stream.Swap(nil); s != nil {
-		s.Close()
-	}
+	return gameFrames{target: c.gameWindow.Load}
 }
 
 // gameArea is the game window's client area, or nil when it is not open. The
@@ -419,8 +380,6 @@ func (c *AppContainer) bindGameWindow() error {
 		return err
 	}
 	c.gameWindow.Store(&target)
-	c.background.Store(c.Config.Background)
-	c.openStream(target)
 	return nil
 }
 

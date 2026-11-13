@@ -57,7 +57,10 @@ type State struct {
 	UpdateError    string                `json:"updateError"`    // why the last check failed, or why there is none
 	Checking       bool                  `json:"checking"`       // a check runs
 	GameFound      bool                  `json:"gameFound"`      // the selected window is open
-	CastKeyChosen  bool                  `json:"castKeyChosen"`  // the person confirmed the Cast key in setup this session
+	KeysChosen     bool                  `json:"keysChosen"`     // the person confirmed the game keys in setup this session
+	Keys           [4]string             `json:"keys"`           // the key settings the next run uses, see setupKeys
+	ESP32Port      string                `json:"esp32Port"`      // the saved board port, "AUTO", or "" when none is chosen
+	BoardFound     string                `json:"boardFound"`     // the port setup found the board on this session, or ""
 	Setup          [setupSlots]SetupStep `json:"setup"`          // what the bot still needs, see setupSteps
 	SetupDone      bool                  `json:"setupDone"`      // nothing is missing, or this is a dry run
 	Addon          string                `json:"addon"`          // Bobber Marker in the game: "missing", "outdated", "current", or "" when the game was not found

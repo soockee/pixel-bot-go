@@ -60,13 +60,8 @@ type Config struct {
 	ReelMethod string `json:"reel_method"`
 	// InteractKey matches the game's native Interact binding when selected.
 	InteractKey string `json:"interact_key,omitempty"`
-	// ESP32Port enables the serial BLE keyboard backend when set.
+	// ESP32Port selects the required serial BLE keyboard backend. AUTO finds the board.
 	ESP32Port string `json:"esp32_port,omitempty"`
-	// Background keeps fishing while another window is in front: keys go to
-	// the game window's message queue and frames come from the window's own
-	// drawing. It needs the Interact reel and Windows input (no ESP32), and
-	// the game must not be minimized. The cursor is never moved.
-	Background bool `json:"background,omitempty"`
 	// IdleMoves now and then wanders the cursor or nudges the camera between catches.
 	IdleMoves bool `json:"idle_moves,omitempty"`
 	// Reposition steps the character with WASD, or turns the camera with a
@@ -129,13 +124,17 @@ var Themes = []string{"graphite", "tavern", "arcane", "frost", "fel", "tide"}
 // DefaultConfig returns a Config populated with standard defaults.
 func DefaultConfig() *Config {
 	return &Config{
-		MinScale:               0.90,
-		MaxScale:               1.20,
-		ScaleStep:              0.05,
-		Threshold:              0.73,
-		Stride:                 6,
-		Refine:                 true,
-		CastKey:                "F3",
+		MinScale:  0.90,
+		MaxScale:  1.20,
+		ScaleStep: 0.05,
+		Threshold: 0.73,
+		Stride:    6,
+		Refine:    true,
+		// F9 to F12 are free in WoW's default bindings; Target passing player
+		// (F11 suggested) stays off until it is set.
+		CastKey:                "F9",
+		InteractKey:            "F10",
+		LogoutKey:              "F12",
 		ReelMethod:             ReelRightClick,
 		MaxFailedCasts:         5,
 		MaxSessionMinutes:      60,
@@ -185,7 +184,6 @@ func (c *Config) Validate() error {
 	}
 	c.InteractKey = strings.TrimSpace(c.InteractKey)
 	c.ESP32Port = strings.ToUpper(strings.TrimSpace(c.ESP32Port))
-	c.Background = c.Background && c.ReelMethod == ReelInteractKey && c.ESP32Port == ""
 	if c.OverlayX < 0 || c.OverlayX > 1 {
 		c.OverlayX = d.OverlayX
 	}

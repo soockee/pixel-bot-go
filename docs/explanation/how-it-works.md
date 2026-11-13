@@ -20,9 +20,9 @@ Each cast follows the same steps: cast, find the bobber, watch, reel in, pause, 
 
 - **Stop button.** Click **Stop** in Go Fish to end the run.
 - **Limits.** It stops by itself after the session length, or after a few casts in a row without a catch, so it never fishes on for hours after something went wrong.
-- **Only in the game.** It only presses keys and clicks while the game is the window in front. Switch to another window and it waits. With **Fish in the background** on, it sends its keys to the game window alone, so they never land in the window you're using, and it leaves your mouse alone.
+- **Only in the game.** Live keys, clicks and pointer movement go through the ESP32 board while the game is the window in front. Switch to another window and it waits.
 - **Only what you see.** It looks at the game window and nothing else on your screen.
 
-## No administrator needed
+## No administrator needed for input
 
-Go Fish runs with your normal Windows rights, like the game. Only if you start the game as administrator does Go Fish need the same, because Windows doesn't let a program press keys in a game that runs with more rights than it has.
+Go Fish sends commands to the ESP32 over USB. The board sends keys and mouse actions back to the PC over Bluetooth. This works with normal Windows permissions. Installing the addon may require Administrator rights if the game folder is protected.

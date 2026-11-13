@@ -8,9 +8,10 @@ Go Fish is a Windows app for studying visual event detection and response timing
 
 ## Install
 
-1. Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest) (`CHECKSUMS.txt` beside it lists its SHA-256). Start the game, then the exe. It needs Administrator only if the game runs as Administrator, since Windows blocks input into a process with more rights.
-2. In **Set up fishing** on the Fishing tab, confirm your cast key with **Use this key**, then click **Install addon** to put the Bobber Marker addon into the game, then type `/reload` in the game.
-3. Stand at the water and press **Start fishing**. Click **Stop** in Go Fish to end the run.
+1. Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest) (`CHECKSUMS.txt` beside it lists its SHA-256). Connect and pair a [Go Fish ESP32 Probe](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe), then start the game and the exe.
+2. In **Settings → ESP32 board**, choose **Auto** or the board's COM port. The paired board sends all live game input over Bluetooth.
+3. In **Set up fishing** on the Fishing tab, click **Find the board**, confirm the suggested F9 to F12 keys with **Use these keys**, then click **Install addon** to put the Bobber Marker addon into the game, then type `/reload` in the game.
+4. Stand at the water and press **Start fishing**. Click **Stop** in Go Fish to end the run.
 
 Go Fish updates itself: it checks GitHub at start and every hour, and **Update to vX.Y.Z** in the top bar or **Settings → Updates** installs a new release after checking its checksum.
 
@@ -20,7 +21,7 @@ Go Fish updates itself: it checks GitHub at start and every hour, and **Update t
 * Detects a bite from the splash at your bobber and the bite sound that follows it, and still works with the game's sound effects off.
 * Runs a state machine: cast, search, watch, reel, pause, and stops after a session limit or too many casts without a bite.
 * Stops when you click **Stop** in Go Fish.
-* Dry-run mode logs every key press and click instead of sending it, and needs no Administrator.
+* Dry-run mode logs intended key presses, clicks and cursor moves. It works without an ESP32.
 * Records sessions (frames, input and sound) for comparing detectors offline.
 
 ## Develop

@@ -65,47 +65,6 @@ func TestSimulatedReelTiming(t *testing.T) {
 	}
 }
 
-func TestTimedInputAlwaysReleasesOnInterruption(t *testing.T) {
-	for _, interruption := range []string{"stop", "focus", "geometry", "shutdown"} {
-		t.Run(interruption, func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) {
-				log := &actionLog{}
-				actions := recordingActions(log)
-				actions.PlanReel = func(string) ReelTiming { return ReelTiming{Hold: 140 * time.Millisecond} }
-				actions.HoldRight = func() func() {
-					log.add("down")
-					return func() { log.add("up") }
-				}
-				fsm := NewFSM(nil, testConfig(), actions)
-				defer fsm.Close()
-				var valid atomic.Bool
-				valid.Store(true)
-				fsm.EventAwaitFocus()
-				fsm.EventFocusAcquired()
-				fsm.send(evtTargetAcquiredAt{x: 10, y: 10, valid: valid.Load})
-				fsm.EventFishBite()
-				synctest.Wait()
-				time.Sleep(reelClickDelay)
-				wantActions(t, log, "move", "move", "down")
-				switch interruption {
-				case "stop":
-					fsm.EventHalt()
-				case "focus":
-					fsm.EventFocusLost()
-				case "geometry":
-					valid.Store(false)
-					fsm.send(evtTargetInvalidated{})
-				case "shutdown":
-					fsm.Close()
-				}
-				wantActions(t, log, "move", "move", "down", "up")
-				time.Sleep(200 * time.Millisecond)
-				wantActions(t, log, "move", "move", "down", "up")
-			})
-		})
-	}
-}
-
 func TestCalibratedDelayIncludesTimeAlreadySpentAfterDetection(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}

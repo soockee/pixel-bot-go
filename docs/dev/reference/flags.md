@@ -6,7 +6,7 @@ order: 3
 
 | Flag / variable                 | Effect                                                                                      |
 | ------------------------------- | ------------------------------------------------------------------------------------------- |
-| `-dry-run` / `PIXELBOT_DRY_RUN=1` | Log key presses, cursor moves and clicks as `dry-run action` instead of sending them; no Administrator needed |
+| `-dry-run` / `PIXELBOT_DRY_RUN=1` | Log intended keys, cursor moves and clicks as `dry-run action`. Works without an ESP32. |
 | `-screen N` / config `screen`   | Open the window on monitor N (1 = primary, others left to right) and refuse a run whose game window is elsewhere; 0 = default placement |
 | `-list-screens`                 | Print the monitors as JSON (`screen`, `x`, `y`, `w`, `h`, `primary`) and exit               |
 | `-record <dir>`                 | With `-window`: record that window's client area into a new directory until Ctrl+C (whole frames every 10 s, the bobber's square at about 10 fps, see Detection datasets); opens no app window and sends no input |
