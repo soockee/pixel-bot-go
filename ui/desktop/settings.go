@@ -24,7 +24,6 @@ type Settings struct {
 	ReelMethod             string  `json:"reelMethod"`
 	InteractKey            string  `json:"interactKey"`
 	ESP32Port              string  `json:"esp32Port"`
-	Background             bool    `json:"background"`
 	IdleMoves              bool    `json:"idleMoves"`
 	Reposition             bool    `json:"reposition"`
 	TargetPlayerKey        string  `json:"targetPlayerKey"`
@@ -57,7 +56,7 @@ func settingsOf(c *config.Config) Settings {
 	return Settings{
 		MinScale: c.MinScale, MaxScale: c.MaxScale, ScaleStep: c.ScaleStep, Threshold: c.Threshold,
 		Stride: c.Stride, Refine: c.Refine, CastKey: c.CastKey,
-		ReelMethod: c.ReelMethod, InteractKey: c.InteractKey, ESP32Port: c.ESP32Port, Background: c.Background,
+		ReelMethod: c.ReelMethod, InteractKey: c.InteractKey, ESP32Port: c.ESP32Port,
 		IdleMoves: c.IdleMoves, Reposition: c.Reposition, TargetPlayerKey: c.TargetPlayerKey,
 		MaxFailedCasts: c.MaxFailedCasts, MaxSessionMinutes: c.MaxSessionMinutes,
 		Schedule: c.Schedule, PlayMinMinutes: c.PlayMinMinutes, PlayMaxMinutes: c.PlayMaxMinutes,
@@ -78,7 +77,7 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 		}
 	}
 	castVK, castOK := action.ParseVK(s.CastKey)
-	check(castOK, "Cast key")
+	check(castOK && esp32.SupportsKey(castVK), "Cast key")
 	check(s.ReelMethod == config.ReelRightClick || s.ReelMethod == config.ReelInteractKey, "Reel method")
 	interactVK, interactOK := action.ParseVK(s.InteractKey)
 	if s.ReelMethod == config.ReelInteractKey {
@@ -98,18 +97,8 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	if err != nil {
 		return c, err
 	}
-	if port != "" {
-		if !esp32.SupportsKey(castVK) {
-			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Cast")
-		}
-		if s.ReelMethod == config.ReelInteractKey && !esp32.SupportsKey(interactVK) {
-			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Interact")
-		}
-	}
-	// config.Validate turns Background off without the Interact reel or with the ESP32.
-	if s.Background && s.ReelMethod == config.ReelInteractKey && port == "" &&
-		(isSideButton(s.CastKey) || isSideButton(s.InteractKey)) {
-		return c, errors.New("fishing in the background needs keyboard keys for Cast and Interact, not mouse buttons")
+	if s.ReelMethod == config.ReelInteractKey && !esp32.SupportsKey(interactVK) {
+		return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Interact")
 	}
 	check(slices.Contains(detect.LocatorNames(), s.Locator), "Locator")
 	check(slices.Contains(detect.BiteDetectorNames(), s.BiteDetector), "Bite detector")
@@ -125,13 +114,13 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 			s.ReelMethod == config.ReelInteractKey && sameKey(s.LogoutKey, s.InteractKey) {
 			return c, errors.New("the Logout key must differ from the Cast and Interact keys")
 		}
-		if port != "" && !esp32.SupportsKey(vk) {
+		if !esp32.SupportsKey(vk) {
 			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Logout")
 		}
 	}
 	c.MinScale, c.MaxScale, c.ScaleStep, c.Threshold = s.MinScale, s.MaxScale, s.ScaleStep, s.Threshold
 	c.Stride, c.Refine, c.CastKey = s.Stride, s.Refine, s.CastKey
-	c.ReelMethod, c.InteractKey, c.ESP32Port, c.Background = s.ReelMethod, s.InteractKey, port, s.Background
+	c.ReelMethod, c.InteractKey, c.ESP32Port = s.ReelMethod, s.InteractKey, port
 	c.MaxFailedCasts, c.MaxSessionMinutes = s.MaxFailedCasts, s.MaxSessionMinutes
 	c.IdleMoves, c.Reposition, c.TargetPlayerKey = s.IdleMoves, s.Reposition, s.TargetPlayerKey
 	c.Schedule = s.Schedule
@@ -154,10 +143,4 @@ func sameKey(a, b string) bool {
 	av, aOK := action.ParseVK(a)
 	bv, bOK := action.ParseVK(b)
 	return aOK && bOK && av == bv
-}
-
-// isSideButton reports whether key names a mouse side button, which cannot be
-// sent to a window in the background.
-func isSideButton(key string) bool {
-	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(key)), "MOUSE")
 }

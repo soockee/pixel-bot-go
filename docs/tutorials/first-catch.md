@@ -1,16 +1,17 @@
 ---
 title: "Your first catch"
-summary: "Three steps: start Go Fish, follow Set up fishing to pick your cast key and install the addon, click Start fishing. About five minutes."
+summary: "Connect the Go Fish ESP32 Probe, choose it in Settings, then set up the game and addon."
 order: 1
 ---
 
-You need a Windows PC and World of Warcraft: Forever with a character who can fish.
+You need a Windows PC, World of Warcraft: Forever with a character who can fish, and a [Go Fish ESP32 Probe](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe) with the Go Fish firmware. Pair the board in Windows Bluetooth settings and leave its USB cable plugged in. Live input always goes through this board.
 
 ## 1. Start Go Fish
 
 1. Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest) and put it in a folder of its own, for example `Documents\Go Fish`.
 2. Start the game and log in to your character.
 3. Double-click the Go Fish file. If Windows warns about an unknown app, click **More info**, then **Run anyway**.
+4. Open **Settings → ESP32 board** and choose **Auto**. If it doesn't find the board, choose its COM port.
 
 ## 2. Follow Set up fishing
 

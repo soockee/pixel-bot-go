@@ -56,6 +56,9 @@ func (a *app) beginSchedule() error {
 func (a *app) prepareSchedule() (*playSchedule, error) {
 	c := a.container
 	cfg := *c.Config
+	if !cfg.DryRun && cfg.ESP32Port == "" {
+		return nil, errors.New("select or connect the ESP32 board in Settings")
+	}
 	if err := cfg.CheckSchedule(); err != nil {
 		return nil, err
 	}
@@ -68,7 +71,7 @@ func (a *app) prepareSchedule() (*playSchedule, error) {
 			return nil, errors.New("the Logout key must differ from the other Go Fish keys")
 		}
 	}
-	if cfg.ESP32Port != "" && !esp32.SupportsKey(key) {
+	if !esp32.SupportsKey(key) {
 		return nil, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Logout")
 	}
 	return &playSchedule{logout: key, screen: a.scheduleScreen, tap: a.tapScheduledKey}, nil
@@ -185,7 +188,7 @@ func (a *app) tickSchedule(now time.Time) {
 
 func (a *app) scheduleScreen(wantWorld bool) bool {
 	c := a.container
-	if a.scheduleStop.Load() || !c.canAct() || c.startProblem() != "" {
+	if a.scheduleStop.Load() || !c.gameFocused() || c.startProblem() != "" {
 		return false
 	}
 	area := c.gameArea()
@@ -221,7 +224,10 @@ func (a *app) tapScheduledKey(vk byte, wantWorld bool) (bool, error) {
 	// Open the serial port before rechecking the screen. A handshake can outlast
 	// the frame that caused this attempt, and a focus change cancels dispatch.
 	var keyboard esp32.Keyboard
-	if !c.Config.DryRun && c.Config.ESP32Port != "" {
+	if !c.Config.DryRun {
+		if c.Config.ESP32Port == "" {
+			return false, errors.New("select or connect the ESP32 board in Settings")
+		}
 		port, err := esp32.PortName(c.Config.ESP32Port)
 		if err == nil {
 			err = keyboard.Open(port)
@@ -234,26 +240,16 @@ func (a *app) tapScheduledKey(vk byte, wantWorld bool) (bool, error) {
 		}
 		defer keyboard.Close()
 	}
-	if !a.scheduleScreen(wantWorld) || !c.canAct() || a.scheduleStop.Load() {
+	if !a.scheduleScreen(wantWorld) || !c.gameFocused() || a.scheduleStop.Load() {
 		return false, nil
 	}
 	switch {
 	case c.Config.DryRun:
 		a.logger.Info("dry-run scheduled key", "vk", vk)
-	case c.Config.ESP32Port != "":
-		if !c.gameFocused() || a.scheduleStop.Load() {
-			return false, nil
-		}
+	default:
 		if err := keyboard.Press(vk, 0); err != nil {
 			return false, err
 		}
-	default:
-		release := c.beginKeyHold(vk)
-		if release == nil {
-			return false, errors.New("the game key press was blocked")
-		}
-		time.Sleep(40 * time.Millisecond)
-		release()
 	}
 	return true, nil
 }
@@ -261,13 +257,4 @@ func (a *app) tapScheduledKey(vk byte, wantWorld bool) (bool, error) {
 func (c *AppContainer) gameFocused() bool {
 	target := c.gameWindow.Load()
 	return target != nil && target.Focused()
-}
-
-// canAct gates keys and the run itself: the game in front, or in a background
-// run open and not minimized. The pointer always needs gameFocused.
-func (c *AppContainer) canAct() bool {
-	if c.background.Load() {
-		return c.gameArea() != nil
-	}
-	return c.gameFocused()
 }

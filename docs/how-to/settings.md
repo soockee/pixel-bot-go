@@ -14,17 +14,9 @@ Open the **Settings** tab. Every change saves at once. Settings are locked while
 
 ## ESP32 board
 
-If you have an ESP32 board with the [Go Fish firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe), Go Fish can press keys and click through it instead of through Windows. Pair **Go Fish ESP32 Probe** in the Windows Bluetooth settings, keep its USB cable plugged in, and pick **Auto** under **ESP32 board**. If it isn't found, pick its COM port instead, for example `COM3`. Pick **Off** to go back.
+Live fishing requires an ESP32 board with the [Go Fish firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe). Pair **Go Fish ESP32 Probe** in Windows Bluetooth settings, keep its USB cable plugged in, and choose **Auto** under **ESP32 board**. If Auto doesn't find it, choose its COM port, for example `COM3`. Without the board, Go Fish won't start a live run. Dry-run mode still works without it.
 
-## Fish in the background
-
-Go Fish can keep fishing while you use other windows, for example after you Alt-Tab to your browser.
-
-1. Choose **Interact key** as the **Reel method**, with a keyboard key, not a mouse button, for Cast and Interact. Leave **ESP32 board** on **Off**.
-2. Under **Input**, switch on **Fish in the background**.
-3. In WoW, open **Options → Sound** and turn on **Sound in Background**, so Go Fish still hears the bite.
-
-Go Fish then sends its keys straight to the game and reads the game window even when other windows cover it. Don't minimize the game: it waits on **Focus** until you bring the game back. It never moves your mouse in this mode, so **Move the mouse** does nothing.
+Go Fish sends every live key, click and cursor move through the board while the game is in front. It does not send input to a game in the background.
 
 ## Scheduled breaks
 
@@ -32,7 +24,7 @@ Go Fish then sends its keys straight to the game and reads the game window even 
 2. Click **Update addon** on the Fishing tab and type `/reload` in the game. The addon makes a **Logout** macro and puts it on that key.
 3. Click **Start fishing** while logged in to your character, with the game in front.
 
-Each session and each break gets a new random length. At the end of a break Go Fish presses Enter to log back in and fishes on. Keep the game in front while it switches, unless **Fish in the background** is on. If it can't tell where you are within 90 seconds, it gives up. Click **Stop** in Go Fish to end the whole schedule.
+Each session and each break gets a new random length. At the end of a break Go Fish presses Enter to log back in and fishes on. Keep the game in front while it switches. If it can't tell where you are within 90 seconds, it gives up. Click **Stop** in Go Fish to end the whole schedule.
 
 ## Run
 

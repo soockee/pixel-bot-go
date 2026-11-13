@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -103,7 +104,7 @@ func TestLoadInvalidJSONReturnsError(t *testing.T) {
 
 func TestLoadKeepsDefaultsAndClampsValues(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "partial.json")
-	if err := os.WriteFile(path, []byte(`{"roi_size_px": 1000}`), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(`{"roi_size_px": 1000, "background": true}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got, err := Load(path)
@@ -115,6 +116,16 @@ func TestLoadKeepsDefaultsAndClampsValues(t *testing.T) {
 	}
 	if got.Threshold != DefaultConfig().Threshold {
 		t.Errorf("Threshold = %v, want the default", got.Threshold)
+	}
+	if err := got.Save(path); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(data, []byte(`"background"`)) {
+		t.Error("saved the retired background setting")
 	}
 }
 

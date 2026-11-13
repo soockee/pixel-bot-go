@@ -8,6 +8,8 @@ order: 2
 
 Everything about your fishing. The pictures Go Fish looks at, the sound it listens to, your casts and catches never leave your PC. Go Fish has no account and no sign-in. A problem report you choose to submit carries your settings and recent warnings, as below.
 
+For live fishing, Go Fish sends key and mouse commands over USB to your ESP32. The board sends those inputs back to your PC over Bluetooth.
+
 ## What it sends
 
 | To | When | What |

@@ -11,8 +11,7 @@ order: 1
 | Reel method | Right click | Right-click the marked bobber, or press your Interact key without moving the cursor. |
 | Interact key | Unset | Set this to match **Interact With Target** in WoW before choosing the Interact reel method. It must differ from the Cast key. |
 | **Input** | | |
-| ESP32 board | Off | **Auto**, or the board's COM port such as `COM3`, to press keys and click through an ESP32 board. See [Change keys and limits](../how-to/settings.md#esp32-board). |
-| Fish in the background | Off | Shown with the Interact reel method and no ESP32 board: Go Fish keeps fishing while you use other windows. The game must stay open, not minimized. See [Change keys and limits](../how-to/settings.md#fish-in-the-background). |
+| ESP32 board | Choose a board | Required for live fishing. Choose **Auto** to find the board or select its COM port, such as `COM3`. See [ESP32 setup](../how-to/settings.md#esp32-board). |
 | **Run** | | |
 | Session length | 60 min | Go Fish stops at the first cast after this time. 5 to 240 minutes. |
 | Casts without a bite | 5 | Go Fish stops after this many casts in a row without a catch. 1 to 20. |
@@ -31,9 +30,9 @@ order: 1
 | Theme | Graphite | The window's look, words, icon and catch sound: Graphite, Tavern Ledger, Arcane Grimoire, Frostwater, Felfire Forge or Tidecaller. |
 | Theme sounds | on | Plays the theme's sound on each catch. Kept on this computer only. |
 
-With **Change spot** on, Go Fish moves after 45 to 55 catches. When Go Fish
-owns the cursor (the Right click reel method, or any method with an ESP32), it
-may turn the camera with a short mouse drag instead of a step. If no bobber
+With **Change spot** on, Go Fish moves after 45 to 55 catches. If the board
+supports camera drags and the pointer is inside the game window, Go Fish may
+turn the camera with a short mouse drag instead of a step. If no bobber
 appears after the first move, it tries three to five more times. If it still
 cannot fish, it stops and logs out. Scheduled play does not resume after that.
 

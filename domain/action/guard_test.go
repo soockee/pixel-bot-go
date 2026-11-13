@@ -22,7 +22,6 @@ func newGuardFixture() *guardFixture {
 	f.Guard = Guard{
 		Logger:     slog.New(slog.DiscardHandler),
 		InFront:    func() bool { return f.inFront },
-		CanPress:   func() bool { return f.inFront },
 		Area:       func() *image.Rectangle { return f.area },
 		CursorPos:  func() (int, int, bool) { return f.cursor.X, f.cursor.Y, true },
 		OnTakeover: func() { f.takeovers++ },
@@ -167,18 +166,19 @@ func TestCameraDragRequiresRoomAndFocus(t *testing.T) {
 	}
 }
 
-func TestGuardSendsKeysButNotThePointerInABackgroundRun(t *testing.T) {
+func TestGuardRequiresFocusForKeyHold(t *testing.T) {
 	f := newGuardFixture()
-	f.inFront = false
-	f.CanPress = func() bool { return true }
 	f.BeginKeyHold = func(byte) func() { f.sent = append(f.sent, "hold"); return func() {} }
-	f.PressKey(1)
 	if release := f.HoldKey(1); release == nil {
-		t.Error("HoldKey refused a background key")
+		t.Fatal("HoldKey refused a focused window")
+	} else {
+		release()
 	}
-	f.MoveCursor(150, 150)
-	f.ClickRight()
-	if want := []string{"press", "hold"}; !slices.Equal(f.sent, want) {
+	f.inFront = false
+	if f.HoldKey(1) != nil {
+		t.Error("HoldKey accepted an unfocused window")
+	}
+	if want := []string{"hold"}; !slices.Equal(f.sent, want) {
 		t.Errorf("sent = %v, want %v", f.sent, want)
 	}
 }

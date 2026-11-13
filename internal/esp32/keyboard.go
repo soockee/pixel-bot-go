@@ -234,6 +234,13 @@ func (k *Keyboard) PrepareButtons() error {
 	return k.prepareCapability("BUTTONS", &k.buttons)
 }
 
+// CanPressButtons reports whether the open port supports mouse side buttons.
+func (k *Keyboard) CanPressButtons() bool {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return k.buttons
+}
+
 // PressButton holds Mouse 4 or Mouse 5 for hold, 40 ms when it is zero, with
 // the same failure contract as Tap.
 func (k *Keyboard) PressButton(vk byte, hold time.Duration) error {

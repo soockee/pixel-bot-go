@@ -35,8 +35,7 @@ const groups: { title: string; show?: "debug"; fields: Field[] }[] = [
   {
     title: "Input",
     fields: [
-      { key: "esp32Port", label: "ESP32 board", hint: "Send every key, click and cursor move through the paired board. Auto finds it on its USB cable. Off uses Windows input.", kind: "port" },
-      { key: "background", label: "Fish in the background", hint: "Keep fishing while you use other windows. Don't minimize WoW, and turn on Sound in Background in its sound settings.", kind: "switch", when: (v) => v.reelMethod === "interact_key" && !v.esp32Port },
+      { key: "esp32Port", label: "ESP32 board", hint: "Required for live input. Connect the paired Go Fish ESP32 Probe over USB, or choose its COM port.", kind: "port" },
     ],
   },
   {
@@ -317,7 +316,7 @@ export function setupSettings() {
     let value = "";
     async function load() {
       const ports = (await Service.ESP32Ports()) ?? [];
-      select.replaceChildren(new Option("Off, use Windows input", ""), new Option("Auto, find the board", "AUTO"), ...ports.map((p) => new Option(p, p)));
+      select.replaceChildren(new Option("Choose a board", ""), new Option("Auto, find the board", "AUTO"), ...ports.map((p) => new Option(p, p)));
       select.value = value;
     }
     select.addEventListener("mousedown", () => void load());
