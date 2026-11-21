@@ -52,6 +52,21 @@ $("update").addEventListener("click", () => void Service.Update().catch(() => un
 for (const id of ["support-link", "support-updates"]) $(id).addEventListener("click", () => void Service.OpenSupport());
 // Opens a filled-in GitHub issue in the browser; the person submits it there.
 $("report-problem").addEventListener("click", () => void Service.ReportProblem());
+// Go writes the file and shows it in File Explorer; this only shows where, or what failed.
+const saveReport = $<HTMLButtonElement>("save-report");
+saveReport.addEventListener("click", async () => {
+  const detail = $("report-detail");
+  saveReport.disabled = true;
+  detail.classList.remove("bad");
+  try {
+    detail.textContent = `Saved ${await Service.SaveReport()}`;
+  } catch (e) {
+    detail.classList.add("bad");
+    detail.textContent = String(e).replace(/^Error: /, "");
+  } finally {
+    saveReport.disabled = false;
+  }
+});
 
 const live = setupLive();
 const moveOverlay = setupMoveOverlay();

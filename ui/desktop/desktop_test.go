@@ -98,19 +98,6 @@ func TestLogoutKeySettings(t *testing.T) {
 	}
 }
 
-func TestTargetPlayerKeySettings(t *testing.T) {
-	base := config.DefaultConfig()
-	values := settingsOf(base)
-	values.TargetPlayerKey = "Ctrl"
-	if _, err := values.apply(*base); err == nil {
-		t.Error("a Target passing player key the board cannot press was accepted")
-	}
-	values.TargetPlayerKey = "F11"
-	if got, err := values.apply(*base); err != nil || got.TargetPlayerKey != "F11" {
-		t.Fatalf("Target passing player F11 = %+v, %v", got, err)
-	}
-}
-
 func TestESP32PortSettings(t *testing.T) {
 	base := config.DefaultConfig()
 	values := settingsOf(base)

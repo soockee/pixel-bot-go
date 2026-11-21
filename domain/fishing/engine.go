@@ -139,7 +139,7 @@ func (e *Engine) Start() error {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel, e.done = cancel, make(chan struct{})
-	r := &run{engine: e, locator: locator, bite: bite, interact: cfg.ReelMethod == config.ReelInteractKey, watchPlayer: cfg.TargetPlayerKey != ""}
+	r := &run{engine: e, locator: locator, bite: bite, interact: cfg.ReelMethod == config.ReelInteractKey}
 	r.listener, _ = bite.(detect.SoundBiteDetector)
 	go r.loop(ctx, e.done, closeKeyboard)
 	return nil
@@ -174,16 +174,13 @@ type run struct {
 	searches     int
 	monitoring   bool
 	// The watched frames of the current cast, logged when it ends.
-	watchFrames            int
-	watchFrom, lastSeen    time.Time
-	longestGap             time.Duration
-	interact               bool
-	lastErr                string
-	watchPlayer            bool
-	playerPoll             time.Time
-	playerSeen, playerSent uint8
-	outcomePoll            time.Time
-	outcomes               outcomes
+	watchFrames         int
+	watchFrom, lastSeen time.Time
+	longestGap          time.Duration
+	interact            bool
+	lastErr             string
+	outcomePoll         time.Time
+	outcomes            outcomes
 }
 
 func (r *run) loop(ctx context.Context, done chan<- struct{}, closeKeyboard func()) {
@@ -302,9 +299,6 @@ func (r *run) step() {
 		return
 	}
 	roi := r.monitor(frame)
-	if r.watchPlayer && e.fsm.Current() == StateMonitoring {
-		r.pollPlayer(window)
-	}
 	e.preview.Store(&Preview{
 		Frame: r.window.Image, ROI: roi, ROIBox: r.target.Sub(r.window.Origin),
 		Scene: frame.Image, SceneBox: area.Sub(r.window.Origin),

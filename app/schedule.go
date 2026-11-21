@@ -66,7 +66,7 @@ func (a *app) prepareSchedule() (*playSchedule, error) {
 	if !ok {
 		return nil, errors.New("set the Logout key under Settings, Scheduled breaks")
 	}
-	for _, other := range []string{cfg.CastKey, cfg.InteractKey, cfg.TargetPlayerKey} {
+	for _, other := range []string{cfg.CastKey, cfg.InteractKey} {
 		if vk, ok := action.ParseVK(other); ok && key == vk {
 			return nil, errors.New("the Logout key must differ from the other Go Fish keys")
 		}

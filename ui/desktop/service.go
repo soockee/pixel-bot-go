@@ -27,6 +27,9 @@ type Commands struct {
 	ReleaseNotes func()
 	// ReportProblem opens a new GitHub issue, filled in, in the browser.
 	ReportProblem func()
+	// SaveReport writes the logs, settings and report details into one file,
+	// shows it in File Explorer and returns its path.
+	SaveReport func() (string, error)
 	// OpenURL opens a page in the browser.
 	OpenURL      func(url string)
 	CheckAddon   func()
@@ -39,6 +42,11 @@ type Commands struct {
 	// port for esp32.AutoPort, and returns the port that answered. It runs on
 	// the caller's goroutine, as the handshake takes a while, and sends no input.
 	FindBoard func(port string) (string, error)
+	// TestBoard checks the board on port end to end, USB and Bluetooth, and
+	// returns a line for the person or what failed. Like FindBoard it runs on
+	// the caller's goroutine; its only input is a key and a one-count pointer
+	// move that no window gets.
+	TestBoard func(port string) (string, error)
 }
 
 // Service is what the frontend calls. Every method runs on the UI loop, so
@@ -210,6 +218,15 @@ func (s *Service) ReleaseNotes() { _ = s.do(s.cmds.ReleaseNotes) }
 // with the version, Windows and app details filled in.
 func (s *Service) ReportProblem() { _ = s.do(s.cmds.ReportProblem) }
 
+// SaveReport saves a report file, for a bug report where the log was asked
+// for, shows it in File Explorer and returns its path. Nothing is sent.
+func (s *Service) SaveReport() (path string, err error) {
+	if doErr := s.do(func() { path, err = s.cmds.SaveReport() }); doErr != nil {
+		return "", doErr
+	}
+	return path, err
+}
+
 // ChooseKeys confirms the saved game keys in setup, so the addon step comes next.
 func (s *Service) ChooseKeys() { _ = s.do(s.view.SetKeysChosen) }
 
@@ -236,6 +253,32 @@ func (s *Service) FindBoard() (found string, err error) {
 	}
 	_ = s.do(func() { s.view.SetBoardFound(found) })
 	return found, nil
+}
+
+// TestBoard checks the board on port, or on the saved one when port is "",
+// over USB and Bluetooth into Windows, and returns what it measured. A run
+// holds the port, so it refuses during one.
+func (s *Service) TestBoard(port string) (line string, err error) {
+	if doErr := s.do(func() {
+		switch {
+		case s.cmds.Running():
+			err = errors.New("stop the run to test the board")
+		case port == "" && s.cfg.ESP32Port != "":
+			port = s.cfg.ESP32Port
+		case port == "":
+			port = esp32.AutoPort
+		}
+	}); doErr != nil {
+		return "", doErr
+	}
+	if err != nil {
+		return "", err
+	}
+	if line, err = s.cmds.TestBoard(port); err != nil {
+		return "", err
+	}
+	_ = s.do(func() { s.view.SetBoardTest(line) })
+	return line, nil
 }
 
 // CheckAddon looks whether the Bobber Marker addon is installed and current.

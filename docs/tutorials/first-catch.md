@@ -17,8 +17,8 @@ You need a Windows PC, World of Warcraft: Forever with a character who can fish,
 The first time, Go Fish opens on **Set up fishing**, which walks you through what is missing.
 
 1. **Game window** ticks itself when Go Fish finds the game. If it doesn't, click **Check again**.
-2. **ESP32 board**: click **Find the board**. If it isn't found, check the USB cable and the Bluetooth pairing, or choose its COM port.
-3. **Game keys**: Go Fish suggests **F9** to cast, and **F10**, **F11** and **F12** for the other keys it needs, because WoW leaves them free. Keep them, or click a key and press another spare one. Click **Use these keys**.
+2. **ESP32 board**: click **Find and test the board**. Go Fish finds the board, checks it answers over USB, and checks that a test key from the board reaches Windows over Bluetooth. It catches that key itself, so the game never sees it. If the test fails, the message says what to fix: the USB cable, or pairing the board again in Bluetooth settings.
+3. **Game keys**: Go Fish suggests **F9** to cast, and **F10** and **F12** for the other keys it needs, because WoW leaves them free. Keep them, or click a key and press another spare one. Click **Use these keys**.
 4. **Bobber Marker addon**: click **Install addon**, then type `/reload` in the game's chat and press Enter.
 
 Then the picture of the game appears and you are ready. You don't bind anything in the game yourself: the addon binds your keys. If something goes wrong here, see [Install the addon](../how-to/install-addon.md).

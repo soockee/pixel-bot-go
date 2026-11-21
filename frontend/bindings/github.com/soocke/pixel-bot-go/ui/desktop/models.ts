@@ -47,7 +47,6 @@ export interface Settings {
     "esp32Port": string;
     "idleMoves": boolean;
     "reposition": boolean;
-    "targetPlayerKey": string;
     "maxFailedCasts": number;
     "maxSessionMinutes": number;
     "schedule": boolean;
@@ -264,6 +263,11 @@ export interface State {
      * the port setup found the board on this session, or ""
      */
     "boardFound": string;
+
+    /**
+     * what the last passed board test measured this session, or ""
+     */
+    "boardTest": string;
 
     /**
      * what the bot still needs, see setupSteps

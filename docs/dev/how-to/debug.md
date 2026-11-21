@@ -6,7 +6,7 @@ order: 6
 
 ## Enable Debug Mode
 
-Set `"debug": true` in `pixle_bot_config.json` then start the app. Visit `http://localhost:6060/debug/pprof/` for profiles. Disable via `"debug": false`.
+Set `"debug": true` in `pixle_bot_config.json` then start the app. Visit `http://localhost:6060/debug/pprof/` for profiles. Disable via `"debug": false`. Debug mode switches on the developer tools (pprof, `/debug/state`, DevTools, the Recorder tab and the detection settings); the log holds the Debug lines, such as `splash seen` and `detection.search`, in every mode.
 
 ## Observability & Metrics
 

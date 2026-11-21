@@ -14,7 +14,7 @@ Open the **Settings** tab. Every change saves at once. Settings are locked while
 
 ## ESP32 board
 
-Live fishing requires an ESP32 board with the [Go Fish firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe). Pair **Go Fish ESP32 Probe** in Windows Bluetooth settings, keep its USB cable plugged in, and choose **Auto** under **ESP32 board**. If Auto doesn't find it, choose its COM port, for example `COM3`. Without the board, Go Fish won't start a live run. Dry-run mode still works without it.
+Live fishing requires an ESP32 board with the [Go Fish firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe). Pair **Go Fish ESP32 Probe** in Windows Bluetooth settings, keep its USB cable plugged in, and choose **Auto** under **ESP32 board**. If Auto doesn't find it, choose its COM port, for example `COM3`. Click **Test** next to it to check the board: it should answer every check over USB, and its test key, and its pointer on firmware that moves the pointer, should reach Windows over Bluetooth. Go Fish catches the test key, so no window gets it; the pointer moves by one pixel and back. Without the board, Go Fish won't start a live run. Dry-run mode still works without it.
 
 Go Fish sends every live key, click and cursor move through the board while the game is in front. It does not send input to a game in the background.
 

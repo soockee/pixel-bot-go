@@ -11,7 +11,7 @@ order: 1
 | Reel method | Right click | Right-click the marked bobber, or press your Interact key without moving the cursor. |
 | Interact key | F10 | A spare key for the Interact reel method. Bobber Marker binds it to **Interact With Target** in WoW. It must differ from the Cast key. |
 | **Input** | | |
-| ESP32 board | Choose a board | Required for live fishing. Choose **Auto** to find the board or select its COM port, such as `COM3`. See [ESP32 setup](../how-to/settings.md#esp32-board). |
+| ESP32 board | Choose a board | Required for live fishing. Choose **Auto** to find the board or select its COM port, such as `COM3`. **Test** checks it over USB and Bluetooth. See [ESP32 setup](../how-to/settings.md#esp32-board). |
 | **Run** | | |
 | Session length | 60 min | Go Fish stops at the first cast after this time. 5 to 240 minutes. |
 | Casts without a bite | 5 | Go Fish stops after this many casts in a row without a catch. 1 to 20. |
@@ -20,7 +20,6 @@ order: 1
 | **Between catches** | | |
 | Move the mouse | Off | Now and then after a catch, the cursor drifts a little along a curved path, or the camera turns slightly. |
 | Change spot | Off | Every 45 to 55 catches, Go Fish takes a step with W, A, S or D, or turns the camera, and checks the next cast. Needs the Logout key, to log out if it gets stuck. |
-| Target passing player | Off | Optional. A spare key, F11 suggested, Bobber Marker binds to select a friendly player who walks past while you fish. |
 | **Scheduled breaks** | | |
 | Take breaks | Off | Alternates random fishing sessions with logged-out breaks after Start. |
 | Shortest / longest session | 20 / 45 min | Shown with breaks on: the range for each fishing session. |
@@ -35,10 +34,5 @@ supports camera drags and the pointer is inside the game window, Go Fish may
 turn the camera with a short mouse drag instead of a step. If no bobber
 appears after the first move, it tries three to five more times. If it still
 cannot fish, it stops and logs out. Scheduled play does not resume after that.
-
-To use **Target passing player**, click it and press a spare key, update
-Bobber Marker, and type `/reload` in the game. The addon turns on friendly soft
-targeting and watches for a friendly player in range while you fish. Click
-**Clear**, update Bobber Marker and reload to turn it off again.
 
 To go back to all the defaults, close Go Fish and delete `pixle_bot_config.json` next to it.

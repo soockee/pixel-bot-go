@@ -108,9 +108,6 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 				return nil, err
 			}
 			keys := []string{run.CastKey}
-			if run.TargetPlayerKey != "" {
-				keys = append(keys, run.TargetPlayerKey)
-			}
 			if run.Schedule || run.Reposition {
 				keys = append(keys, run.LogoutKey)
 			}
@@ -164,7 +161,15 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			if run.IdleMoves && !keyboard.CanPoint() {
 				return nil, errors.New("flash the current ESP32 firmware to move the pointer")
 			}
-			logger.Info("ESP32 keyboard ready", "port", keyboard.Name(), "camera", keyboard.CanDragCamera(), "pointer", keyboard.CanPoint())
+			// Only what this run asked the board: a capability it never asked reads false.
+			ready := []any{"port", keyboard.Name(), "buttons", keyboard.CanPressButtons()}
+			if run.Reposition || run.IdleMoves {
+				ready = append(ready, "camera", keyboard.CanDragCamera())
+			}
+			if run.ReelMethod != config.ReelInteractKey || run.IdleMoves {
+				ready = append(ready, "pointer", keyboard.CanPoint())
+			}
+			logger.Info("ESP32 keyboard ready", ready...)
 			keepOpen = true
 			return keyboard.Close, nil
 		}
