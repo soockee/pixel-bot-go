@@ -18,7 +18,7 @@ Go Fish updates itself: it checks GitHub at start and every hour, and **Update t
 ## What it does
 
 * Finds the bobber by the magenta brackets the Bobber Marker addon draws, then watches only that box at 30 fps.
-* Detects a bite from the splash at your bobber and the bite sound that follows it, and still works with the game's sound effects off.
+* Detects a bite from the splash at your bobber and the bite sound that follows it. Keep the game's sound effects on: with them off, the first three bites of each run get away before it reels on the splash alone.
 * Runs a state machine: cast, search, watch, reel, pause, and stops after a session limit or too many casts without a bite.
 * Stops when you click **Stop** in Go Fish.
 * Dry-run mode logs intended key presses, clicks and cursor moves. It works without an ESP32.

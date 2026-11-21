@@ -298,8 +298,8 @@ func (f *FishingFSM) wake() {
 		point := f.cursorSteps[n-1].Point
 		f.cursorSteps = f.cursorSteps[n:]
 		// Skip elapsed intermediate points instead of sending a burst.
-		if !f.actions.Cursor.Move(point) {
-			f.why("the pointer was moved away, or the game was not in front")
+		if err := f.actions.Cursor.Move(point); err != nil {
+			f.why(err.Error())
 			f.halt()
 			return
 		}
@@ -491,6 +491,11 @@ func (f *FishingFSM) transition(next FishingState) {
 		l(prev, next)
 	}
 	switch next {
+	case StateWaitingFocus:
+		// The person may use the mouse while the game is not in front; that is no takeover.
+		if f.actions.Cursor != nil {
+			f.actions.Cursor.Reset()
+		}
 	case StateSearching:
 		f.arm(searchTimeout)
 	case StateCasting:

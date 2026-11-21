@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -84,7 +85,7 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 			c.RecordPresenter.Toggle()
 		},
 		Running:       func() bool { return c.Capture.Enabled() || a.schedule != nil },
-		Exit:          func() { go a.wails.Quit() }, // Quit waits for the loop, which runs this
+		Exit:          a.quit,
 		Update:        a.installUpdate,
 		CheckUpdate:   a.findUpdate,
 		ReleaseNotes:  a.releaseNotes,
@@ -118,7 +119,7 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		BackgroundColour: application.NewRGB(0x12, 0x13, 0x14), URL: "/", Hidden: true,
 	})
 	a.overlay = a.newOverlay()
-	a.main.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { go a.wails.Quit() })
+	a.main.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { a.quit() })
 	// The native window exists only once the app runs, so it is placed then.
 	a.wails.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
 		if b, ok := action.ScreenBounds(cfg.Screen); ok {
@@ -217,6 +218,22 @@ func (a *app) tick() {
 }
 
 // shutdown stops recording and capture before the app exits.
+// quitLimit is how long quitting may take before the process exits anyway.
+const quitLimit = 5 * time.Second
+
+// quit closes the app. Wails runs shutdown on the main thread, which waits for
+// the run and the loop, so anything they wait on in turn would keep the
+// process alive with no window. After quitLimit it logs every goroutine, to
+// show what hung, and exits.
+func (a *app) quit() {
+	time.AfterFunc(quitLimit, func() {
+		buf := make([]byte, 1<<20)
+		a.logger.Error("quit hung; exiting", "goroutines", string(buf[:runtime.Stack(buf, true)]))
+		os.Exit(1)
+	})
+	go a.wails.Quit() // Quit waits for the loop, which may run this
+}
+
 func (a *app) shutdown() {
 	a.scheduleStop.Store(true)
 	a.container.FSM.Close()

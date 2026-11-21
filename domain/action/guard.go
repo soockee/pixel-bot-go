@@ -1,6 +1,7 @@
 package action
 
 import (
+	"errors"
 	"image"
 	"log/slog"
 )
@@ -14,7 +15,7 @@ type Guard struct {
 	CursorPos  func() (x, y int, ok bool) // where the pointer is now
 	OnTakeover func()                     // the user moved the pointer
 	Press      func(vk byte) bool         // input that is sent when allowed
-	Move       func(x, y int) bool        //
+	Move       func(x, y int) error       //
 	Click      func() bool                //
 	target     image.Point                // where the last Move left the pointer
 	hasTarget  bool
@@ -31,25 +32,28 @@ func (g *Guard) PressKey(vk byte) bool {
 
 // MoveCursor moves the pointer to a point inside the capture area.
 func (g *Guard) MoveCursor(x, y int) {
-	g.TryMoveCursor(image.Pt(x, y))
+	_ = g.TryMoveCursor(image.Pt(x, y))
 }
 
-// TryMoveCursor reports whether the guard and Windows accepted a waypoint.
-func (g *Guard) TryMoveCursor(p image.Point) bool {
+// TryMoveCursor moves the pointer to a waypoint, or says why it did not.
+func (g *Guard) TryMoveCursor(p image.Point) error {
 	if g.userMoved() {
-		return false
+		return errors.New("the mouse was moved")
 	}
 	g.hasTarget = false
-	area := g.Area()
-	if !g.InFront() || area == nil || !p.In(*area) {
-		g.Logger.Warn("input dropped: move outside the capture area or window not in front", "x", p.X, "y", p.Y)
-		return false
+	if !g.InFront() {
+		g.Logger.Warn("input dropped: window not in front", "x", p.X, "y", p.Y)
+		return errors.New("the game was not in front")
 	}
-	if !g.Move(p.X, p.Y) {
-		return false
+	if area := g.Area(); area == nil || !p.In(*area) {
+		g.Logger.Warn("input dropped: move outside the capture area", "x", p.X, "y", p.Y)
+		return errors.New("the pointer path left the game window")
+	}
+	if err := g.Move(p.X, p.Y); err != nil {
+		return err
 	}
 	g.target, g.hasTarget = p, true
-	return true
+	return nil
 }
 
 // ResetCursor gives up the previous run's pointer ownership.

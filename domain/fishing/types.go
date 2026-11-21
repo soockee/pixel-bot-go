@@ -88,7 +88,7 @@ type CursorStep struct {
 // or Move means the app cannot safely take control of the pointer.
 type CursorCallbacks struct {
 	Plan  func(target image.Point, settle bool) ([]CursorStep, bool)
-	Move  func(image.Point) bool
+	Move  func(image.Point) error // nil, or why the pointer did not get there
 	Reset func()
 }
 

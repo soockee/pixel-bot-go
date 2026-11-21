@@ -25,8 +25,9 @@ Then the picture of the game appears and you are ready. You don't bind anything 
 
 ## 3. Fish
 
-1. In the game, stand at the water and face it.
-2. In Go Fish, click **Start fishing**, then click into the game.
+1. In the game, turn on **Auto Loot** (Interface options, **Controls**). Go Fish only reels in; without Auto Loot the fish stays in the loot window.
+2. Stand at the water and face it.
+3. In Go Fish, click **Start fishing**, then click into the game.
 
 Go Fish casts, waits for the splash, reels in and casts again. The Fishing tab counts your catches.
 
