@@ -11,7 +11,7 @@ order: 1
 | Reel method | Right click | Right-click the marked bobber, or press your Interact key without moving the cursor. |
 | Interact key | F10 | A spare key for the Interact reel method. Bobber Marker binds it to **Interact With Target** in WoW. It must differ from the Cast key. |
 | **Input** | | |
-| ESP32 board | Choose a board | Required for live fishing. Choose **Auto** to find the board or select its COM port, such as `COM3`. See [ESP32 setup](../how-to/settings.md#esp32-board). |
+| ESP32 board | Choose a board | Required for live fishing. Choose **Auto** to find the board or select its COM port, such as `COM3`. **Test** checks it over USB and Bluetooth. See [ESP32 setup](../how-to/settings.md#esp32-board). |
 | **Run** | | |
 | Session length | 60 min | Go Fish stops at the first cast after this time. 5 to 240 minutes. |
 | Casts without a bite | 5 | Go Fish stops after this many casts in a row without a catch. 1 to 20. |

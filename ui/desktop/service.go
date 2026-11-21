@@ -39,6 +39,11 @@ type Commands struct {
 	// port for esp32.AutoPort, and returns the port that answered. It runs on
 	// the caller's goroutine, as the handshake takes a while, and sends no input.
 	FindBoard func(port string) (string, error)
+	// TestBoard checks the board on port end to end, USB and Bluetooth, and
+	// returns a line for the person or what failed. Like FindBoard it runs on
+	// the caller's goroutine; its only input is a key and a one-count pointer
+	// move that no window gets.
+	TestBoard func(port string) (string, error)
 }
 
 // Service is what the frontend calls. Every method runs on the UI loop, so
@@ -234,6 +239,32 @@ func (s *Service) FindBoard() (found string, err error) {
 	}
 	_ = s.do(func() { s.view.SetBoardFound(found) })
 	return found, nil
+}
+
+// TestBoard checks the board on port, or on the saved one when port is "",
+// over USB and Bluetooth into Windows, and returns what it measured. A run
+// holds the port, so it refuses during one.
+func (s *Service) TestBoard(port string) (line string, err error) {
+	if doErr := s.do(func() {
+		switch {
+		case s.cmds.Running():
+			err = errors.New("stop the run to test the board")
+		case port == "" && s.cfg.ESP32Port != "":
+			port = s.cfg.ESP32Port
+		case port == "":
+			port = esp32.AutoPort
+		}
+	}); doErr != nil {
+		return "", doErr
+	}
+	if err != nil {
+		return "", err
+	}
+	if line, err = s.cmds.TestBoard(port); err != nil {
+		return "", err
+	}
+	_ = s.do(func() { s.view.SetBoardTest(line) })
+	return line, nil
 }
 
 // CheckAddon looks whether the Bobber Marker addon is installed and current.

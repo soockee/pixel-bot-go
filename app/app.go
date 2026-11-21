@@ -95,6 +95,7 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		InstallAddon:  a.installAddon,
 		MoveOverlay:   a.setOverlayMove,
 		FindBoard:     findBoard,
+		TestBoard:     testBoard,
 		SetTheme:      a.setTheme,
 	}, c.Recordings, cfg, config.FilePath, logger)
 

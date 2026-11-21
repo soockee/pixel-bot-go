@@ -560,6 +560,10 @@ main { min-height: 0; overflow: hidden; }
 .row:first-of-type { border-top: 0; }
 .row .hint { display: block; color: var(--text-3); font-size: 12px; }
 .row .control { display: flex; justify-content: flex-end; }
+.port-control { display: flex; gap: 8px; width: 100%; }
+.port-control select { flex: 1; min-width: 0; }
+.row .port-result { grid-column: 1 / -1; margin: 0; }
+.row .port-result.bad { color: var(--bad); }
 
 .settings-status { color: var(--text-3); font-size: 12px; min-height: 18px; }
 

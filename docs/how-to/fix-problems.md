@@ -35,6 +35,7 @@ Go Fish sends live input through the ESP32 to the window in front. Click into th
 ## Nothing happens in the game
 
 - Check that the Go Fish ESP32 Probe is paired in Windows Bluetooth settings, plugged in over USB, and selected under **Settings → ESP32 board**. If **Auto** doesn't find it, choose its COM port.
+- Click **Test** next to **Settings → ESP32 board**. If checks over USB go missing, try another cable or USB port. If the board answers over USB but its key or pointer does not reach Windows, remove **Go Fish ESP32 Probe** in Bluetooth settings and pair it again.
 - Check that the board has the current Go Fish firmware and that no other program has its COM port open.
 - If you changed a key, click **Update addon** in **Set up fishing** and type `/reload` in the game.
 

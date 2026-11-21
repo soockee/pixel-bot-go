@@ -114,6 +114,7 @@ const sideButton: Record<number, string> = { 3: "Mouse4", 4: "Mouse5" };
 interface Control {
   el: HTMLElement;
   input: HTMLElement; // what the label points at
+  after?: HTMLElement; // a line under the whole row, such as a test result
   get(): Value;
   set(v: Value): void;
   enable(on: boolean): void;
@@ -335,16 +336,39 @@ export function setupSettings() {
       save();
     });
     void load();
+    // Go runs the test (ping-pong over USB, a key and a pointer nudge over
+    // Bluetooth into Windows); this only shows its line or what failed.
+    const test = h("button", "Test", "button");
+    test.type = "button";
+    const result = h("p", "", "hint port-result");
+    result.hidden = true;
+    test.addEventListener("click", async () => {
+      test.disabled = true;
+      result.hidden = false;
+      result.classList.remove("bad");
+      result.textContent = "Testing the board…";
+      try {
+        result.textContent = await Service.TestBoard(select.value === "AUTO" ? "" : select.value);
+      } catch (e) {
+        result.classList.add("bad");
+        result.textContent = String(e).replace(/^Error: /, "");
+      } finally {
+        test.disabled = false;
+      }
+    });
+    const box = h("div", "", "port-control");
+    box.append(select, test);
     return {
-      el: select,
+      el: box,
       input: select,
+      after: result,
       get: () => select.value,
       set: (v) => {
         value = String(v);
         if (![...select.options].some((o) => o.value === value)) select.add(new Option(value, value));
         select.value = value;
       },
-      enable: (on) => { select.disabled = !on; },
+      enable: (on) => { select.disabled = !on; test.disabled = !on; },
     };
   }
 
@@ -435,6 +459,7 @@ export function setupSettings() {
         c.set(data.values[f.key]);
         controls.set(f.key, c);
         const r = row(`setting-${f.key}`, f.label, f.hint, c.el, c.input);
+        if (c.after) r.append(c.after);
         if (f.when) conditional.push({ row: r, when: f.when });
         const anchor = document.createComment(f.key);
         fs.append(r, anchor);
