@@ -13,15 +13,18 @@ import (
 
 // SplashSoundDetector reports a bite when the bobber splashes and the bite sound
 // starts shortly after; in recordings the sound follows the splash by 0.2 to
-// 0.45 s. Other players' bites sound the same but splash elsewhere, and spell
+// 0.45 s, or starts while the spray is still too small to count
+// (soundBeforeSplash). Other players' bites sound the same but splash elsewhere, and spell
 // effects splash without the sound, so neither alone triggers it.
 // Not safe for concurrent use; call Feed and Hear from a single goroutine.
 //
 // A splash is white spray at the centre of the box, where the bobber sits:
-// pixels that turn lighter than a lagging baseline and nearly colourless.
-// Pets, players and the fishing line passing through the box are dark, and
-// spell effects are coloured, so neither counts; a change in brightness or
-// motion alone does not either. On labelled bot and hand-play recordings a
+// pixels that turn lighter than a lagging baseline and move toward white in
+// every colour channel alike (towardWhite), whatever the water's colour: spray
+// over orange-lit water is orange-tinted white, and only its blue channel can
+// tell it from the water. Pets, players and the fishing line passing through
+// the box are dark, spell effects raise one colour more than the others, and
+// light that changes brightens the water's own colour, so none counts. On labelled bot and hand-play recordings a
 // bite's spray covers 10 to 40 % of the centre disc, everything else on open
 // water at most about 6 %. A fishing pool's foam sprays the centre all the
 // time, so a splash must also stand out from the water's recent level
@@ -45,6 +48,7 @@ type SplashSoundDetector struct {
 	splashFrom time.Time  // first frame of the latest splash at the bobber
 	splash     time.Time  // its last frame
 	sound      onsets
+	onset      time.Time // the latest sound onset, for a splash that crosses the bar just after it
 	fired      bool
 
 	// Kept across casts for the run.
@@ -58,7 +62,7 @@ const (
 	splashSettle    = 3 * time.Second        // landing ripples fade within this time after the lock
 	splashRise      = 12                     // luminance above the baseline that counts as spray
 	splashLag       = 500 * time.Millisecond // the baseline takes on lasting changes, such as the landed bobber or a parked cursor
-	splashSpread    = 25                     // at most this spread between colour channels: spray is nearly colourless
+	splashEven      = 0.5                    // spray raises every channel by at least this share of its largest rise toward white
 	splashMinCentre = 0.09                   // share of the centre disc that must turn to spray at least
 	splashLevelFor  = 3 * time.Second        // how far back the water's own spray level reaches
 	splashOverLevel = 2                      // and how many times its 90th percentile a splash must reach
@@ -67,6 +71,10 @@ const (
 const (
 	// soundAfterSplash is how long after a splash the bite sound may start.
 	soundAfterSplash = 800 * time.Millisecond
+	// soundBeforeSplash is how long before a splash's first frame the bite
+	// sound may start: the spray grows over a frame or two before it counts,
+	// while an onset is dated back to where the sound began to rise.
+	soundBeforeSplash = 150 * time.Millisecond
 	// SilentFor is how long the game must be silent before a splash alone
 	// counts; tests wait this long after a lock before a silent bite.
 	SilentFor = 3 * time.Second
@@ -137,6 +145,11 @@ func (s *SplashSoundDetector) Feed(roi *image.RGBA, t time.Time) bool {
 	if 2*b.centre < b.all {
 		return false
 	}
+	if !s.onset.IsZero() && s.splashFrom == t && t.Sub(s.onset) <= soundBeforeSplash && !t.Before(s.onset) {
+		s.fired, s.heardBite = true, true
+		s.logger.Info("bite detected", "detector", "splash_sound", "sound_after_splash_ms", s.onset.Sub(t).Milliseconds())
+		return true
+	}
 	if s.noBiteSound {
 		s.fired = true
 		s.logger.Info("bite detected", "detector", "splash_sound", "without_bite_sound", true, "spray", b.centre, "disc", b.disc)
@@ -162,11 +175,14 @@ func (s *SplashSoundDetector) Hear(pcm []byte, t time.Time) bool {
 		return false
 	}
 	at, ok := s.sound.add(pcm, t)
+	if ok {
+		s.onset = at
+	}
 	if !ok || s.splash.IsZero() {
 		return false
 	}
 	gap := at.Sub(s.splashFrom)
-	s.fired = gap >= 0 && at.Sub(s.splash) <= soundAfterSplash
+	s.fired = gap >= -soundBeforeSplash && at.Sub(s.splash) <= soundAfterSplash
 	if !s.fired {
 		s.logger.Debug("sound outside the splash", "after_first_ms", gap.Milliseconds(), "after_last_ms", at.Sub(s.splash).Milliseconds())
 	}
@@ -307,14 +323,13 @@ func (o *onsets) jumpStart(level float64) (time.Time, bool) {
 // brightening compares each frame of the watched box with a baseline that
 // follows the scene with a lag, so an abrupt splash stands out.
 type brightening struct {
-	base        []float32
+	base        []float32 // red, green, blue per pixel
 	w, h        int
 	start, last time.Time
 }
 
-// brightened counts spray: pixels that rose by splashRise and are nearly
-// colourless (channel spread at most splashSpread), in the whole box and in the
-// centre disc where the bobber sits.
+// brightened counts spray: pixels that rose by splashRise and moved toward
+// white, in the whole box and in the centre disc where the bobber sits.
 type brightened struct{ all, centre, disc int }
 
 // measure updates the baseline with roi and reports what brightened. It reports
@@ -324,7 +339,7 @@ func (s *brightening) measure(roi *image.RGBA, t time.Time) (brightened, bool) {
 	w, h := r.Dx(), r.Dy()
 	first := s.base == nil || w != s.w || h != s.h
 	if first {
-		s.base, s.w, s.h, s.start = make([]float32, w*h), w, h, t
+		s.base, s.w, s.h, s.start = make([]float32, 3*w*h), w, h, t
 	}
 	follow := float32(1 - math.Exp(-float64(t.Sub(s.last))/float64(splashLag)))
 	s.last = t
@@ -334,26 +349,48 @@ func (s *brightening) measure(roi *image.RGBA, t time.Time) (brightened, bool) {
 		row := roi.Pix[y*roi.Stride:]
 		for x := range w {
 			p := row[x*4:]
-			l := float32(77*uint32(p[0])+150*uint32(p[1])+29*uint32(p[2])) / 256
-			i := y*w + x
+			base := s.base[3*(y*w+x):][:3]
 			if first {
-				s.base[i] = l
+				base[0], base[1], base[2] = float32(p[0]), float32(p[1]), float32(p[2])
 				continue
 			}
 			inDisc := (x-cx)*(x-cx)+(y-cy)*(y-cy) <= radius*radius
 			if inDisc {
 				b.disc++
 			}
-			if l-s.base[i] > splashRise && max(p[0], p[1], p[2])-min(p[0], p[1], p[2]) <= splashSpread {
+			if towardWhite(p[:3], base) {
 				b.all++
 				if inDisc {
 					b.centre++
 				}
 			}
-			s.base[i] += (l - s.base[i]) * follow
+			for c := range base {
+				base[c] += (float32(p[c]) - base[c]) * follow
+			}
 		}
 	}
 	return b, !first && t.Sub(s.start) >= splashSettle
+}
+
+// towardWhite reports whether pixel p rose by splashRise over its baseline and
+// every channel moved toward white by at least splashEven of the largest move,
+// as when white is mixed in. A channel already near white has no room to move
+// and is left out.
+func towardWhite(p []uint8, base []float32) bool {
+	luma := func(r, g, b float32) float32 { return (77*r + 150*g + 29*b) / 256 }
+	if luma(float32(p[0]), float32(p[1]), float32(p[2]))-luma(base[0], base[1], base[2]) <= splashRise {
+		return false
+	}
+	lo, hi := float32(1), float32(0)
+	for c, v := range p {
+		room := 255 - base[c]
+		if room < 8 {
+			continue
+		}
+		share := (float32(v) - base[c]) / room
+		lo, hi = min(lo, share), max(hi, share)
+	}
+	return hi > 0 && lo > 0 && lo >= splashEven*hi
 }
 
 // sprayLevel keeps the centre's spray share over the last splashLevelFor, so

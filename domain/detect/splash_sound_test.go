@@ -62,6 +62,8 @@ func TestSplashSound(t *testing.T) {
 		{"spell effect: splash only", 4 * s, -1, false},
 		{"sound too long after the splash", 4 * s, 5 * s, false},
 		{"sound before the splash", 4 * s, 3*s + 800*time.Millisecond, false},
+		// The spray grows over a frame or two before it counts, while the sound is dated where it began to rise.
+		{"sound starts as the splash grows", 4 * s, 3*s + 900*time.Millisecond, true},
 		{"landing splash before the scene settles", 2 * s, 2*s + 300*time.Millisecond, false},
 	}
 	for _, tt := range tests {
@@ -70,8 +72,8 @@ func TestSplashSound(t *testing.T) {
 			if fired != tt.want {
 				t.Fatalf("fired = %v at %v, want %v", fired, at, tt.want)
 			}
-			if fired && (at < tt.sound || at > tt.sound+50*time.Millisecond) { // levels come in 25 ms steps
-				t.Errorf("fired at %v, want within 50 ms of the sound at %v", at, tt.sound)
+			if want := max(tt.sound, tt.splashAt); fired && (at < want || at > want+50*time.Millisecond) { // levels come in 25 ms steps
+				t.Errorf("fired at %v, want within 50 ms of %v, when both the splash and the sound came", at, want)
 			}
 		})
 	}
@@ -425,6 +427,31 @@ func TestSplashSoundNeedsWhiteSprayAtTheBobber(t *testing.T) {
 			}
 			if fired != tt.want {
 				t.Errorf("fired = %v, want %v", fired, tt.want)
+			}
+		})
+	}
+}
+
+// Spray mixes white into the water, whatever its colour; light and spells do not.
+func TestTowardWhite(t *testing.T) {
+	tests := []struct {
+		name string
+		base [3]float32
+		now  [3]uint8
+		want bool
+	}{
+		{"spray on grey-blue water", [3]float32{50, 60, 70}, [3]uint8{180, 190, 200}, true},
+		{"orange-tinted spray on orange-lit water", [3]float32{150, 105, 80}, [3]uint8{185, 150, 130}, true},
+		{"spray on light blue water", [3]float32{40, 80, 120}, [3]uint8{110, 140, 170}, true},
+		{"orange light getting brighter", [3]float32{150, 105, 80}, [3]uint8{180, 126, 96}, false},
+		{"a red spell effect", [3]float32{150, 105, 80}, [3]uint8{230, 60, 50}, false},
+		{"a dark pet", [3]float32{150, 105, 80}, [3]uint8{30, 25, 20}, false},
+		{"a small flicker", [3]float32{150, 105, 80}, [3]uint8{158, 112, 88}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := towardWhite(tt.now[:], tt.base[:]); got != tt.want {
+				t.Errorf("towardWhite = %v, want %v", got, tt.want)
 			}
 		})
 	}
