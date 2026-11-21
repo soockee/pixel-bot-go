@@ -153,6 +153,7 @@ func evaluateBite(b detect.BiteDetector, d *dataset.Dataset, watches []watch, c 
 			c.BiteCasts++
 		}
 		b.Reset()
+		fired := false
 		for _, f := range d.FramesIn(dataset.Span{StartMS: watches[i].FromMS, EndMS: cast.EndMS}) {
 			img, err := f.Load()
 			if err != nil {
@@ -160,11 +161,20 @@ func evaluateBite(b detect.BiteDetector, d *dataset.Dataset, watches []watch, c 
 			}
 			if ms, heard := hear(f.MS); heard {
 				scoreBite(ms, cast.BiteMS, c)
+				fired = true
 				break
 			}
 			if b.Feed(img.SubImage(watches[i].Area).(*image.RGBA), time.UnixMilli(f.MS)) {
 				scoreBite(f.MS, cast.BiteMS, c)
+				fired = true
 				break
+			}
+		}
+		// The cast lasts until its end, not its last frame: at 10 fps up to
+		// 100 ms of sound, where a bite sound may start, follows that frame.
+		if !fired {
+			if ms, heard := hear(cast.EndMS); heard {
+				scoreBite(ms, cast.BiteMS, c)
 			}
 		}
 	}

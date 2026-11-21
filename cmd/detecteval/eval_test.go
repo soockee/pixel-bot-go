@@ -211,6 +211,30 @@ func TestBitesAreWatchedInTheMarkerBox(t *testing.T) {
 	}
 }
 
+// The bot hears the sound up to the reel, so a cast ending just after the bite
+// sound began, before the next frame, still catches it.
+func TestSoundAfterTheLastFrameCounts(t *testing.T) {
+	dir := writeFakeDataset(t)
+	d, err := dataset.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.Labels.Casts = d.Labels.Casts[:1]
+	d.Labels.Casts[0].EndMS = 3850 // the last frame is at 3800 ms, the sound starts there
+	d.Labels.Empty = nil
+	labels, err := json.Marshal(d.Labels)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "labels.json"), labels, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := evaluate(t, "marker", "splash_sound", dir).Bites["splash_sound"]
+	if got.BitesCaught != 1 {
+		t.Errorf("bites caught = %d, want the bite whose sound began after the last frame", got.BitesCaught)
+	}
+}
+
 func TestScoreBite(t *testing.T) {
 	bite := int64(1000)
 	tests := []struct {
