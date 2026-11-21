@@ -58,10 +58,10 @@ func TestSetupKeysAreTheKeysTheRunUses(t *testing.T) {
 		edit func(*config.Config)
 		want [4]string
 	}{
-		{"right click", func(*config.Config) {}, [4]string{"castKey", "targetPlayerKey"}},
-		{"interact reel", func(c *config.Config) { c.ReelMethod = config.ReelInteractKey }, [4]string{"castKey", "interactKey", "targetPlayerKey"}},
-		{"breaks", func(c *config.Config) { c.Schedule = true }, [4]string{"castKey", "targetPlayerKey", "logoutKey"}},
-		{"all of them", func(c *config.Config) { c.ReelMethod, c.Reposition = config.ReelInteractKey, true }, [4]string{"castKey", "interactKey", "targetPlayerKey", "logoutKey"}},
+		{"right click", func(*config.Config) {}, [4]string{"castKey"}},
+		{"interact reel", func(c *config.Config) { c.ReelMethod = config.ReelInteractKey }, [4]string{"castKey", "interactKey"}},
+		{"breaks", func(c *config.Config) { c.Schedule = true }, [4]string{"castKey", "logoutKey"}},
+		{"all of them", func(c *config.Config) { c.ReelMethod, c.Reposition = config.ReelInteractKey, true }, [4]string{"castKey", "interactKey", "logoutKey"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -20,7 +20,6 @@ order: 1
 | **Between catches** | | |
 | Move the mouse | Off | Now and then after a catch, the cursor drifts a little along a curved path, or the camera turns slightly. |
 | Change spot | Off | Every 45 to 55 catches, Go Fish takes a step with W, A, S or D, or turns the camera, and checks the next cast. Needs the Logout key, to log out if it gets stuck. |
-| Target passing player | Off | Optional. A spare key, F11 suggested, Bobber Marker binds to select a friendly player who walks past while you fish. |
 | **Scheduled breaks** | | |
 | Take breaks | Off | Alternates random fishing sessions with logged-out breaks after Start. |
 | Shortest / longest session | 20 / 45 min | Shown with breaks on: the range for each fishing session. |
@@ -35,10 +34,5 @@ supports camera drags and the pointer is inside the game window, Go Fish may
 turn the camera with a short mouse drag instead of a step. If no bobber
 appears after the first move, it tries three to five more times. If it still
 cannot fish, it stops and logs out. Scheduled play does not resume after that.
-
-To use **Target passing player**, click it and press a spare key, update
-Bobber Marker, and type `/reload` in the game. The addon turns on friendly soft
-targeting and watches for a friendly player in range while you fish. Click
-**Clear**, update Bobber Marker and reload to turn it off again.
 
 To go back to all the defaults, close Go Fish and delete `pixle_bot_config.json` next to it.

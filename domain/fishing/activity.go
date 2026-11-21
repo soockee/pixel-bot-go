@@ -8,50 +8,29 @@ import (
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
-	"github.com/soocke/pixel-bot-go/internal/esp32"
 )
 
-// CheckActivityKeys rejects a Target passing player key, and the WASD keys a
-// reposition presses, that another Go Fish action already uses.
+// CheckActivityKeys rejects the WASD keys a reposition presses when another
+// Go Fish action already uses one.
 func CheckActivityKeys(cfg config.Config, parse func(string) (byte, bool)) error {
-	if cfg.TargetPlayerKey == "" && !cfg.Reposition {
+	if !cfg.Reposition {
 		return nil
 	}
 	if parse == nil {
 		return fmt.Errorf("optional game keys cannot be resolved")
 	}
 	used := make(map[byte]string)
-	for _, binding := range []struct {
-		key, label string
-		optional   bool
-	}{
-		{cfg.CastKey, "Cast", false},
-		{cfg.InteractKey, "Interact", false},
-		{cfg.LogoutKey, "Logout", false},
-		{cfg.TargetPlayerKey, "Target passing player", true},
+	for _, binding := range []struct{ key, label string }{
+		{cfg.CastKey, "Cast"}, {cfg.InteractKey, "Interact"}, {cfg.LogoutKey, "Logout"},
 	} {
-		if binding.key == "" {
-			continue
-		}
-		vk, ok := parse(binding.key)
-		if binding.optional {
-			if !ok || !esp32.SupportsKey(vk) {
-				return fmt.Errorf("%s requires a letter, digit, F1–F12, Mouse 4 or Mouse 5", binding.label)
-			}
-			if other, exists := used[vk]; exists {
-				return fmt.Errorf("%s needs a different key from %s", binding.label, other)
-			}
-		}
-		if ok {
+		if vk, ok := parse(binding.key); binding.key != "" && ok {
 			used[vk] = binding.label
 		}
 	}
-	if cfg.Reposition {
-		for _, key := range "WASD" {
-			if vk, ok := parse(string(key)); ok {
-				if other, exists := used[vk]; exists {
-					return fmt.Errorf("repositioning walks with %s, which is assigned to %s", string(key), other)
-				}
+	for _, key := range "WASD" {
+		if vk, ok := parse(string(key)); ok {
+			if other, exists := used[vk]; exists {
+				return fmt.Errorf("repositioning walks with %s, which is assigned to %s", string(key), other)
 			}
 		}
 	}
@@ -153,39 +132,6 @@ func (f *FishingFSM) activity(key, name string) bool {
 	return true
 }
 
-func (r *run) pollPlayer(window image.Rectangle) {
-	now := time.Now()
-	if now.Before(r.playerPoll) {
-		return
-	}
-	r.playerPoll = now.Add(250 * time.Millisecond)
-	e := r.engine
-	sample := func() uint8 {
-		if e.fsm.actions.CanAct != nil && !e.fsm.actions.CanAct() {
-			return 0
-		}
-		current, err := e.frames.Window()
-		if err != nil || current != window {
-			return 0
-		}
-		area := image.Rect(8, 8, 38, 14).Add(window.Min)
-		if !area.In(window) {
-			return 0
-		}
-		frame, err := e.frames.Grab(area)
-		if err != nil {
-			return 0
-		}
-		return passingPlayerSignal(frame.Image)
-	}
-	player := sample()
-	if player != 0 && player == r.playerSeen && player != r.playerSent {
-		r.playerSent = player
-		e.fsm.send(evtPassingPlayer{confirm: func() bool { return sample() == player }})
-	}
-	r.playerSeen = player
-}
-
 // WorldSignalArea is where Bobber Marker shows its in-world blocks, in the
 // game window's client area.
 var WorldSignalArea = image.Rect(8, 16, 26, 22)
@@ -206,25 +152,4 @@ func InWorld(img *image.RGBA) bool {
 		}
 	}
 	return true
-}
-
-// The addon's opaque cyan/yellow/magenta/blue blocks identify an eligible
-// soft target. Sample their centers to avoid pixel rounding at the edges.
-func passingPlayerSignal(img *image.RGBA) uint8 {
-	if img == nil || img.Bounds().Dx() < 30 || img.Bounds().Dy() < 6 {
-		return 0
-	}
-	origin := img.Bounds().Min
-	for i, rgb := range [4][3]uint8{{0, 255, 255}, {255, 255, 0}, {255, 0, 255}, {0, 0, 255}} {
-		x, y := origin.X+3+i*6, origin.Y+3
-		c := img.RGBAAt(x, y)
-		if c.R != rgb[0] || c.G != rgb[1] || c.B != rgb[2] {
-			return 0
-		}
-	}
-	token := img.RGBAAt(origin.X+27, origin.Y+3)
-	if token.G != 211 || token.B != 77 {
-		return 0
-	}
-	return token.R
 }

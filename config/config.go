@@ -83,8 +83,6 @@ type Config struct {
 	// Reposition steps the character with WASD, or turns the camera with a
 	// mouse drag, every 45 to 55 catches, before a verification cast.
 	Reposition bool `json:"reposition,omitempty"`
-	// TargetPlayerKey selects the nearby friendly player reported by the addon.
-	TargetPlayerKey string `json:"target_player_key,omitempty"`
 	// MaxFailedCasts halts the bot after this many casts in a row end without a reel.
 	MaxFailedCasts int `json:"max_failed_casts"`
 	// MaxSessionMinutes halts the bot at the first cast after this long.
@@ -146,8 +144,7 @@ func DefaultConfig() *Config {
 		Threshold: 0.73,
 		Stride:    6,
 		Refine:    true,
-		// F9 to F12 are free in WoW's default bindings; Target passing player
-		// (F11 suggested) stays off until it is set.
+		// F9 to F12 are free in WoW's default bindings.
 		CastKey:                "F9",
 		InteractKey:            "F10",
 		LogoutKey:              "F12",
@@ -206,7 +203,6 @@ func (c *Config) Validate() error {
 	if c.OverlayY < 0 || c.OverlayY > 1 {
 		c.OverlayY = d.OverlayY
 	}
-	c.TargetPlayerKey = strings.ToUpper(strings.TrimSpace(c.TargetPlayerKey))
 	if c.MaxFailedCasts <= 0 {
 		c.MaxFailedCasts = d.MaxFailedCasts
 	}

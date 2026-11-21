@@ -26,7 +26,6 @@ type Settings struct {
 	ESP32Port              string  `json:"esp32Port"`
 	IdleMoves              bool    `json:"idleMoves"`
 	Reposition             bool    `json:"reposition"`
-	TargetPlayerKey        string  `json:"targetPlayerKey"`
 	MaxFailedCasts         int     `json:"maxFailedCasts"`
 	MaxSessionMinutes      int     `json:"maxSessionMinutes"`
 	Schedule               bool    `json:"schedule"`
@@ -57,7 +56,7 @@ func settingsOf(c *config.Config) Settings {
 		MinScale: c.MinScale, MaxScale: c.MaxScale, ScaleStep: c.ScaleStep, Threshold: c.Threshold,
 		Stride: c.Stride, Refine: c.Refine, CastKey: c.CastKey,
 		ReelMethod: c.ReelMethod, InteractKey: c.InteractKey, ESP32Port: c.ESP32Port,
-		IdleMoves: c.IdleMoves, Reposition: c.Reposition, TargetPlayerKey: c.TargetPlayerKey,
+		IdleMoves: c.IdleMoves, Reposition: c.Reposition,
 		MaxFailedCasts: c.MaxFailedCasts, MaxSessionMinutes: c.MaxSessionMinutes,
 		Schedule: c.Schedule, PlayMinMinutes: c.PlayMinMinutes, PlayMaxMinutes: c.PlayMaxMinutes,
 		BreakMinMinutes: c.BreakMinMinutes, BreakMaxMinutes: c.BreakMaxMinutes,
@@ -118,16 +117,11 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Logout")
 		}
 	}
-	if s.TargetPlayerKey != "" {
-		if vk, ok := action.ParseVK(s.TargetPlayerKey); !ok || !esp32.SupportsKey(vk) {
-			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Target passing player")
-		}
-	}
 	c.MinScale, c.MaxScale, c.ScaleStep, c.Threshold = s.MinScale, s.MaxScale, s.ScaleStep, s.Threshold
 	c.Stride, c.Refine, c.CastKey = s.Stride, s.Refine, s.CastKey
 	c.ReelMethod, c.InteractKey, c.ESP32Port = s.ReelMethod, s.InteractKey, port
 	c.MaxFailedCasts, c.MaxSessionMinutes = s.MaxFailedCasts, s.MaxSessionMinutes
-	c.IdleMoves, c.Reposition, c.TargetPlayerKey = s.IdleMoves, s.Reposition, s.TargetPlayerKey
+	c.IdleMoves, c.Reposition = s.IdleMoves, s.Reposition
 	c.Schedule = s.Schedule
 	c.PlayMinMinutes, c.PlayMaxMinutes = s.PlayMinMinutes, s.PlayMaxMinutes
 	c.BreakMinMinutes, c.BreakMaxMinutes = s.BreakMinMinutes, s.BreakMaxMinutes
