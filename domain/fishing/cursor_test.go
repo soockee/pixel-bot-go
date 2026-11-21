@@ -56,6 +56,31 @@ func TestReelWaitsForCursorAndStopCancelsRemainingSteps(t *testing.T) {
 	}
 }
 
+// The person may use the mouse while the game is not in front, so the pointer
+// the bot left behind before a focus loss must not count as a takeover after it.
+func TestFocusLossForgetsThePointer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		resets := 0
+		actions := recordingActions(&actionLog{})
+		actions.Cursor = &CursorCallbacks{
+			Plan: func(target image.Point, _ bool) ([]CursorStep, bool) {
+				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, true
+			},
+			Move:  func(image.Point) error { return nil },
+			Reset: func() { resets++ },
+		}
+		fsm := NewFSM(nil, testConfig(), actions)
+		defer fsm.Close()
+		startMonitoring(t, fsm)
+		before := resets
+		fsm.EventFocusLost()
+		wantState(t, fsm, StateWaitingFocus)
+		if resets != before+1 {
+			t.Fatalf("focus loss reset the pointer guard %d times, want once", resets-before)
+		}
+	})
+}
+
 func TestRefusedCursorStepHaltsBeforeReel(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}

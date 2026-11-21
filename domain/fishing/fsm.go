@@ -491,6 +491,11 @@ func (f *FishingFSM) transition(next FishingState) {
 		l(prev, next)
 	}
 	switch next {
+	case StateWaitingFocus:
+		// The person may use the mouse while the game is not in front; that is no takeover.
+		if f.actions.Cursor != nil {
+			f.actions.Cursor.Reset()
+		}
 	case StateSearching:
 		f.arm(searchTimeout)
 	case StateCasting:
