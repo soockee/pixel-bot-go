@@ -144,11 +144,7 @@ func main() {
 		}
 	}
 	debugEnabled := cfg.Debug || traceModel != nil
-	level := slog.LevelInfo
-	if debugEnabled {
-		level = slog.LevelDebug
-	}
-	logger := NewLogger(level)
+	logger := NewLogger()
 	slog.SetDefault(logger)
 	if timing != nil {
 		logger.Info("timing profile loaded", "dry_run", cfg.DryRun, "seed", *timingSeed)
