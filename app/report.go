@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
 )
@@ -29,7 +30,7 @@ func writeReport(path, details string) (err error) {
 		}
 	}()
 	z := zip.NewWriter(out)
-	w, err := z.Create("summary.txt")
+	w, err := z.CreateHeader(&zip.FileHeader{Name: "summary.txt", Method: zip.Deflate, Modified: time.Now()})
 	if err != nil {
 		return err
 	}
@@ -54,7 +55,12 @@ func addFile(z *zip.Writer, name string) error {
 		return err
 	}
 	defer in.Close()
-	w, err := z.Create(filepath.Base(name))
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	// The entry keeps the file's time, so a log tells when it was written.
+	w, err := z.CreateHeader(&zip.FileHeader{Name: filepath.Base(name), Method: zip.Deflate, Modified: info.ModTime()})
 	if err != nil {
 		return err
 	}

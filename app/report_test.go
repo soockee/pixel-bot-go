@@ -31,6 +31,9 @@ func TestReportHoldsTheSummaryLogsAndSettings(t *testing.T) {
 		b, _ := io.ReadAll(r)
 		r.Close()
 		got[f.Name] = string(b)
+		if f.Modified.Year() < 2000 {
+			t.Errorf("%s dated %v, want the file's own time", f.Name, f.Modified)
+		}
 	}
 	want := map[string]string{
 		"summary.txt":                         "what the issue says",
