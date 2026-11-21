@@ -47,7 +47,6 @@ export interface Settings {
     "esp32Port": string;
     "idleMoves": boolean;
     "reposition": boolean;
-    "targetPlayerKey": string;
     "maxFailedCasts": number;
     "maxSessionMinutes": number;
     "schedule": boolean;

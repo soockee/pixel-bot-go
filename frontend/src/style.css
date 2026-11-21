@@ -766,7 +766,6 @@ input.switch:disabled { opacity: 0.5; cursor: default; }
 .lock img { display: block; width: 100%; height: 100%; }
 
 
-.key-pair { display: flex; gap: 8px; align-items: center; }
 
 /* The thank-you card after a run that saved time */
 .thanks {

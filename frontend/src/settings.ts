@@ -7,8 +7,8 @@ import { playSound, sounds, themes } from "./themes";
 type Key = keyof Settings;
 type Value = Settings[Key];
 
-/** when hides a field the other values make pointless; optional keys can be cleared. */
-type Field = { key: Key; label: string; hint: string; when?: (v: Settings) => boolean; optional?: boolean } & (
+/** when hides a field the other values make pointless. */
+type Field = { key: Key; label: string; hint: string; when?: (v: Settings) => boolean } & (
   | { kind: "key" | "switch" | "text" | "port" | "locator" | "biteDetector" | "reelMethod" }
   | { kind: "slider"; min: number; max: number; step: number; unit?: string; zero?: string }
 );
@@ -52,7 +52,6 @@ const groups: { title: string; show?: "debug"; fields: Field[] }[] = [
     fields: [
       { key: "idleMoves", label: "Move the mouse", hint: "Now and then, drift the cursor a little or nudge the camera", kind: "switch" },
       { key: "reposition", label: "Change spot", hint: "Every 45 to 55 catches, take a step with WASD or turn the camera, then check the next cast. Logs out if no spot works.", kind: "switch" },
-      { key: "targetPlayerKey", label: "Target passing player", hint: "Optional. An unused key, F11 suggested, that Bobber Marker binds to select a friendly player who walks by. Update the addon after setting it.", kind: "key", optional: true },
     ],
   },
   {
@@ -197,7 +196,7 @@ export function setupSettings() {
     let listening = false;
     const show = () => {
       button.classList.toggle("listening", listening);
-      button.replaceChildren(listening ? "Press a key or button" : value ? h("kbd", keyLabel(value)) : f.optional ? "Off" : "Set key");
+      button.replaceChildren(listening ? "Press a key or button" : value ? h("kbd", keyLabel(value)) : "Set key");
     };
     const stop = () => {
       listening = false;
@@ -247,26 +246,12 @@ export function setupSettings() {
       show();
     });
     button.addEventListener("blur", () => listening && stop());
-    if (!f.optional) {
-      return {
-        el: button,
-        input: button,
-        get: () => value,
-        set: (v) => { value = String(v); show(); },
-        enable: (on) => { button.disabled = !on; if (!on && listening) stop(); },
-      };
-    }
-    const clear = h("button", "Clear", "button");
-    clear.type = "button";
-    clear.addEventListener("click", () => take(""));
-    const box = h("div", "", "key-pair");
-    box.append(button, clear);
     return {
-      el: box,
+      el: button,
       input: button,
       get: () => value,
-      set: (v) => { value = String(v); show(); clear.hidden = !value; },
-      enable: (on) => { button.disabled = clear.disabled = !on; if (!on && listening) stop(); },
+      set: (v) => { value = String(v); show(); },
+      enable: (on) => { button.disabled = !on; if (!on && listening) stop(); },
     };
   }
 

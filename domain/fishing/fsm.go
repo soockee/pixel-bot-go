@@ -143,10 +143,6 @@ func (f *FishingFSM) handle(ev any) {
 		if (f.state == StateMonitoring || f.state == StateReeling) && !f.hasCurrentTarget() {
 			f.resumeSearch()
 		}
-	case evtPassingPlayer:
-		if f.state == StateMonitoring && f.hasCurrentTarget() && e.confirm() {
-			f.activity(f.cfg.TargetPlayerKey, "target passing player")
-		}
 	case evtTargetLost:
 		if f.state == StateMonitoring {
 			f.castFailed()
@@ -228,7 +224,6 @@ type (
 	}
 	evtTargetInvalidated struct{}
 	evtTargetLost        struct{}
-	evtPassingPlayer     struct{ confirm func() bool }
 	evtHalt              struct{ reason string }
 	evtFishBite          struct{ at time.Time }
 	evtFocusAcquired     struct{}

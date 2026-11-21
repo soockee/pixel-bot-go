@@ -108,9 +108,6 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 				return nil, err
 			}
 			keys := []string{run.CastKey}
-			if run.TargetPlayerKey != "" {
-				keys = append(keys, run.TargetPlayerKey)
-			}
 			if run.Schedule || run.Reposition {
 				keys = append(keys, run.LogoutKey)
 			}

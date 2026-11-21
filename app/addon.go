@@ -36,7 +36,7 @@ func (a *app) gameDir() (string, error) {
 // only when breaks or Change spot may log out.
 func (a *app) addonKeys() addon.Keys {
 	cfg := a.container.Config
-	keys := addon.Keys{Cast: addon.BindingKey(cfg.CastKey), TargetPlayer: addon.BindingKey(cfg.TargetPlayerKey)}
+	keys := addon.Keys{Cast: addon.BindingKey(cfg.CastKey)}
 	if cfg.ReelMethod == config.ReelInteractKey {
 		keys.Interact = addon.BindingKey(cfg.InteractKey)
 	}

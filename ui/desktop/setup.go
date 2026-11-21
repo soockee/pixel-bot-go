@@ -83,7 +83,7 @@ func setupSteps(s State) (steps [setupSlots]SetupStep, done bool) {
 }
 
 // setupKeys are the key settings the next run uses, the same set the addon
-// binds (app.addonKeys), plus the optional Target passing player key.
+// binds (app.addonKeys).
 func setupKeys(c *config.Config) (keys [4]string) {
 	n := 0
 	add := func(name string) { keys[n], n = name, n+1 }
@@ -91,7 +91,6 @@ func setupKeys(c *config.Config) (keys [4]string) {
 	if c.ReelMethod == config.ReelInteractKey {
 		add("interactKey")
 	}
-	add("targetPlayerKey")
 	if c.Schedule || c.Reposition {
 		add("logoutKey")
 	}
