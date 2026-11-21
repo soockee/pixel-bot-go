@@ -27,6 +27,9 @@ type Commands struct {
 	ReleaseNotes func()
 	// ReportProblem opens a new GitHub issue, filled in, in the browser.
 	ReportProblem func()
+	// SaveReport writes the logs, settings and report details into one file,
+	// shows it in File Explorer and returns its path.
+	SaveReport func() (string, error)
 	// OpenURL opens a page in the browser.
 	OpenURL      func(url string)
 	CheckAddon   func()
@@ -212,6 +215,15 @@ func (s *Service) ReleaseNotes() { _ = s.do(s.cmds.ReleaseNotes) }
 // ReportProblem opens a new GitHub issue on the problem form in the browser,
 // with the version, Windows and app details filled in.
 func (s *Service) ReportProblem() { _ = s.do(s.cmds.ReportProblem) }
+
+// SaveReport saves a report file, for a bug report where the log was asked
+// for, shows it in File Explorer and returns its path. Nothing is sent.
+func (s *Service) SaveReport() (path string, err error) {
+	if doErr := s.do(func() { path, err = s.cmds.SaveReport() }); doErr != nil {
+		return "", doErr
+	}
+	return path, err
+}
 
 // ChooseKeys confirms the saved game keys in setup, so the addon step comes next.
 func (s *Service) ChooseKeys() { _ = s.do(s.view.SetKeysChosen) }
