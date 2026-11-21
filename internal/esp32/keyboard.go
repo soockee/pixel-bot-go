@@ -74,6 +74,12 @@ var (
 	retryEvery = 250 * time.Millisecond
 )
 
+// replyWait is how long an action waits for the board's OK, on top of the
+// key's hold. The board replies once Bluetooth took the report, which takes
+// longer than 300 ms now and then while the radio is busy; the input went out
+// all the same, so a short wait stopped runs for nothing.
+const replyWait = time.Second
+
 var errNotPaired = errors.New("connect Go Fish ESP32 Probe in Windows Bluetooth settings")
 
 // Name returns the port in use, or "" while closed.
@@ -172,7 +178,7 @@ func (k *Keyboard) handshake() error {
 		waited := time.Since(start)
 		switch {
 		case err == nil && reply == "GOFISH 1 READY":
-			return nil
+			return k.port.SetReadTimeout(replyWait)
 		case err == nil && reply == "GOFISH 1 WAITING":
 			ours = true
 		case !ours && waited >= bootWait:
@@ -258,7 +264,7 @@ func (k *Keyboard) PressButton(vk byte, hold time.Duration) error {
 	if k.port == nil || !k.buttons {
 		return errors.New("flash the current ESP32 firmware to press Mouse 4 and Mouse 5")
 	}
-	if err := k.port.SetReadTimeout(300*time.Millisecond + hold); err != nil {
+	if err := k.port.SetReadTimeout(replyWait + hold); err != nil {
 		k.closePort()
 		return fmt.Errorf("ESP32 button timeout: %w", err)
 	}
@@ -425,7 +431,7 @@ func (k *Keyboard) TapFor(usage byte, hold time.Duration) error {
 		command = fmt.Sprintf("%s %d", command, hold.Milliseconds())
 	}
 	if k.timed {
-		if err := k.port.SetReadTimeout(300*time.Millisecond + hold); err != nil {
+		if err := k.port.SetReadTimeout(replyWait + hold); err != nil {
 			k.closePort()
 			return fmt.Errorf("ESP32 tap timeout: %w", err)
 		}
