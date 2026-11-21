@@ -120,16 +120,22 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 	})
 	a.overlay = a.newOverlay()
 	a.main.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) { a.quit() })
-	// The native window exists only once the app runs, so it is placed then.
-	a.wails.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) {
-		if b, ok := action.ScreenBounds(cfg.Screen); ok {
-			p := a.main.PhysicalBounds()
-			a.main.SetPhysicalBounds(application.Rect{X: b.Min.X + 100, Y: b.Min.Y + 100, Width: p.Width, Height: p.Height})
-		} else if cfg.Screen > 0 {
-			logger.Warn("configured screen not found; using default placement", "screen", cfg.Screen)
-		}
-		a.setTheme(cfg.Theme)
-		a.main.Show()
+	// The window is placed and shown once its page has loaded, when the native
+	// window surely exists. Wails creates windows on their own goroutines as the
+	// app starts, and a Show that came first (from ApplicationStarted) marked the
+	// window shown without showing it, so it stayed hidden now and then.
+	var shown sync.Once
+	a.main.OnWindowEvent(events.Windows.WebViewNavigationCompleted, func(*application.WindowEvent) {
+		shown.Do(func() {
+			if b, ok := action.ScreenBounds(cfg.Screen); ok {
+				p := a.main.PhysicalBounds()
+				a.main.SetPhysicalBounds(application.Rect{X: b.Min.X + 100, Y: b.Min.Y + 100, Width: p.Width, Height: p.Height})
+			} else if cfg.Screen > 0 {
+				logger.Warn("configured screen not found; using default placement", "screen", cfg.Screen)
+			}
+			a.setTheme(cfg.Theme)
+			a.main.Show()
+		})
 	})
 	return a
 }
