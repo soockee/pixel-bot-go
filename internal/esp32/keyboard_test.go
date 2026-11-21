@@ -69,6 +69,55 @@ func TestMoveToReachesTargetDespiteAcceleration(t *testing.T) {
 	}
 }
 
+// latePort is firmware whose reports reach Windows lag after the reply, as
+// over a busy Bluetooth link.
+type latePort struct {
+	mousePort
+	lag     time.Duration
+	pending []lateReport
+}
+
+type lateReport struct {
+	at     time.Time
+	dx, dy int
+}
+
+func (p *latePort) Write(b []byte) (int, error) {
+	var dx, dy int
+	if _, err := fmt.Sscanf(string(b), "MOVE %d %d\n", &dx, &dy); err != nil {
+		return 0, err
+	}
+	p.pending = append(p.pending, lateReport{time.Now().Add(p.lag), dx, dy})
+	p.moves++
+	p.replies.WriteString("OK\r\n")
+	return len(b), nil
+}
+
+// pos applies the reports that have arrived by now.
+func (p *latePort) pos() (int, int, bool) {
+	for len(p.pending) > 0 && !time.Now().Before(p.pending[0].at) {
+		p.x += p.pending[0].dx
+		p.y += p.pending[0].dy
+		p.pending = p.pending[1:]
+	}
+	return p.x, p.y, true
+}
+
+func TestMoveToLeavesNoReportOnItsWay(t *testing.T) {
+	for _, d := range []image.Point{{40, 10}, {-5, 0}, {1, -1}} {
+		port := &latePort{mousePort: mousePort{x: 500, y: 500}, lag: 80 * time.Millisecond}
+		k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port}), pointer: true}
+		target := image.Pt(500, 500).Add(d)
+		if err := k.MoveTo(target, port.pos); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(2 * port.lag)
+		if x, y, _ := port.pos(); image.Pt(x, y) != target {
+			t.Errorf("move by %v: a late report left the pointer at %d,%d, want %v after %d reports", d, x, y, target, port.moves)
+		}
+	}
+}
+
 func TestPressButtonSendsTheSideButton(t *testing.T) {
 	port := &testPort{reply: strings.NewReader("OK\r\nOK\r\n")}
 	k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port})}

@@ -354,10 +354,19 @@ func sign(n int) int {
 	return 1
 }
 
-// settle waits until Windows applies the report that was just acknowledged,
-// which lags the reply by up to one Bluetooth connection interval.
+// reportLag is how long settle waits for a report to move the pointer. The
+// firmware acknowledges a report once its Bluetooth stack queued it, and
+// Windows applies it a connection interval or more later, past 50 ms while the
+// radio is busy (Wi-Fi, interference). A shorter wait sends the next step while
+// this one is still on its way: both land, and the pointer overshoots after
+// MoveTo already reported it on target.
+const reportLag = 250 * time.Millisecond
+
+// settle waits until Windows applies the report that was just acknowledged.
+// It returns early once the pointer moves; it waits the whole reportLag only
+// for a report that moves it by less than a pixel.
 func settle(x, y int, pos func() (int, int, bool)) (int, int) {
-	deadline := time.Now().Add(50 * time.Millisecond)
+	deadline := time.Now().Add(reportLag)
 	for {
 		nx, ny, ok := pos()
 		if ok && (nx != x || ny != y) || time.Now().After(deadline) {
