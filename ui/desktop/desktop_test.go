@@ -179,6 +179,10 @@ func TestESP32PortsKeepTheSavedPort(t *testing.T) {
 	if got := s.ESP32Ports(); !slices.Equal(got, []string{"COM3", "COM7"}) {
 		t.Fatalf("ports = %v, want COM3 and the saved COM7", got)
 	}
+	s.cfg.ESP32Port = "AUTO"
+	if got := s.ESP32Ports(); !slices.Equal(got, []string{"COM3"}) {
+		t.Fatalf("ports = %v, want only COM3: Auto is no port", got)
+	}
 }
 
 func TestSavingSettingsRechecksTheAddon(t *testing.T) {

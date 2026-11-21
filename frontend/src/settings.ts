@@ -321,13 +321,21 @@ export function setupSettings() {
   }
 
   // The ports are listed again on each open: the board may be plugged in since.
+  // Auto comes first, then the COM ports Go lists (the saved one included);
+  // "Choose a board" only while none is chosen.
   function portControl(): Control {
     const select = document.createElement("select");
     let value = "";
-    async function load() {
-      const ports = (await Service.ESP32Ports()) ?? [];
-      select.replaceChildren(new Option("Choose a board", ""), new Option("Auto, find the board", "AUTO"), ...ports.map((p) => new Option(p, p)));
+    let ports: string[] = [];
+    function fill() {
+      const options = [new Option("Auto (find the board)", "AUTO"), ...ports.map((p) => new Option(p, p))];
+      if (value === "") options.unshift(new Option("Choose a board", ""));
+      select.replaceChildren(...options);
       select.value = value;
+    }
+    async function load() {
+      ports = (await Service.ESP32Ports()) ?? [];
+      fill();
     }
     select.addEventListener("mousedown", () => void load());
     select.addEventListener("change", () => {
@@ -341,8 +349,8 @@ export function setupSettings() {
       get: () => select.value,
       set: (v) => {
         value = String(v);
-        if (![...select.options].some((o) => o.value === value)) select.add(new Option(value, value));
-        select.value = value;
+        if (value !== "" && value !== "AUTO" && !ports.includes(value)) ports = [...ports, value];
+        fill();
       },
       enable: (on) => { select.disabled = !on; },
     };

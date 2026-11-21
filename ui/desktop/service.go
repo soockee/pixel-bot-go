@@ -97,7 +97,9 @@ func (s *Service) Windows() []string {
 func (s *Service) ESP32Ports() []string {
 	ports := s.cmds.ListPorts()
 	_ = s.do(func() {
-		if s.cfg.ESP32Port != "" && !slices.Contains(ports, s.cfg.ESP32Port) {
+		// The saved port stays choosable while its board is unplugged. Auto is
+		// no port: the frontend offers it on its own.
+		if s.cfg.ESP32Port != "" && s.cfg.ESP32Port != esp32.AutoPort && !slices.Contains(ports, s.cfg.ESP32Port) {
 			ports = append(ports, s.cfg.ESP32Port)
 		}
 	})
