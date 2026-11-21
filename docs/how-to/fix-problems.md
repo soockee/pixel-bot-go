@@ -55,9 +55,9 @@ Turn on **Auto Loot** in the game (Interface options, **Controls**). Go Fish cli
 
 ## Still stuck
 
-Click **Report a problem** at the top right of Go Fish. Your browser opens a new issue on [GitHub](https://github.com/soockee/pixel-bot-go/issues) with the Go Fish version, your Windows version, your settings and Go Fish's recent warnings already filled in. Describe what happened, pick where it happened, and submit. You need a GitHub account to submit, and nothing is sent before you do.
+Click **Report a problem** at the top right of Go Fish. Your browser opens a new issue on [GitHub](https://github.com/soockee/pixel-bot-go/issues) with the Go Fish version, your Windows version, a summary of your last runs, your settings and Go Fish's recent warnings already filled in. Describe what happened, pick where it happened, and submit. You need a GitHub account to submit, and nothing is sent before you do. Go Fish keeps the logs of its last three starts, so the report still holds the problem after you restarted it.
 
-If you can, drag the file `pixel_bot_logs.json` from the Go Fish folder into the issue. It holds what Go Fish did, but no passwords.
+If you are asked for the log, open **Settings**, click **Save report file** under **Report file**, and drag the file Go Fish shows you into the issue. It holds the last logs and your settings, but no passwords.
 
 ## It works again
 

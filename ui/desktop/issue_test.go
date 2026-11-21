@@ -27,7 +27,7 @@ func TestProblemFormHasTheFieldsTheAppFills(t *testing.T) {
 func TestProblemURLFillsTheForm(t *testing.T) {
 	s := State{FSM: "monitoring", Running: true, Window: "World of Warcraft", GameFound: true, Addon: "current", Version: "v1.2.0"}
 	cfg := config.DefaultConfig()
-	raw := ProblemURL(s, cfg, "Windows 11 (build 26100)", []string{"10:00:00 ERROR sound capture failed (access denied)"})
+	raw := ProblemURL(s, cfg, "Windows 11 (build 26100)", "", []string{"10:00:00 ERROR sound capture failed (access denied)"})
 	u, err := url.Parse(raw)
 	if err != nil {
 		t.Fatal(err)
@@ -52,7 +52,7 @@ func TestProblemURLFillsTheForm(t *testing.T) {
 
 func TestProblemURLStaysShortWithLongWarnings(t *testing.T) {
 	long := []string{strings.Repeat("é", 2000), strings.Repeat("x", 2000)}
-	raw := ProblemURL(State{}, config.DefaultConfig(), "", long)
+	raw := ProblemURL(State{}, config.DefaultConfig(), "", strings.Repeat("summary line\n", 400), long)
 	u, _ := url.Parse(raw)
 	details := u.Query().Get(issueDetails)
 	if !strings.HasSuffix(details, "(cut short)") || len(raw) > 8000 {

@@ -48,10 +48,10 @@ body:
     id: details
     attributes:
       label: App details
-      description: Filled in by Go Fish, the run state, setup checks, settings and recent warnings. Remove anything you would rather not share.
+      description: Filled in by Go Fish, the run state, setup checks, a summary of the runs in its log, settings and recent warnings. Remove anything you would rather not share.
       render: text
   - type: textarea
     id: logs
     attributes:
       label: Log file
-      description: Optional. Drag `pixel_bot_logs.json` from the Go Fish folder here. It holds what Go Fish did, but no passwords.
+      description: Only if asked. In Go Fish, open Settings, click **Save report file**, and drag the file it shows you here. It holds the last logs and your settings, but no passwords.
