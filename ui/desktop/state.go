@@ -61,6 +61,7 @@ type State struct {
 	Keys           [4]string             `json:"keys"`           // the key settings the next run uses, see setupKeys
 	ESP32Port      string                `json:"esp32Port"`      // the saved board port, "AUTO", or "" when none is chosen
 	BoardFound     string                `json:"boardFound"`     // the port setup found the board on this session, or ""
+	BoardTest      string                `json:"boardTest"`      // what the last passed board test measured this session, or ""
 	Setup          [setupSlots]SetupStep `json:"setup"`          // what the bot still needs, see setupSteps
 	SetupDone      bool                  `json:"setupDone"`      // nothing is missing, or this is a dry run
 	Addon          string                `json:"addon"`          // Bobber Marker in the game: "missing", "outdated", "current", or "" when the game was not found

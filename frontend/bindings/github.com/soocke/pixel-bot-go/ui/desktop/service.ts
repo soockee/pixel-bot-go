@@ -185,6 +185,15 @@ export function State(): $CancellablePromise<$models.State> {
 }
 
 /**
+ * TestBoard checks the board on port, or on the saved one when port is "",
+ * over USB and Bluetooth into Windows, and returns what it measured. A run
+ * holds the port, so it refuses during one.
+ */
+export function TestBoard(port: string): $CancellablePromise<string> {
+    return $Call.ByID(3342670857, port);
+}
+
+/**
  * ToggleCapture starts or stops the run.
  */
 export function ToggleCapture(): $CancellablePromise<void> {

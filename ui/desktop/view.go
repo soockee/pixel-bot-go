@@ -122,6 +122,9 @@ func (v *View) SetInput(c *config.Config) {
 // SetBoardFound shows the port setup found the board on.
 func (v *View) SetBoardFound(port string) { v.state.BoardFound = port }
 
+// SetBoardTest shows what the last passed board test measured.
+func (v *View) SetBoardTest(line string) { v.state.BoardTest = line }
+
 // SetUpdate shows the newer release on offer, "" when none, and whether it
 // is being installed.
 func (v *View) SetUpdate(tag string, updating bool) { v.state.Update, v.state.Updating = tag, updating }
