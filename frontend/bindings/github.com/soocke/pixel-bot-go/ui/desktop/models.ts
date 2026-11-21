@@ -265,6 +265,11 @@ export interface State {
     "boardFound": string;
 
     /**
+     * what the last passed board test measured this session, or ""
+     */
+    "boardTest": string;
+
+    /**
      * what the bot still needs, see setupSteps
      */
     "setup": SetupStep[];

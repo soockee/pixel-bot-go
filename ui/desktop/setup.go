@@ -44,6 +44,8 @@ func setupSteps(s State) (steps [setupSlots]SetupStep, done bool) {
 
 	board := SetupStep{ID: "board", Title: "ESP32 board", Done: s.ESP32Port != "", Fields: [4]string{"esp32Port"}}
 	switch {
+	case s.BoardTest != "":
+		board.Detail = s.BoardTest
 	case s.BoardFound != "":
 		board.Detail = fmt.Sprintf("Found the board on %s.", s.BoardFound)
 	case s.ESP32Port == esp32.AutoPort:
@@ -51,7 +53,7 @@ func setupSteps(s State) (steps [setupSlots]SetupStep, done bool) {
 	case board.Done:
 		board.Detail = fmt.Sprintf("Uses the board on %s.", s.ESP32Port)
 	default:
-		board.Detail, board.Action = "Plug the Go Fish ESP32 into this PC with its USB cable and pair it over Bluetooth. Then find it, or choose its COM port.", "Find the board"
+		board.Detail, board.Action = "Plug the Go Fish ESP32 into this PC with its USB cable and pair it over Bluetooth. Then find and test it, or choose its COM port.", "Find and test the board"
 	}
 
 	// A current addon already holds the saved keys, so there is nothing to choose.

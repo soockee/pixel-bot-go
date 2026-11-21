@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/soocke/pixel-bot-go/config"
 )
@@ -27,14 +28,25 @@ const (
 )
 
 // detailsLimit keeps the URL under the roughly 8000 characters GitHub and
-// browsers accept once the details are escaped.
-const detailsLimit = 3000
+// browsers accept: it is the most the details may take once escaped.
+const detailsLimit = 6500
 
 // ProblemURL returns a new GitHub issue on the problem form, filled in with
-// the version, Windows and what the app knows: the run, the setup checks, the
-// Settings tab's values and the recent warnings. Nothing is sent until the
-// person submits the form in the browser.
-func ProblemURL(s State, cfg *config.Config, windows string, warnings []string) string {
+// the version, Windows and ProblemDetails, cut from the end to fit a URL.
+// Nothing is sent until the person submits the form in the browser.
+func ProblemURL(s State, cfg *config.Config, windows, summary string, warnings []string) string {
+	q := url.Values{}
+	q.Set("template", issueTemplate)
+	q.Set(issueVersion, s.Version)
+	q.Set(issueWindows, windows)
+	q.Set(issueDetails, fitEscaped(ProblemDetails(s, cfg, summary, warnings), detailsLimit))
+	return issueNewURL + "?" + q.Encode()
+}
+
+// ProblemDetails is what the app knows for a problem report: the run, the
+// setup checks, a summary of the runs in the log (RunSummary), the Settings
+// tab's values and the recent warnings.
+func ProblemDetails(s State, cfg *config.Config, summary string, warnings []string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Run: %s, running %v, casts %d, reels %d, casts without a bite in a row %d\n",
 		s.FSM, s.Running, s.Casts, s.Reels, s.FailedInRow)
@@ -42,6 +54,9 @@ func ProblemURL(s State, cfg *config.Config, windows string, warnings []string) 
 	fmt.Fprintf(&b, "Game window: %q, found %v\n", s.Window, s.GameFound)
 	fmt.Fprintf(&b, "Addon: %s (app carries %s)\n", cmp.Or(s.Addon, "game not found"), s.AddonVersion)
 	fmt.Fprintf(&b, "Setup done: %v, dry run %v, debug %v, theme %s\n", s.SetupDone, s.DryRun, s.Debug, s.Theme)
+	if summary != "" {
+		b.WriteString("\nRuns in the log:\n" + summary)
+	}
 	b.WriteString("\nSettings:\n")
 	b.WriteString(settingLines(settingsOf(cfg)))
 	if len(warnings) > 0 {
@@ -50,16 +65,28 @@ func ProblemURL(s State, cfg *config.Config, windows string, warnings []string) 
 			b.WriteString("  " + w + "\n")
 		}
 	}
-	details := b.String()
-	if len(details) > detailsLimit {
-		details = strings.ToValidUTF8(details[:detailsLimit], "") + "\n(cut short)" // the cut may split a character
+	return b.String()
+}
+
+// fitEscaped returns s, or as much of it as fits in limit characters once
+// query-escaped, ending in a note that it was cut. The cut is made between
+// characters, never inside one.
+func fitEscaped(s string, limit int) string {
+	const note = "\n(cut short)"
+	if len(url.QueryEscape(s)) <= limit {
+		return s
 	}
-	q := url.Values{}
-	q.Set("template", issueTemplate)
-	q.Set(issueVersion, s.Version)
-	q.Set(issueWindows, windows)
-	q.Set(issueDetails, details)
-	return issueNewURL + "?" + q.Encode()
+	used := len(url.QueryEscape(note))
+	end := 0
+	for i, r := range s {
+		size := len(url.QueryEscape(string(r)))
+		if used+size > limit {
+			break
+		}
+		used += size
+		end = i + utf8.RuneLen(r)
+	}
+	return s[:end] + note
 }
 
 // settingLines lists the settings one "name: value" line each, by name.

@@ -90,11 +90,13 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		CheckUpdate:   a.findUpdate,
 		ReleaseNotes:  a.releaseNotes,
 		ReportProblem: a.reportProblem,
+		SaveReport:    a.saveReport,
 		OpenURL:       func(url string) { a.wails.Browser.OpenURL(url) },
 		CheckAddon:    a.checkAddon,
 		InstallAddon:  a.installAddon,
 		MoveOverlay:   a.setOverlayMove,
 		FindBoard:     findBoard,
+		TestBoard:     testBoard,
 		SetTheme:      a.setTheme,
 	}, c.Recordings, cfg, config.FilePath, logger)
 

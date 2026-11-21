@@ -141,6 +141,14 @@ export function ReportProblem(): $CancellablePromise<void> {
 }
 
 /**
+ * SaveReport saves a report file, for a bug report where the log was asked
+ * for, shows it in File Explorer and returns its path. Nothing is sent.
+ */
+export function SaveReport(): $CancellablePromise<string> {
+    return $Call.ByID(766369736);
+}
+
+/**
  * SaveSettings validates and saves settings, and returns the values as saved,
  * clamped to safe ranges. Settings cannot change during a run.
  */
@@ -174,6 +182,15 @@ export function Settings(): $CancellablePromise<$models.SettingsForm> {
  */
 export function State(): $CancellablePromise<$models.State> {
     return $Call.ByID(556374792);
+}
+
+/**
+ * TestBoard checks the board on port, or on the saved one when port is "",
+ * over USB and Bluetooth into Windows, and returns what it measured. A run
+ * holds the port, so it refuses during one.
+ */
+export function TestBoard(port: string): $CancellablePromise<string> {
+    return $Call.ByID(3342670857, port);
 }
 
 /**

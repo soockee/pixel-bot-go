@@ -35,6 +35,7 @@ Go Fish sends live input through the ESP32 to the window in front. Click into th
 ## Nothing happens in the game
 
 - Check that the Go Fish ESP32 Probe is paired in Windows Bluetooth settings, plugged in over USB, and selected under **Settings → ESP32 board**. If **Auto** doesn't find it, choose its COM port.
+- Click **Test** next to **Settings → ESP32 board**. If checks over USB go missing, try another cable or USB port. If the board answers over USB but its key or pointer does not reach Windows, remove **Go Fish ESP32 Probe** in Bluetooth settings and pair it again.
 - Check that the board has the current Go Fish firmware and that no other program has its COM port open.
 - If you changed a key, click **Update addon** in **Set up fishing** and type `/reload` in the game.
 
@@ -55,9 +56,9 @@ Turn on **Auto Loot** in the game (Interface options, **Controls**). Go Fish cli
 
 ## Still stuck
 
-Click **Report a problem** at the top right of Go Fish. Your browser opens a new issue on [GitHub](https://github.com/soockee/pixel-bot-go/issues) with the Go Fish version, your Windows version, your settings and Go Fish's recent warnings already filled in. Describe what happened, pick where it happened, and submit. You need a GitHub account to submit, and nothing is sent before you do.
+Click **Report a problem** at the top right of Go Fish. Your browser opens a new issue on [GitHub](https://github.com/soockee/pixel-bot-go/issues) with the Go Fish version, your Windows version, a summary of your last runs, your settings and Go Fish's recent warnings already filled in. Describe what happened, pick where it happened, and submit. You need a GitHub account to submit, and nothing is sent before you do. Go Fish keeps the logs of its last three starts, so the report still holds the problem after you restarted it.
 
-If you can, drag the file `pixel_bot_logs.json` from the Go Fish folder into the issue. It holds what Go Fish did, but no passwords.
+If you are asked for the log, open **Settings**, click **Save report file** under **Report file**, and drag the file Go Fish shows you into the issue. It holds the last logs and your settings, but no passwords.
 
 ## It works again
 

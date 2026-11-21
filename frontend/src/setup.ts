@@ -32,13 +32,17 @@ export function setupWizard(finishSaving: () => Promise<void>, useBoard: () => P
   let activeID = "";
   let activeFields: string[] = [];
   install.addEventListener("click", async () => {
+    const label = install.textContent;
     install.disabled = true;
     keys.inert = true;
     error.hidden = true;
     try {
       await finishSaving();
       if (activeID === "board") {
-        await Service.FindBoard();
+        // The board is only kept once Go's test passed over USB and Bluetooth.
+        install.textContent = "Testing the board…";
+        const found = await Service.FindBoard();
+        await Service.TestBoard(found);
         await useBoard();
       } else if (activeID === "keys") {
         await Service.ChooseKeys();
@@ -50,6 +54,7 @@ export function setupWizard(finishSaving: () => Promise<void>, useBoard: () => P
       error.textContent = String(e).replace(/^Error: /, "");
       error.hidden = false;
     } finally {
+      install.textContent = label;
       keys.inert = false;
       install.disabled = false;
       check();

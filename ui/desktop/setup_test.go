@@ -25,8 +25,9 @@ func TestSetupSteps(t *testing.T) {
 		{"a chosen window is closed", State{Window: "Fake Game"}, false, 0, "", `"Fake Game" is not open`},
 		{"game folder unknown", State{Window: defaultWindow}, false, 3, "", "find the game folder"},
 		{"already open", State{Window: defaultWindow, GameFound: true}, false, 0, "", "Found the World of Warcraft window"},
-		{"no board chosen", State{GameFound: true, Addon: "current"}, false, 1, "Find the board", "USB cable"},
+		{"no board chosen", State{GameFound: true, Addon: "current"}, false, 1, "Find and test the board", "USB cable"},
 		{"board found", State{GameFound: true, ESP32Port: "AUTO", BoardFound: "COM5"}, false, 1, "", "on COM5"},
+		{"board tested", State{GameFound: true, ESP32Port: "COM5", BoardFound: "COM5", BoardTest: "Board on COM5: 20 of 20 answers"}, false, 1, "", "20 of 20 answers"},
 		{"board on auto", State{GameFound: true, ESP32Port: "AUTO"}, false, 1, "", "when fishing starts"},
 		{"board on a chosen port", State{GameFound: true, ESP32Port: "COM7"}, false, 1, "", "on COM7"},
 		{"keys not chosen", State{GameFound: true, ESP32Port: "AUTO", Addon: "missing"}, false, 2, "Use these keys", "F9 to F12"},
@@ -164,6 +165,24 @@ func TestFindBoardLooksOnTheSavedPortOrEverywhere(t *testing.T) {
 			t.Errorf("saved %q: found %q, %v, asked %q, state %q", tc.saved, found, err, asked, s.State().BoardFound)
 		}
 		cancel()
+	}
+}
+
+func TestTestBoardUsesTheGivenOrSavedPortAndKeepsTheResult(t *testing.T) {
+	for _, tc := range []struct{ given, saved, want string }{{"COM5", "", "COM5"}, {"", "COM7", "COM7"}, {"", "", "AUTO"}} {
+		s, _ := gameService(t, nil, false)
+		s.cfg.ESP32Port = tc.saved
+		var asked string
+		s.cmds.TestBoard = func(port string) (string, error) { asked = port; return "Board on " + port + ": fine.", nil }
+		line, err := s.TestBoard(tc.given)
+		if err != nil || asked != tc.want || line == "" || s.State().BoardTest != line {
+			t.Errorf("given %q, saved %q: asked %q, line %q, %v, state %q", tc.given, tc.saved, asked, line, err, s.State().BoardTest)
+		}
+	}
+	s, _ := gameService(t, nil, true)
+	s.cmds.TestBoard = func(string) (string, error) { t.Fatal("opened the port during a run"); return "", nil }
+	if _, err := s.TestBoard(""); err == nil {
+		t.Fatal("TestBoard ran during a run")
 	}
 }
 

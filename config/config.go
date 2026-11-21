@@ -3,7 +3,9 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 )
@@ -22,9 +24,23 @@ func (c Config) CheckSchedule() error {
 // misspelling is kept so existing files keep loading.
 const FilePath = "pixle_bot_config.json"
 
-// LogPath is the JSON log, relative to the working directory, truncated at
-// each start.
+// LogPath is the JSON log of the current start, relative to the working
+// directory. The logs of the LogsKept-1 starts before it are kept beside it
+// (KeptLogPath).
 const LogPath = "pixel_bot_logs.json"
+
+// LogsKept is how many starts' logs are kept, the current one included.
+const LogsKept = 3
+
+// KeptLogPath is the log n starts back: path itself for 0, then
+// pixel_bot_logs.1.json and so on.
+func KeptLogPath(path string, n int) string {
+	if n == 0 {
+		return path
+	}
+	ext := filepath.Ext(path)
+	return fmt.Sprintf("%s.%d%s", strings.TrimSuffix(path, ext), n, ext)
+}
 
 const (
 	ReelRightClick  = "right_click"  // Reel by clicking the bobber.
