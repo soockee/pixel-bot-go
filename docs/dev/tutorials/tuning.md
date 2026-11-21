@@ -17,5 +17,5 @@ order: 3
 1. Verify stable template lock (few `TargetLost` events).
 2. Slightly enlarge ROI if splashes are missed.
 3. Ensure steady lighting; avoid UI overlays near bobber.
-4. Keep the game's sound effects on: `splash_sound` then needs the bite sound after the splash, which rules out other players' spells. With them off it reels on the splash alone after the first cast of a run.
+4. Keep the game's sound effects on: `splash_sound` then needs the bite sound after the splash, which rules out other players' spells. With them off it reels on the splash alone only after three casts in a row whose splash brought no bite (`unansweredCasts`), or after 3 s when the game makes no sound at all.
 5. If premature bites trigger, raise `Threshold` to improve initial lock quality.
