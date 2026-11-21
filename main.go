@@ -150,6 +150,7 @@ func main() {
 	}
 	logger := NewLogger(level)
 	slog.SetDefault(logger)
+	logger.Info("Go Fish started", "version", update.Version, "debug", debugEnabled, "dry_run", cfg.DryRun)
 	if timing != nil {
 		logger.Info("timing profile loaded", "dry_run", cfg.DryRun, "seed", *timingSeed)
 	}
