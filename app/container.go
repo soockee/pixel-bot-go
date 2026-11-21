@@ -168,12 +168,12 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			keepOpen = true
 			return keyboard.Close, nil
 		}
-		move := func(x, y int) bool {
+		move := func(x, y int) error {
 			if err := keyboard.MoveTo(image.Pt(x, y), action.CursorPos); err != nil {
 				logger.Error("ESP32 pointer move failed", "error", err)
-				return false
+				return errors.New("the ESP32 could not put the pointer on the target; see pixel_bot_logs.json")
 			}
-			return true
+			return nil
 		}
 		click := func() bool {
 			if err := keyboard.ClickRight(); err != nil {
@@ -316,17 +316,17 @@ func (c *AppContainer) dryCursor(plan cursormotion.Planner, inFront func() bool,
 			}
 			return cursorSteps(plan(current, target, *area, settle))
 		},
-		Move: func(p image.Point) bool {
+		Move: func(p image.Point) error {
 			area := c.gameArea()
 			if !inFront() || area == nil || !p.In(*area) {
-				return false
+				return errors.New("the game was not in front, or the pointer path left it")
 			}
 			move(p.X, p.Y)
 			current = p
 			if c.trace != nil && c.trace.output != nil {
 				c.trace.cursorWaypoint(p, *area)
 			}
-			return true
+			return nil
 		},
 		Reset: func() { positioned = false },
 	}

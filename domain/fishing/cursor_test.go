@@ -1,6 +1,7 @@
 package fishing
 
 import (
+	"errors"
 	"image"
 	"os"
 	"testing"
@@ -26,13 +27,13 @@ func TestReelWaitsForCursorAndStopCancelsRemainingSteps(t *testing.T) {
 						{After: 600 * time.Millisecond, Point: target},
 					}, true
 				},
-				Move: func(p image.Point) bool {
+				Move: func(p image.Point) error {
 					if p == image.Pt(10, 10) {
 						log.add("target")
 					} else {
 						log.add("waypoint")
 					}
-					return true
+					return nil
 				},
 				Reset: func() {},
 			}
@@ -63,7 +64,7 @@ func TestRefusedCursorStepHaltsBeforeReel(t *testing.T) {
 			Plan: func(target image.Point, _ bool) ([]CursorStep, bool) {
 				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, true
 			},
-			Move:  func(image.Point) bool { return false },
+			Move:  func(image.Point) error { return errors.New("blocked") },
 			Reset: func() {},
 		}
 		fsm := NewFSM(nil, testConfig(), actions)
@@ -123,9 +124,12 @@ func TestPairedCursorReplay(t *testing.T) {
 							}
 							return steps, len(steps) > 0
 						},
-						Move: func(p image.Point) bool {
+						Move: func(p image.Point) error {
 							actions.MoveCursor(p.X, p.Y)
-							return p.In(bounds)
+							if !p.In(bounds) {
+								return errors.New("outside")
+							}
+							return nil
 						},
 						Reset: func() {},
 					}

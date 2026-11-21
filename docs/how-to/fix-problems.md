@@ -16,7 +16,9 @@ When Go Fish stops without you pressing Stop, the status bar says **Stopped:** a
 
 - **N casts in a row got no bite.** It cast the number of times you set under **Casts without a bite** and none got a bite. Check that the pink brackets show around your bobber, and that you fish where fish bite.
 - **The mouse was moved.** Go Fish parks the pointer on the bobber while it waits, and stops when you move the mouse so that it never fights you for it. Leave the mouse alone while it fishes, and click **Start fishing** again.
-- **The pointer was moved away, or the game was not in front.** The same, when the game lost the focus at the wrong moment.
+- **The game was not in front.** Another window took the focus while Go Fish moved the pointer. Keep the game in front while it fishes.
+- **The pointer path left the game window.** Keep the bobber away from the edges of the game window.
+- **The ESP32 could not put the pointer on the target.** The board's pointer moves did not arrive in time, usually over a weak Bluetooth link. Move the board closer to the PC, and turn off the board's Wi-Fi status page while fishing.
 - **The N minute session limit was reached.** The limit under **Session** in Settings ended the run.
 - Other messages name the setting to check, such as the Cast or Interact key.
 

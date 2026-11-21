@@ -302,6 +302,7 @@ func (k *Keyboard) MoveTo(target image.Point, pos func() (x, y int, ok bool)) er
 		return errors.New("ESP32 pointer support is unavailable")
 	}
 	gain := [2]float64{1, 1}
+	var trail []string // each step, for the error when the target is not reached
 	for range maxMoveSteps {
 		x, y, ok := pos()
 		if !ok {
@@ -318,15 +319,19 @@ func (k *Keyboard) MoveTo(target image.Point, pos func() (x, y int, ok bool)) er
 		if err := k.sendAction(fmt.Sprintf("MOVE %d %d", step[0], step[1]), "pointer move"); err != nil {
 			return err
 		}
+		sent := time.Now()
 		nx, ny := settle(x, y, pos)
 		moved := [2]int{nx - x, ny - y}
+		trail = append(trail, fmt.Sprintf("%d,%d%+d%+d>%+d%+d/%dms", x, y, step[0], step[1], moved[0], moved[1], time.Since(sent).Milliseconds()))
 		for i := range gain {
 			if step[i] != 0 && moved[i] != 0 && (moved[i] > 0) == (step[i] > 0) {
 				gain[i] = min(max(float64(moved[i])/float64(step[i]), 0.25), 4)
 			}
 		}
 	}
-	return errors.New("ESP32 pointer did not reach the target")
+	// Each step reads "from x,y, sent dx dy > moved dx dy / time until Windows applied it".
+	return fmt.Errorf("ESP32 pointer did not reach %d,%d after %d steps: %s",
+		target.X, target.Y, len(trail), strings.Join(trail[max(0, len(trail)-12):], " "))
 }
 
 // reportStep is the report value expected to cover rest pixels, at least one

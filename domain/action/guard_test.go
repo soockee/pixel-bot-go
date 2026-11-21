@@ -26,10 +26,10 @@ func newGuardFixture() *guardFixture {
 		CursorPos:  func() (int, int, bool) { return f.cursor.X, f.cursor.Y, true },
 		OnTakeover: func() { f.takeovers++ },
 		Press:      func(byte) bool { f.sent = append(f.sent, "press"); return true },
-		Move: func(x, y int) bool {
+		Move: func(x, y int) error {
 			f.cursor = image.Pt(x, y)
 			f.sent = append(f.sent, "move")
-			return true
+			return nil
 		},
 		Click: func() bool { f.sent = append(f.sent, "click"); return true },
 	}
@@ -81,7 +81,7 @@ func TestGuardDetectsTakeoverBeforeFirstWaypoint(t *testing.T) {
 		t.Fatal("expected a plan to start inside the window")
 	}
 	f.cursor.X += 20 // a hand on the mouse
-	if f.TryMoveCursor(image.Pt(160, 150)) || f.takeovers != 1 || len(f.sent) != 0 {
+	if f.TryMoveCursor(image.Pt(160, 150)) == nil || f.takeovers != 1 || len(f.sent) != 0 {
 		t.Fatalf("takeover did not stop the waypoint: sent=%v takeovers=%d", f.sent, f.takeovers)
 	}
 }
