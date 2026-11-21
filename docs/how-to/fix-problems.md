@@ -44,6 +44,14 @@ Go Fish sends live input through the ESP32 to the window in front. Click into th
 - Fish where the water is calm and the bobber is easy to see, away from other players' bobbers.
 - With the game's sound effects off, Go Fish needs three casts without a reel before it reels on the splash alone. Keep sound effects on: then it waits for the bite sound, and other players' spells and ripples do not fool it.
 
+## It reels in, but the fish stays in the loot window
+
+Turn on **Auto Loot** in the game (Interface options, **Controls**). Go Fish clicks the bobber and leaves the looting to the game.
+
+## Many fish get away
+
+"Your fish got away" comes from the game, not from Go Fish: it happens often when your fishing skill is low for the water you fish in. Fish where your skill is high enough.
+
 
 ## Still stuck
 
