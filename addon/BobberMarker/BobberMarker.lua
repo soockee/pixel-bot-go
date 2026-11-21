@@ -399,6 +399,10 @@ end
 -- that logs out on the Logout key. Macros and bindings cannot change in combat, so
 -- this waits for it to end. It changes only what differs and never writes to the
 -- chat; what went wrong is kept in keyProblems for /bobbermarker to show.
+-- The keys Go Fish names win over whatever the game had on them, and when they
+-- change, the old keys are released: every other key on the addon's own macros,
+-- and the Interact key it set before (db.interactKey), so an Interact key the
+-- player bound stays.
 
 local CAST_MACRO = "Fishing";
 local LOGOUT_MACRO = "Logout";
@@ -443,16 +447,33 @@ local function EnsureMacro(name, body)
 	return false;
 end
 
--- Binds key to the macro name holding body. True when the binding changed.
+-- Releases every key bound to command except keep. True when one was released.
+local function ReleaseOthers(command, keep)
+	local released = false;
+	for _, other in ipairs({ GetBindingKey(command) }) do
+		if other ~= keep and SetBinding(other) then
+			released = true;
+		end
+	end
+	return released;
+end
+
+-- Binds key, and only key, to the macro name holding body, over whatever it
+-- held before. True when a binding changed.
 local function BindMacro(key, name, body)
-	if not key or key == "" or not EnsureMacro(name, body) or GetBindingAction(key) == "MACRO " .. name then
+	if not key or key == "" or not EnsureMacro(name, body) then
 		return false;
+	end
+	local command = "MACRO " .. name;
+	local changed = ReleaseOthers(command, key);
+	if GetBindingAction(key) == command then
+		return changed;
 	end
 	if SetBindingMacro(key, name) then
 		return true;
 	end
 	Problem("could not bind " .. key .. "; bind it to the " .. name .. " macro in Key Bindings.");
-	return false;
+	return changed;
 end
 
 local function SetUpKeys()
@@ -470,7 +491,15 @@ local function SetUpKeys()
 	local interact = keys.interact;
 	changed = BindMacro(keys.cast, CAST_MACRO, "#showtooltip\n/cast " .. FishingName()) or changed;
 	changed = BindMacro(keys.logout, LOGOUT_MACRO, "/logout") or changed;
-	if interact and interact ~= "" and GetBindingAction(interact) ~= INTERACT then
+	if interact == "" then
+		interact = nil;
+	end
+	local before = db.interactKey;
+	if before and before ~= interact and GetBindingAction(before) == INTERACT and SetBinding(before) then
+		changed = true;
+	end
+	db.interactKey = interact;
+	if interact and GetBindingAction(interact) ~= INTERACT then
 		if SetBinding(interact, INTERACT) then
 			changed = true;
 		else
@@ -481,17 +510,15 @@ local function SetUpKeys()
 	local targetPlayer = keys.targetPlayer;
 	local softFriend = GetCVarValue("SoftTargetFriend");
 	if targetPlayer and targetPlayer ~= "" then
-		if GetBindingAction(targetPlayer) == "" then
-			SetOverrideBindingClick(targetButton, false, targetPlayer, targetButton:GetName(), "LeftButton");
-			if softFriend and softFriend ~= "3" then
-				db.softFriendBefore = db.softFriendBefore or softFriend;
-				SetCVarValue("SoftTargetFriend", "3");
-			end
-			if GetCVarValue("SoftTargetFriend") ~= "3" then
-				Problem("friendly soft targeting could not be enabled.");
-			end
-		else
-			Problem("the passing-player key " .. targetPlayer .. " is already bound; choose an unused key.");
+		-- An override wins over the key's own binding while the addon runs, and
+		-- leaves that binding as it was.
+		SetOverrideBindingClick(targetButton, false, targetPlayer, targetButton:GetName(), "LeftButton");
+		if softFriend and softFriend ~= "3" then
+			db.softFriendBefore = db.softFriendBefore or softFriend;
+			SetCVarValue("SoftTargetFriend", "3");
+		end
+		if GetCVarValue("SoftTargetFriend") ~= "3" then
+			Problem("friendly soft targeting could not be enabled.");
 		end
 	elseif db.softFriendBefore then
 		if softFriend == "3" then
