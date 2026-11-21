@@ -139,7 +139,7 @@ func (a *app) installUpdate() error {
 		return err
 	}
 	a.logger.Info("update installed", "from", update.Version, "to", r.Tag)
-	go a.wails.Quit() // Run starts the new build once the app has shut down
+	a.quit() // Run starts the new build once the app has shut down
 	return nil
 }
 
