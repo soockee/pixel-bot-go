@@ -6,9 +6,9 @@ order: 6
 
 The status bar at the bottom of Go Fish usually says what is wrong. These are the common cases.
 
-## Start fishing is greyed out
+## It says "Finish setup first"
 
-Something in **Set up fishing** is still missing. Usually the game isn't open, the ESP32 board isn't found, or the addon needs an install or update. Follow the list; see [Install the addon](install-addon.md).
+Something in **Set up fishing** is still missing, and the line under **Start fishing** names the step. Usually the game isn't open, the ESP32 board isn't found, or the addon needs an install or update. Follow the list; see [Install the addon](install-addon.md).
 
 ## It stopped by itself
 
@@ -22,7 +22,7 @@ When Go Fish stops without you pressing Stop, the Fishing view says **Stopped by
   - **the pointer was not on the bobber**: the move to the bobber did not finish before the bite. Start again; if it repeats, see the ESP32 line below.
   - **the game was not in front** or **the mouse was moved**: as above.
   - **the bobber was outside the game window**: keep the bobber away from the edges of the game window.
-  - **the ESP32 could not click**: the board did not answer the click. Click **Test** under **Settings → ESP32 board**; see [Nothing happens in the game](#nothing-happens-in-the-game).
+  - **the ESP32 could not click**: the board did not answer the click. Click **Test** under **Settings → Input → ESP32 board**; see [Nothing happens in the game](#nothing-happens-in-the-game).
 - **The ESP32 could not put the pointer on the target.** The board's pointer moves did not arrive in time, usually over a weak Bluetooth link. Move the board closer to the PC, and turn off the board's Wi-Fi status page while fishing.
 - **The N minute session limit was reached.** The limit under **Session** in Settings ended the run.
 - Other messages name the setting to check, such as the Cast or Interact key.
@@ -39,8 +39,8 @@ Go Fish sends live input through the ESP32 to the window in front. Click into th
 
 ## Nothing happens in the game
 
-- Check that the Go Fish ESP32 Probe is paired in Windows Bluetooth settings, plugged in over USB, and selected under **Settings → ESP32 board**. If **Auto** doesn't find it, choose its COM port.
-- Click **Test** next to **Settings → ESP32 board**. If checks over USB go missing, try another cable or USB port. If the board answers over USB but its key or pointer does not reach Windows, remove **Go Fish ESP32 Probe** in Bluetooth settings and pair it again.
+- Check that the Go Fish ESP32 Probe is paired in Windows Bluetooth settings, plugged in over USB, and selected under **Settings → Input → ESP32 board**. If **Auto** doesn't find it, choose its COM port.
+- Click **Test** next to **Settings → Input → ESP32 board**. If checks over USB go missing, try another cable or USB port. If the board answers over USB but its key or pointer does not reach Windows, remove **Go Fish ESP32 Probe** in Bluetooth settings and pair it again.
 - Check that the board has the current Go Fish firmware and that no other program has its COM port open.
 - If you changed a key, click **Update addon** in **Set up fishing** and type `/reload` in the game.
 

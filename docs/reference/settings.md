@@ -6,8 +6,9 @@ order: 1
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| **Fishing** | | |
+| **Fishing keys** | | |
 | Cast key | F9 | The key or mouse side button Go Fish presses to cast Fishing. Must match the game. |
+| **Reeling** | | |
 | Reel method | Right click | Right-click the marked bobber, or press your Interact key without moving the cursor. |
 | Interact key | F10 | A spare key for the Interact reel method. Bobber Marker binds it to **Interact With Target** in WoW. It must differ from the Cast key. |
 | **Input** | | |

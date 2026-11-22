@@ -6,15 +6,17 @@ order: 3
 
 Open the **Settings** tab. Every change saves at once. Settings are locked while Go Fish is fishing; click **Stop** first.
 
-## Keys
+## Fishing keys
 
 - **Cast key**: click it, then press a spare key: a letter, a number on the top row, F1 to F12, or a mouse side button, without Shift, Ctrl or Alt. The addon puts Fishing on that key for you. After a change, click **Update addon** on the Fishing tab and type `/reload` in the game.
+
+## Reeling
 
 - **Reel method**: Go Fish right-clicks the bobber by default. To reel with a key instead, choose **Interact key** and pick a spare key next to it; the addon sets it up after an **Update** and `/reload`. If your bobber lands too far away for the key to reach, go back to **Right click**.
 
 ## ESP32 board
 
-Live fishing requires an ESP32 board with the [Go Fish firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe). Pair **Go Fish ESP32 Probe** in Windows Bluetooth settings, keep its USB cable plugged in, and choose **Auto** under **ESP32 board**. If Auto doesn't find it, choose its COM port, for example `COM3`. Click **Test** next to it to check the board: it should answer every check over USB, and its test key, and its pointer on firmware that moves the pointer, should reach Windows over Bluetooth. Go Fish catches the test key, so no window gets it; the pointer moves by one pixel and back. Without the board, Go Fish won't start a live run. Dry-run mode still works without it.
+Live fishing requires an ESP32 board with the [Go Fish firmware](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe). Pair **Go Fish ESP32 Probe** in Windows Bluetooth settings, keep its USB cable plugged in, and choose **Auto** under **Input → ESP32 board**. **Set up fishing** does this for you with **Find and test the board**. If Auto doesn't find it, choose its COM port, for example `COM3`. Click **Test** next to it to check the board: it should answer every check over USB, and its test key, and its pointer on firmware that moves the pointer, should reach Windows over Bluetooth. Go Fish catches the test key, so no window gets it; the pointer moves by one pixel and back. Without the board, Go Fish won't start a live run. Dry-run mode still works without it.
 
 Go Fish sends every live key, click and cursor move through the board while the game is in front. It does not send input to a game in the background.
 

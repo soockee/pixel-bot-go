@@ -19,10 +19,10 @@ Go Fish goes round these steps; the Fishing tab highlights the current one.
 
 ## Counters
 
-- **Catches this run**: fish reeled in since you pressed Start, and how many casts that took.
-- **Caught, got away, not hooked**: how the reels ended, as the game told Bobber Marker. "Not hooked" means Go Fish reeled with no fish on the hook. Shown once Bobber Marker 1.5.0 or later is installed.
+- **Catches this run**: fish reeled in since you pressed Start, and how many casts that took. If a reel click was blocked, for example because the game was not in front, the line also counts the blocked reels.
+- **Caught, got away, not hooked**: how the reels ended, as the game told Bobber Marker, shown as one bar with the three counts under it. "Not hooked" means Go Fish reeled with no fish on the hook. Shown once Bobber Marker 1.5.0 or later is installed.
 - **Session**: how long this run has gone, against the session length.
-- **Casts without a bite**: casts in a row without a catch, against the limit that stops the run.
+- **Casts without a bite**: casts in a row without a catch, against the limit that stops the run. The bar turns red one cast before the limit.
 
 ## Thank-you note
 
@@ -31,6 +31,10 @@ When Go Fish has caught 100 fish for you in total, and again at 500, 1,000, 2,50
 ## Picture
 
 The large picture is what Go Fish sees of the game window. While it watches for a bite, the picture zooms in on your bobber and the water around it, live; the rest of the window dims.
+
+Before you start, it shows **Ready to fish**. After a run that stopped by itself, it shows **Stopped by itself**, the reason, and a **What to do** link to [It stopped by itself](../how-to/fix-problems.md#it-stopped-by-itself).
+
+If **Set up fishing** is not finished, the line under **Start fishing** says which step is missing. Starting still works, in case a check is wrong.
 
 ## Status bar
 

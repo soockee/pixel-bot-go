@@ -19,4 +19,6 @@ For live fishing, Go Fish sends key and mouse commands over USB to your ESP32. T
 | GitHub, in your browser | Only when you click **Report a problem** and then submit the issue | What you write, plus what Go Fish filled in: its version, your Windows version, the game window's title, a summary of your last runs from its log (casts, bites, how they ended, why a run stopped), your settings and its recent warnings. You see all of it before you submit, and the issue is public. |
 | Wherever you drag it | Only when you click **Save report file** and drag the file somewhere | Go Fish saves the file in its folder and shows it to you; it sends nothing itself. The file holds the logs of the last three starts, your settings and the report text above. The logs name your game folder and may hold your Windows user name in a path. |
 
+A few buttons open a page in your browser and send nothing themselves: **What's new** opens the release notes on GitHub, and **What to do** after a stop opens this guide.
+
 When you click **Update**, Go Fish downloads the new version from GitHub. See [Update Go Fish](../how-to/update.md).
