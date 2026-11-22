@@ -2,6 +2,8 @@
 
 Go Fish is a Windows app for studying visual event detection and response timing, using fishing in World of Warcraft: Forever as the test scene. A small addon marks your bobber, the app finds the marker in the game window, watches the box for the splash of a bite, and answers with a click. A local simulator plays the same scene with scripted bites, so everything can be tested without the game.
 
+https://github.com/user-attachments/assets/b5e026ad-c879-4a48-ba24-902346012309
+
 **Documentation:** [soockee.github.io/pixel-bot-go](https://soockee.github.io/pixel-bot-go/)
 
 [![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-socke-ffdd00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/socke)
