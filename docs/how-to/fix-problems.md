@@ -23,7 +23,8 @@ When Go Fish stops without you pressing Stop, the Fishing view says **Stopped by
   - **the game was not in front** or **the mouse was moved**: as above.
   - **the bobber was outside the game window**: keep the bobber away from the edges of the game window.
   - **the ESP32 could not click**: the board did not answer the click. Click **Test** under **Settings → Input → ESP32 board**; see [Nothing happens in the game](#nothing-happens-in-the-game).
-- **The ESP32 could not put the pointer on the target.** The board's pointer moves did not arrive in time, usually over a weak Bluetooth link. Move the board closer to the PC, and turn off the board's Wi-Fi status page while fishing.
+- **The ESP32 could not put the pointer on the target.** The board's pointer moves did not arrive in time, usually over a weak Bluetooth link. One miss only costs that cast. Go Fish stops when the board stops answering, or with **The pointer did not land on the bobber** when misses fill **Casts without a bite**. Move the board closer to the PC, and turn off the board's Wi-Fi status page while fishing.
+- **The ESP32 lost its Bluetooth link to this PC.** Go Fish waits up to 10 seconds for the link to come back and then fishes on; it stops only when the link stays down. Move the board closer to the PC, or remove and pair **Go Fish ESP32 Probe** again.
 - **The N minute session limit was reached.** The limit under **Session** in Settings ended the run.
 - Other messages name the setting to check, such as the Cast or Interact key.
 

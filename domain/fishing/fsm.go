@@ -2,6 +2,7 @@ package fishing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"log/slog"
@@ -295,6 +296,11 @@ func (f *FishingFSM) wake() {
 		f.cursorSteps = f.cursorSteps[n:]
 		// Skip elapsed intermediate points instead of sending a burst.
 		if err := f.actions.Cursor.Move(point); err != nil {
+			if errors.Is(err, ErrPointerMissed) && !f.countFailedCast() {
+				f.logger.Warn("cast given up", "reason", err.Error())
+				f.recast()
+				return
+			}
 			f.why(err.Error())
 			f.halt()
 			return

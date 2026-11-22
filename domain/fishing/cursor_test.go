@@ -102,6 +102,33 @@ func TestRefusedCursorStepHaltsBeforeReel(t *testing.T) {
 	})
 }
 
+func TestMissedPointerGivesUpTheCast(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		log := &actionLog{}
+		actions := recordingActions(log)
+		actions.Cursor = &CursorCallbacks{
+			Plan: func(target image.Point, _ bool) ([]CursorStep, bool) {
+				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, true
+			},
+			Move:  func(image.Point) error { return ErrPointerMissed },
+			Reset: func() {},
+		}
+		cfg := testConfig()
+		cfg.MaxFailedCasts = 2
+		fsm := NewFSM(nil, cfg, actions)
+		defer fsm.Close()
+		startMonitoring(t, fsm)
+		fsm.EventFishBite()
+		time.Sleep(reelClickDelay + time.Second)
+		wantState(t, fsm, StateSearching) // one missed aim recast instead of halting
+		fsm.EventTargetAcquiredAt(10, 10)
+		fsm.EventFishBite()
+		time.Sleep(reelClickDelay + time.Second)
+		wantState(t, fsm, StateHalt) // the second miss in a row reached MaxFailedCasts
+		wantActions(t, log, "press")
+	})
+}
+
 func TestPairedCursorReplay(t *testing.T) {
 	model := cursormotion.Model{Samples: []cursormotion.Sample{{
 		Distance: 170,

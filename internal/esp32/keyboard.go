@@ -324,9 +324,9 @@ func (k *Keyboard) MoveTo(target image.Point, pos func() (x, y int, ok bool)) er
 			step[i] = reportStep(rest[i], gain[i])
 		}
 		reply, err := k.exchange(fmt.Sprintf("MOVE %d %d", step[0], step[1]))
-		// A lost OK is safe to get past once: the next step reads where the
-		// pointer really is, so a report that did go out is not sent twice.
-		if errors.Is(err, os.ErrDeadlineExceeded) && !resynced && k.handshake() == nil {
+		// Getting past a failed step once is safe: the next step reads where
+		// the pointer really is, so a report that did go out is not sent twice.
+		if !resynced && k.recovered(reply, err) {
 			resynced = true
 			continue
 		}
@@ -447,10 +447,23 @@ func (k *Keyboard) TapFor(usage byte, hold time.Duration) error {
 	return k.sendAction(command, "tap")
 }
 
-// sendAction runs with the port locked.
+// sendAction runs with the port locked. A lost OK or a Bluetooth drop does not
+// halt the run once the board answers HELLO again: the action went out or was
+// dropped, and a cast or reel that never happened costs only that cast.
 func (k *Keyboard) sendAction(command, action string) error {
 	reply, err := k.exchange(command)
+	if k.recovered(reply, err) {
+		return nil
+	}
 	return k.result(action, reply, err)
+}
+
+// recovered reports whether the board is ready again after its OK was lost or
+// its Bluetooth link dropped. handshake waits up to pairWait for the link.
+func (k *Keyboard) recovered(reply string, err error) bool {
+	lost := errors.Is(err, os.ErrDeadlineExceeded)
+	dropped := err == nil && reply == "ERR disconnected"
+	return (lost || dropped) && k.handshake() == nil
 }
 
 // result closes the port unless the board acknowledged the action.
