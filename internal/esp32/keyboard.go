@@ -309,6 +309,7 @@ func (k *Keyboard) MoveTo(target image.Point, pos func() (x, y int, ok bool)) er
 	}
 	gain := [2]float64{1, 1}
 	var trail []string // each step, for the error when the target is not reached
+	resynced := false  // a lost reply was already got past with a new HELLO
 	for range maxMoveSteps {
 		x, y, ok := pos()
 		if !ok {
@@ -322,7 +323,14 @@ func (k *Keyboard) MoveTo(target image.Point, pos func() (x, y int, ok bool)) er
 		for i := range step {
 			step[i] = reportStep(rest[i], gain[i])
 		}
-		if err := k.sendAction(fmt.Sprintf("MOVE %d %d", step[0], step[1]), "pointer move"); err != nil {
+		reply, err := k.exchange(fmt.Sprintf("MOVE %d %d", step[0], step[1]))
+		// A lost OK is safe to get past once: the next step reads where the
+		// pointer really is, so a report that did go out is not sent twice.
+		if errors.Is(err, os.ErrDeadlineExceeded) && !resynced && k.handshake() == nil {
+			resynced = true
+			continue
+		}
+		if err := k.result("pointer move", reply, err); err != nil {
 			return err
 		}
 		sent := time.Now()
@@ -442,6 +450,11 @@ func (k *Keyboard) TapFor(usage byte, hold time.Duration) error {
 // sendAction runs with the port locked.
 func (k *Keyboard) sendAction(command, action string) error {
 	reply, err := k.exchange(command)
+	return k.result(action, reply, err)
+}
+
+// result closes the port unless the board acknowledged the action.
+func (k *Keyboard) result(action, reply string, err error) error {
 	if err == nil && reply == "OK" {
 		return nil
 	}

@@ -149,3 +149,46 @@ func TestTapClosesAfterMissingAcknowledgment(t *testing.T) {
 		t.Fatalf("unexpected retry, writes = %q, error = %v", port.writes.String(), err)
 	}
 }
+
+// lostReplyPort is firmware whose OK for the first MOVE never reaches the PC,
+// although the pointer moved.
+type lostReplyPort struct {
+	mousePort
+	lost bool
+}
+
+func (p *lostReplyPort) Read(b []byte) (int, error) {
+	if p.replies.Len() == 0 {
+		return 0, nil // what the serial port returns when its read timeout ends
+	}
+	return p.replies.Read(b)
+}
+
+func (p *lostReplyPort) Write(b []byte) (int, error) {
+	if string(b) == "HELLO\n" {
+		p.replies.WriteString("GOFISH 1 READY\r\n")
+		return len(b), nil
+	}
+	n, err := p.mousePort.Write(b)
+	if !p.lost {
+		p.lost = true
+		p.replies.Reset()
+	}
+	return n, err
+}
+
+func (p *lostReplyPort) ResetInputBuffer() error            { return nil }
+func (p *lostReplyPort) SetReadTimeout(time.Duration) error { return nil }
+func (p *lostReplyPort) Close() error                       { return nil }
+
+func TestMoveToGetsPastOneLostReply(t *testing.T) {
+	port := &lostReplyPort{mousePort: mousePort{gain: func(int) float64 { return 1 }, x: 500, y: 500}}
+	k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port}), pointer: true}
+	pos := func() (int, int, bool) { return port.x, port.y, true }
+	if err := k.MoveTo(image.Pt(700, 450), pos); err != nil {
+		t.Fatalf("a lost OK stopped the move: %v", err)
+	}
+	if port.x != 700 || port.y != 450 || k.port == nil {
+		t.Fatalf("pointer at %d,%d, port open %v; want 700,450 and an open port", port.x, port.y, k.port != nil)
+	}
+}
