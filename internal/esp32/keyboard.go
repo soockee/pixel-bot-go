@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"image"
 	"io"
+	"log/slog"
 	"os"
 	"slices"
 	"strconv"
@@ -63,6 +64,10 @@ type Keyboard struct {
 	name    string                                          // the port in use, which AutoPort resolves
 	open    func(string, *serial.Mode) (serial.Port, error) // nil opens the real port; tests replace it
 	list    func() ([]string, error)                        // nil lists the USB serial ports; tests replace it
+
+	// Logger, when set, gets a Warn for each failed action the board recovered
+	// from, which the run would not show otherwise.
+	Logger *slog.Logger
 }
 
 // A board that was just reset prints boot noise for about a second and then
@@ -326,7 +331,7 @@ func (k *Keyboard) MoveTo(target image.Point, pos func() (x, y int, ok bool)) er
 		reply, err := k.exchange(fmt.Sprintf("MOVE %d %d", step[0], step[1]))
 		// Getting past a failed step once is safe: the next step reads where
 		// the pointer really is, so a report that did go out is not sent twice.
-		if !resynced && k.recovered(reply, err) {
+		if !resynced && k.recovered("pointer move", reply, err) {
 			resynced = true
 			continue
 		}
@@ -452,7 +457,7 @@ func (k *Keyboard) TapFor(usage byte, hold time.Duration) error {
 // dropped, and a cast or reel that never happened costs only that cast.
 func (k *Keyboard) sendAction(command, action string) error {
 	reply, err := k.exchange(command)
-	if k.recovered(reply, err) {
+	if k.recovered(action, reply, err) {
 		return nil
 	}
 	return k.result(action, reply, err)
@@ -460,10 +465,23 @@ func (k *Keyboard) sendAction(command, action string) error {
 
 // recovered reports whether the board is ready again after its OK was lost or
 // its Bluetooth link dropped. handshake waits up to pairWait for the link.
-func (k *Keyboard) recovered(reply string, err error) bool {
-	lost := errors.Is(err, os.ErrDeadlineExceeded)
-	dropped := err == nil && reply == "ERR disconnected"
-	return (lost || dropped) && k.handshake() == nil
+func (k *Keyboard) recovered(action, reply string, err error) bool {
+	cause := ""
+	switch {
+	case errors.Is(err, os.ErrDeadlineExceeded):
+		cause = "reply lost"
+	case err == nil && reply == "ERR disconnected":
+		cause = "Bluetooth link dropped"
+	default:
+		return false
+	}
+	if k.handshake() != nil {
+		return false
+	}
+	if k.Logger != nil {
+		k.Logger.Warn("ESP32 recovered", "action", action, "cause", cause)
+	}
+	return true
 }
 
 // result closes the port unless the board acknowledged the action.

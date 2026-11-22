@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	"log/slog"
 	"math"
 	"strings"
 	"testing"
@@ -195,9 +196,13 @@ func TestMoveToGetsPastOneLostReply(t *testing.T) {
 
 func TestTapGetsPastALostReply(t *testing.T) {
 	port := &lostReplyPort{}
-	k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port})}
+	var log strings.Builder
+	k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port}), Logger: slog.New(slog.NewTextHandler(&log, nil))}
 	if err := k.Tap(0x3E); err != nil || k.port == nil {
 		t.Fatalf("a lost OK: err %v, port open %v; want nil and an open port", err, k.port != nil)
+	}
+	if !strings.Contains(log.String(), `msg="ESP32 recovered" action=tap cause="reply lost"`) {
+		t.Errorf("log = %q, want the recovery", log.String())
 	}
 }
 

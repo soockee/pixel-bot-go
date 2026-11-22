@@ -99,7 +99,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	} else {
 		callbacks.ReelRoll = rand.IntN
 		callbacks.RepositionRoll = rand.IntN
-		var keyboard esp32.Keyboard
+		keyboard := esp32.Keyboard{Logger: logger}
 		callbacks.OpenKeyboard = func(run config.Config) (func(), error) {
 			if run.ESP32Port == "" {
 				return nil, errors.New("select or connect the ESP32 board in Settings")
