@@ -447,9 +447,14 @@ func (k *Keyboard) TapFor(usage byte, hold time.Duration) error {
 	return k.sendAction(command, "tap")
 }
 
-// sendAction runs with the port locked.
+// sendAction runs with the port locked. A lost OK does not halt the run when
+// the board still answers HELLO: the action went out or was dropped, and a cast
+// or reel that never happened costs only that cast.
 func (k *Keyboard) sendAction(command, action string) error {
 	reply, err := k.exchange(command)
+	if errors.Is(err, os.ErrDeadlineExceeded) && k.handshake() == nil {
+		return nil
+	}
 	return k.result(action, reply, err)
 }
 

@@ -192,3 +192,11 @@ func TestMoveToGetsPastOneLostReply(t *testing.T) {
 		t.Fatalf("pointer at %d,%d, port open %v; want 700,450 and an open port", port.x, port.y, k.port != nil)
 	}
 }
+
+func TestTapGetsPastALostReply(t *testing.T) {
+	port := &lostReplyPort{}
+	k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port})}
+	if err := k.Tap(0x3E); err != nil || k.port == nil {
+		t.Fatalf("a lost OK: err %v, port open %v; want nil and an open port", err, k.port != nil)
+	}
+}
