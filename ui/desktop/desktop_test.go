@@ -129,30 +129,6 @@ func TestESP32PortSettings(t *testing.T) {
 	}
 }
 
-func TestSetThemeSavesKnownThemesOnly(t *testing.T) {
-	cfg := config.DefaultConfig()
-	view := NewView(NewFrames(), func(State) {})
-	loop := NewLoop(func() {})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go loop.Run(ctx, time.Hour)
-	var icons []string
-	path := filepath.Join(t.TempDir(), "config.json")
-	s := NewService(loop, view, Commands{SetTheme: func(theme string) { icons = append(icons, theme) }}, nil, cfg,
-		path, slog.New(slog.DiscardHandler))
-
-	s.SetTheme("fel")
-	s.SetTheme("no-such-theme")
-	saved, err := config.Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Theme != "fel" || s.State().Theme != "fel" || saved.Theme != "fel" || len(icons) != 1 {
-		t.Fatalf("theme %q, shown %q, saved %q, icons %v; want fel everywhere and one icon change",
-			cfg.Theme, s.State().Theme, saved.Theme, icons)
-	}
-}
-
 func TestESP32PortsKeepTheSavedPort(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.ESP32Port = "COM7"

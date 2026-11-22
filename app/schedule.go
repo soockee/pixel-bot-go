@@ -101,7 +101,7 @@ func (a *app) tickSchedule(now time.Time) {
 	if stopped {
 		a.recoveryAllowed = false
 		if a.schedule != nil {
-			a.stopSchedule("Schedule stopped")
+			a.stopSchedule("Stopped")
 		}
 		return
 	}
@@ -131,7 +131,7 @@ func (a *app) tickSchedule(now time.Time) {
 			if reason == "" {
 				reason = "fishing stopped"
 			}
-			a.stopSchedule("Schedule stopped: " + reason)
+			a.stopSchedule("Stopped: " + reason)
 		} else if !now.Before(s.until) {
 			c.CapturePresenter.Disable()
 			a.setSchedulePhase(sendLogout, now.Add(screenWait), "Schedule: preparing to log out")
@@ -150,7 +150,7 @@ func (a *app) tickSchedule(now time.Time) {
 		if wantWorld {
 			expected = "the logged-in game"
 		}
-		a.stopSchedule("Schedule stopped: could not confirm " + expected + ". Check focus and that Bobber Marker is up to date.")
+		a.stopSchedule("Stopped: could not confirm " + expected + ". Check focus and that Bobber Marker is up to date.")
 		return
 	}
 	if now.Before(s.nextCheck) || c.FSM.Current() != fishing.StateHalt {
@@ -209,7 +209,7 @@ func (a *app) scheduleScreen(wantWorld bool) bool {
 func (a *app) scheduleKey(vk byte, wantWorld bool, next schedulePhase, status string) {
 	sent, err := a.schedule.tap(vk, wantWorld)
 	if err != nil {
-		a.stopSchedule("Schedule stopped: " + err.Error())
+		a.stopSchedule("Stopped: " + err.Error())
 		return
 	}
 	if sent {

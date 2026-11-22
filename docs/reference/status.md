@@ -14,7 +14,7 @@ Go Fish goes round these steps; the Fishing tab highlights the current one.
 | Search | Looking for the pink brackets around the bobber. |
 | Watch | Watching the box for the splash of a bite. |
 | Reel | A fish bit; clicking the bobber. |
-| Cool down | The short pause after a catch. |
+| Pause | The short pause after a catch. |
 | Cast | Pressing your cast key. |
 
 ## Counters
@@ -26,7 +26,7 @@ Go Fish goes round these steps; the Fishing tab highlights the current one.
 
 ## Thank-you note
 
-When Go Fish has caught 100 fish for you in total, and again at 500, 1,000, 2,500, 5,000 and every 5,000 after, a short note under the counters says how many fish and how many hours of fishing that was, and offers to say thanks. It only shows after a run that went well (at least one catch, few reels with no fish hooked), never during a dry run. **Not now** hides it until the next milestone; **I already support it** and **Don't ask again** hide it for good, and only the small link in the status bar stays. The button's wording follows the theme. Go Fish keeps the counts on your PC only.
+When Go Fish has caught 100 fish for you in total, and again at 500, 1,000, 2,500, 5,000 and every 5,000 after, a short note under the counters says how many fish and how many hours of fishing that was, and offers to say thanks. It only shows after a run that went well (at least one catch, few reels with no fish hooked), never during a dry run. **Not now** hides it until the next milestone; **I already support it** and **Don't ask again** hide it for good, and only the small link in the status bar stays. Go Fish keeps the counts on your PC only.
 
 ## Picture
 

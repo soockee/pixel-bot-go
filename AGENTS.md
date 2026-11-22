@@ -15,7 +15,7 @@ Go Fish is a Windows Go application for visual event and response experiments. I
 (cd frontend && npm ci && npm run build)   # frontend, embedded by go build; needed once and after frontend changes
 (cd frontend && npm run bindings)   # regenerate frontend/bindings after changing ui/desktop types or Service methods (needs wails3 CLI v3.1.0)
 go build -o pixel-bot-go.exe .      # build (console program; releases and run.ps1 add -ldflags '-H=windowsgui', so no terminal opens)
-./scripts/theme-icons.ps1            # after changing frontend/public/themes/*.svg: renders app/icons/*.png and the exe icon (rsrc_windows_amd64.syso, needs Edge and wails3)
+./scripts/app-icon.ps1               # after changing frontend/public/icon.svg: renders app/icon.png and the exe icon (rsrc_windows_amd64.syso, needs Edge and wails3)
 go test ./...                       # run all tests
 go vet ./...                        # static checks
 gofmt -l .                          # must print nothing
@@ -57,14 +57,14 @@ There is no Makefile. Without a frontend build the window is empty (`frontend/di
 - The bobber is whatever the addon marks: `detect.MarkerLocator` returns the box inside its corner brackets, the box centre is the click point, and the box is the area watched for a bite. Without the addon the bot finds nothing and halts after `max_failed_casts`.
 - UI and logic: the frontend only renders `desktop.State` (the `state` event) and calls `desktop.Service`; it holds no rules. Validation, defaults and decisions live in Go (`ui/desktop`, presenters, domain). `ui/desktop` and `ui/presenter` do not import Wails; only `app/` and `frontend/` know the toolkit. Add a field to `State` or a method to `Service`, regenerate the bindings, then render it.
 - Build all wiring in `app/container.go`; do not construct services inside presenters or views. Constructors require their dependencies, so do not add nil guards for them.
-- Support: a quiet link in the status bar and next to What's new (Settings → Updates), and a thank-you card in the Fishing view at catch milestones after a good run (`ui/desktop/support.go` decides, `app/support.go` adds each run's catches and time and saves `catches_total`, `fishing_seconds_total`, `support_milestone`, `support_muted`). The wording follows the theme (`Words.support` in `themes.ts`). The link is `desktop.SupportURL`; `.github/FUNDING.yml` adds GitHub's Sponsor button. Nothing is measured or sent: there is no telemetry, so conversion is read from Buy Me a Coffee's supporter list against the release download counts.
+- Support: a quiet link in the status bar and next to What's new (Settings → Updates), and a thank-you card in the Fishing view at catch milestones after a good run (`ui/desktop/support.go` decides, `app/support.go` adds each run's catches and time and saves `catches_total`, `fishing_seconds_total`, `support_milestone`, `support_muted`). The link is `desktop.SupportURL`; `.github/FUNDING.yml` adds GitHub's Sponsor button. Nothing is measured or sent: there is no telemetry, so conversion is read from Buy Me a Coffee's supporter list against the release download counts.
 
 ## Conventions
 
 - Follow `.github/instructions/go.instructions.md` (idiomatic Go, early returns, documented exports, no emoji, English comments, exactly one `package` line per file when editing).
 - Tests are table-friendly `_test.go` files beside the code (`fsm_test.go`, `engine_test.go`, `bite_detector_test.go`, presenter/model tests). Add or update tests for FSM, detector and presenter changes; run `go test ./...` before finishing.
 - Windows-specific code goes in `*_windows.go` files.
-- Themes: Go keeps the ids (`config.Themes`) and the choice; `frontend/src/themes.ts` holds each theme's words, catch sound and burst, `frontend/src/themes.css` its look (it reacts to the fishing step through `body[data-fsm]`), `frontend/public/themes/<id>.svg` its icon. A new theme touches all four plus `scripts/theme-icons.ps1` output.
+- Look: one look, Graphite (`frontend/src/style.css` tokens on `:root`): neutral surfaces, one amber accent, and the addon's magenta brackets only where the bot looks. Keep chrome quiet; no glows, looping animation or per-view layouts. The cycle's step names and captions are in `frontend/src/cycle.ts`, shared with the overlay.
 - Config changes: update `Config`, `DefaultConfig`, `Validate`, and `docs/dev/reference/config.md` together, plus `docs/reference/settings.md` when the setting is on the Settings tab.
 - Docs follow Diataxis. `docs/tutorials`, `docs/how-to`, `docs/reference` and `docs/explanation` are the player guide, plain language with nothing technical, published by GitHub Pages (Jekyll: `_config.yml`, `_layouts/`, `assets/`) at https://soockee.github.io/pixel-bot-go/. Each page has `title`, `summary` (shown as "In short") and `order` front matter. `docs/dev/` holds the technical docs in the same four folders and is not published. Put new content on the matching page or add one; keep the player guide's data sharing page true when what the app sends changes.
 

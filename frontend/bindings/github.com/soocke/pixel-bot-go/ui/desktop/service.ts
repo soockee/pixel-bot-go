@@ -157,13 +157,6 @@ export function SaveSettings(values: $models.Settings): $CancellablePromise<$mod
 }
 
 /**
- * SetTheme saves the window's look, one of config.Themes.
- */
-export function SetTheme(theme: string): $CancellablePromise<void> {
-    return $Call.ByID(798552314, theme);
-}
-
-/**
  * SetWindow makes title the target window.
  */
 export function SetWindow(title: string): $CancellablePromise<void> {

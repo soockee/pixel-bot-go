@@ -34,8 +34,6 @@ type Commands struct {
 	OpenURL      func(url string)
 	CheckAddon   func()
 	InstallAddon func() error
-	// SetTheme shows the theme's icon on the window and the taskbar.
-	SetTheme func(theme string)
 	// MoveOverlay starts or ends placing the overlay; ending saves its place.
 	MoveOverlay func(on bool) error
 	// FindBoard asks for the Go Fish firmware on port, or on every USB serial
@@ -180,21 +178,6 @@ func (s *Service) SaveSettings(values Settings) (saved Settings, err error) {
 		return saved, doErr
 	}
 	return saved, err
-}
-
-// SetTheme saves the window's look, one of config.Themes.
-func (s *Service) SetTheme(theme string) {
-	if !slices.Contains(config.Themes, theme) {
-		return
-	}
-	_ = s.do(func() {
-		s.cfg.Theme = theme
-		s.view.SetTheme(theme)
-		s.cmds.SetTheme(theme)
-		if err := s.cfg.Save(s.cfgPath); err != nil {
-			s.logger.Error("persist theme failed", "error", err)
-		}
-	})
 }
 
 // Recordings lists the saved recordings, newest first.

@@ -165,6 +165,3 @@ func (v *View) SetVersion(version string) { v.state.Version = version }
 func (v *View) SetInfo(dryRun, debug bool) {
 	v.state.DryRun, v.state.Debug = dryRun, debug
 }
-
-// SetTheme shows the window's look.
-func (v *View) SetTheme(theme string) { v.state.Theme = theme }

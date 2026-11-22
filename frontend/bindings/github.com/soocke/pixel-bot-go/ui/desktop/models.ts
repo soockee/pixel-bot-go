@@ -195,11 +195,6 @@ export interface State {
     "dryRun": boolean;
 
     /**
-     * one of config.Themes
-     */
-    "theme": string;
-
-    /**
      * show the developer views
      */
     "debug": boolean;

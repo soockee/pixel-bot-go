@@ -32,11 +32,11 @@ func setupSteps(s State) (steps [setupSlots]SetupStep, done bool) {
 	}
 	game := SetupStep{ID: "game", Title: "Game window", Done: s.GameFound}
 	if game.Done {
-		game.Detail = fmt.Sprintf("Found the %s window.", s.Window)
+		game.Detail = fmt.Sprintf("Found the %s window", s.Window)
 	} else {
 		switch s.Window {
 		case "", "<none>", defaultWindow:
-			game.Detail = "Waiting for the WoW window. Open WoW: Forever, or select its window if it is already open."
+			game.Detail = "Waiting for the WoW window. Open WoW: Forever, or pick its window under Game window if it is open."
 		default:
 			game.Detail = fmt.Sprintf("The window %q is not open. Start it, or choose another under Game window.", s.Window)
 		}
@@ -47,33 +47,33 @@ func setupSteps(s State) (steps [setupSlots]SetupStep, done bool) {
 	case s.BoardTest != "":
 		board.Detail = s.BoardTest
 	case s.BoardFound != "":
-		board.Detail = fmt.Sprintf("Found the board on %s.", s.BoardFound)
+		board.Detail = fmt.Sprintf("Found the board on %s", s.BoardFound)
 	case s.ESP32Port == esp32.AutoPort:
-		board.Detail = "Go Fish finds the board on its USB cable when fishing starts."
+		board.Detail = "Go Fish finds the board on its USB cable when fishing starts"
 	case board.Done:
-		board.Detail = fmt.Sprintf("Uses the board on %s.", s.ESP32Port)
+		board.Detail = fmt.Sprintf("Uses the board on %s", s.ESP32Port)
 	default:
-		board.Detail, board.Action = "Plug the Go Fish ESP32 into this PC with its USB cable and pair it over Bluetooth. Then find and test it, or choose its COM port.", "Find and test the board"
+		board.Detail, board.Action = "Plug the board into this PC by USB and pair it over Bluetooth, then find and test it", "Find and test the board"
 	}
 
 	// A current addon already holds the saved keys, so there is nothing to choose.
 	keys := SetupStep{ID: "keys", Title: "Game keys", Done: s.KeysChosen || s.Addon == "current", Fields: s.Keys}
 	if keys.Done {
-		keys.Detail = "Bobber Marker binds these keys in WoW."
+		keys.Detail = "Bobber Marker binds these keys in WoW"
 	} else {
-		keys.Detail, keys.Action = "F9 to F12 are suggested: WoW leaves them free. Keep them or press other spare keys. Bobber Marker binds them in WoW.", "Use these keys"
+		keys.Detail, keys.Action = "F9 to F12 are free in WoW. Keep them, or click a key and press another spare one.", "Use these keys"
 	}
 
 	addon := SetupStep{ID: "addon", Title: "Bobber Marker addon"}
 	switch s.Addon {
 	case "current":
-		addon.Done, addon.Detail = true, "Installed and up to date."
+		addon.Done, addon.Detail = true, "Installed and up to date"
 	case "missing":
 		addon.Detail, addon.Action = "Install it into the game. It marks your bobber and binds your keys.", "Install addon"
 	case "outdated":
-		addon.Detail, addon.Action = "Update it to apply your keys and the new version.", "Update addon"
+		addon.Detail, addon.Action = "An older version is installed. Update it to apply your keys.", "Update addon"
 	default:
-		addon.Detail = "Go Fish needs to find the game folder before it can install Bobber Marker."
+		addon.Detail = "Go Fish needs the game folder first. Start WoW: Forever, then check again."
 	}
 
 	steps = [setupSlots]SetupStep{game, board, keys, addon}

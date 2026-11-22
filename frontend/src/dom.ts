@@ -29,18 +29,8 @@ export function clock(seconds: number): string {
   return hh ? `${hh}:${String(mm).padStart(2, "0")}:${ss}` : `${mm}:${ss}`;
 }
 
-/** css reads a theme token from :root. */
+/** css reads a design token from :root. */
 export const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-
-/** storage reads and writes one per-viewer convenience; it may be unavailable. */
-export const storage = {
-  get(key: string): string | null {
-    try { return localStorage.getItem(key); } catch { return null; }
-  },
-  set(key: string, value: string): void {
-    try { localStorage.setItem(key, value); } catch { /* not kept */ }
-  },
-};
 
 /** keyLabel shows a stored key name: Mouse4 reads as Mouse 4. */
 export const keyLabel = (name: string) => name.replace(/^Mouse(\d)$/, "Mouse $1");

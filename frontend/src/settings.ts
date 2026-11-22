@@ -2,7 +2,6 @@
 // are set by pressing them, numbers with sliders, techniques with dropdowns.
 import { Service, type Settings, type SettingsForm, type State } from "./api";
 import { $, h, keyLabel } from "./dom";
-import { playSound, sounds, themes } from "./themes";
 
 type Key = keyof Settings;
 type Value = Settings[Key];
@@ -35,7 +34,7 @@ const groups: { title: string; show?: "debug"; fields: Field[] }[] = [
   {
     title: "Input",
     fields: [
-      { key: "esp32Port", label: "ESP32 board", hint: "Required for live input. Connect the paired Go Fish ESP32 Probe over USB, or choose its COM port.", kind: "port" },
+      { key: "esp32Port", label: "ESP32 board", hint: "Sends the keys and clicks. Auto finds it on USB, or choose its COM port and test it.", kind: "port" },
     ],
   },
   {
@@ -131,7 +130,7 @@ export function setupSettings() {
     if (option) option.disabled = !v.interactKey && v.reelMethod !== "interact_key";
   };
   const gated: HTMLElement[] = [];
-  const message = h("p", "Changes save as you make them", "settings-status");
+  const message = h("p", "", "settings-status");
   let running = false;
   let shown = false;
   let saving = Promise.resolve();
@@ -403,40 +402,10 @@ export function setupSettings() {
     return r;
   }
 
-  // Each theme is a card with its icon; picking one plays its catch sound.
-  const picker = h("div", "", "theme-picker");
-  picker.setAttribute("role", "radiogroup");
-  picker.setAttribute("aria-label", "Theme");
-  const choices = themes.map((t) => {
-    const input = document.createElement("input");
-    input.type = "radio";
-    input.name = "theme";
-    input.value = t.id;
-    input.addEventListener("change", () => {
-      void Service.SetTheme(t.id);
-      playSound(t);
-    });
-    const icon = document.createElement("img");
-    icon.src = `/themes/${t.id}.svg`;
-    icon.alt = "";
-    const card = h("label", "", "theme-card");
-    card.dataset.preview = t.id;
-    const text = h("span", "", "theme-text");
-    text.append(h("strong", t.name), h("span", t.blurb, "hint"));
-    card.append(input, icon, text);
-    picker.append(card);
-    return input;
-  });
-  const sound = document.createElement("input");
-  sound.type = "checkbox";
-  sound.className = "switch";
-  sound.checked = sounds.on();
-  sound.addEventListener("change", () => sounds.set(sound.checked));
-
   function lock() {
     for (const c of controls.values()) c.enable(!running);
     if (running) setMessage("Stop the run to change settings");
-    else if (message.textContent === "Stop the run to change settings") setMessage("Changes save as you make them");
+    else if (message.textContent === "Stop the run to change settings") setMessage("");
   }
 
   async function build() {
@@ -461,10 +430,7 @@ export function setupSettings() {
       return fs;
     });
     refresh(data.values);
-    const look = h("fieldset");
-    look.append(h("legend", "Theme"), picker, row("setting-sounds", "Theme sounds", "Each theme greets a catch with its own sound", sound, sound));
-    const user = groups.findIndex((g) => g.show); // the theme ends the user groups
-    form.replaceChildren(message, ...sections.slice(0, user), look, ...sections.slice(user));
+    form.replaceChildren(message, ...sections);
     placeSetup();
     lock();
   }
@@ -473,7 +439,6 @@ export function setupSettings() {
   const built = build();
 
   function render(s: State) {
-    for (const c of choices) c.checked = c.value === s.theme;
     if (s.debug !== shown) {
       shown = s.debug;
       for (const fs of gated) fs.hidden = !shown;

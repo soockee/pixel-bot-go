@@ -3,10 +3,10 @@
 // except while the person places it: then it is only the pill, to be dragged.
 import { onState } from "./api";
 import { $ } from "./dom";
-import { themeById } from "./themes";
+import { caption, catches } from "./cycle";
 
 const step = $("hud-step");
-const catches = $("hud-catches");
+const count = $("hud-catches");
 const status = $("hud-status");
 const box = $("box");
 
@@ -23,9 +23,8 @@ onState((s) => {
     return;
   }
   if (!s.running) return;
-  const words = themeById(s.theme).words;
-  step.textContent = words.cycle[s.fsm]?.[1] ?? "Starting";
-  catches.textContent = `${s.reels} ${words.catches[s.reels === 1 ? 0 : 1]}`;
+  step.textContent = caption(s.fsm) || "Starting";
+  count.textContent = `${s.reels} ${catches(s.reels)}`;
   status.hidden = s.status === "" || s.status === "Ready";
   status.textContent = s.status;
   // roiBox is in screen pixels on the game's client area, which the overlay

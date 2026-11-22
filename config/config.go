@@ -112,9 +112,6 @@ type Config struct {
 	// 0, the default, casts again quickly, after a random 0.4 to 1.2 seconds.
 	CooldownSeconds int `json:"cooldown_seconds"`
 
-	// Theme is the window's look, one of Themes.
-	Theme string `json:"theme"`
-
 	// OverlayX and OverlayY place the overlay's status pill on the game window,
 	// each as a share of the free space: 0 puts it against the left or top edge,
 	// 1 against the right or bottom edge, 0.5 in the middle. The place holds when
@@ -131,9 +128,6 @@ type Config struct {
 	SupportMilestone    int  `json:"support_milestone"`
 	SupportMuted        bool `json:"support_muted"`
 }
-
-// Themes are the window's looks; the first is the default.
-var Themes = []string{"graphite", "tavern", "arcane", "frost", "fel", "tide"}
 
 // DefaultConfig returns a Config populated with standard defaults.
 func DefaultConfig() *Config {
@@ -162,7 +156,6 @@ func DefaultConfig() *Config {
 		ROISizePx:              80,
 		MaxCastDurationSeconds: 30,
 		CooldownSeconds:        0,
-		Theme:                  Themes[0],
 		OverlayX:               0.5,
 		OverlayY:               0.01,
 	}
@@ -235,9 +228,6 @@ func (c *Config) Validate() error {
 	c.MaxCastDurationSeconds = min(max(c.MaxCastDurationSeconds, 5), 180)
 	c.CooldownSeconds = min(max(c.CooldownSeconds, 0), 60)
 	c.Screen = max(c.Screen, 0)
-	if !slices.Contains(Themes, c.Theme) {
-		c.Theme = d.Theme
-	}
 	return nil
 }
 

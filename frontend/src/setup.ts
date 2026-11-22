@@ -83,6 +83,7 @@ export function setupWizard(finishSaving: () => Promise<void>, useBoard: () => P
     activeID = steps[active]?.id ?? "";
     activeFields = (steps[active]?.fields ?? []).filter((f) => f !== "");
     install.hidden = panel.hidden || !action;
+    $("setup-check").hidden = Boolean(action); // one button per step: the action, or Check again
     keys.hidden = panel.hidden || activeFields.length === 0;
     if (action) install.textContent = action;
     // Rebuild only on a change, so a click is not lost to a redraw.

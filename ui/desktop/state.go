@@ -47,7 +47,6 @@ type State struct {
 	Scene          int                   `json:"scene"`       // version of /frames/scene, the live area around the ROI while watching; 0 means none
 	SceneBox       Rect                  `json:"sceneBox"`    // where the scene sits on the capture
 	DryRun         bool                  `json:"dryRun"`
-	Theme          string                `json:"theme"`          // one of config.Themes
 	Debug          bool                  `json:"debug"`          // show the developer views
 	Update         string                `json:"update"`         // newer release tag on offer, or ""
 	Updating       bool                  `json:"updating"`       // the update downloads or installs
