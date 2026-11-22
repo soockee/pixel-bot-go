@@ -200,6 +200,12 @@ func (s *Service) ReleaseNotes() { _ = s.do(s.cmds.ReleaseNotes) }
 // with the version, Windows and app details filled in.
 func (s *Service) ReportProblem() { _ = s.do(s.cmds.ReportProblem) }
 
+// StopHelpURL is the player guide's list of reasons a run stops by itself.
+const StopHelpURL = "https://soockee.github.io/pixel-bot-go/how-to/fix-problems/#it-stopped-by-itself"
+
+// OpenStopHelp opens StopHelpURL in the browser.
+func (s *Service) OpenStopHelp() { _ = s.do(func() { s.cmds.OpenURL(StopHelpURL) }) }
+
 // SaveReport saves a report file, for a bug report where the log was asked
 // for, shows it in File Explorer and returns its path. Nothing is sent.
 func (s *Service) SaveReport() (path string, err error) {

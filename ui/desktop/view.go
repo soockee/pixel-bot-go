@@ -47,6 +47,9 @@ func (v *View) SetStateLabel(name string) { v.state.FSM = name }
 // SetStatus shows a message in the status bar.
 func (v *View) SetStatus(text string) { v.state.Status = text }
 
+// SetStopped shows why the last run halted on its own, "" for none.
+func (v *View) SetStopped(reason string) { v.state.Stopped = reason }
+
 // SetRunning shows whether capture runs.
 func (v *View) SetRunning(running bool) { v.state.Running = running }
 

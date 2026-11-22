@@ -192,14 +192,14 @@ func TestFakeGameReplayFeedsDryRunAttemptsToScorer(t *testing.T) {
 			},
 			MoveCursor: move,
 			ParseVK:    func(string) (byte, bool) { return 0x72, true },
-			ClickRight: func() bool {
+			ClickRight: func() error {
 				click()
 				emit(actionAttempt, 1, "")
 				// A dry-run callback is observable. A real server reply is not.
 				emit(actionReply, 1, replayDispatched)
 				emit(actionClose, 1, replayDispatched)
 				reeled = true
-				return true
+				return nil
 			},
 		})
 		defer fsm.Close()

@@ -180,12 +180,12 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			}
 			return nil
 		}
-		click := func() bool {
+		click := func() error {
 			if err := keyboard.ClickRight(); err != nil {
 				logger.Error("ESP32 right click failed", "error", err)
-				return false
+				return errors.New("the ESP32 could not click; see pixel_bot_logs.json")
 			}
-			return true
+			return nil
 		}
 		press := func(vk byte) bool {
 			if err := keyboard.Press(vk, 0); err != nil {

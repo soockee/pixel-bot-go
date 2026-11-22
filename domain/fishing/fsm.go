@@ -689,8 +689,8 @@ func (f *FishingFSM) finishReel() {
 			}
 		} else {
 			f.stats.reelAttempts.Add(1)
-			if !f.actions.ClickRight() {
-				f.why("reel click was blocked")
+			if err := f.actions.ClickRight(); err != nil {
+				f.why("could not reel: " + err.Error())
 				f.halt()
 				return
 			}

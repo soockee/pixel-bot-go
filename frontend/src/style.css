@@ -306,6 +306,8 @@ main { min-height: 0; overflow: hidden; }
 }
 .empty p { max-width: 400px; text-wrap: balance; }
 .empty-title { font-size: 16px; font-weight: 500; }
+#capture-empty-hint::first-letter { text-transform: uppercase; } /* Go's reasons start lowercase */
+#stop-help { margin-top: 4px; }
 
 /* The idle scene: what the bot looks for, the bobber on the water inside the
    addon's brackets. Drawn still; nothing moves until a run starts. */

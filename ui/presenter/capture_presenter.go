@@ -30,6 +30,8 @@ type CaptureView interface {
 	PreviewReset()
 	SetRunning(bool)
 	SetStatus(string)
+	// SetStopped shows why the last run halted on its own, "" for none.
+	SetStopped(string)
 }
 
 // CapturePresenter coordinates capture enable/disable actions between the
@@ -57,6 +59,7 @@ func (c *CapturePresenter) Enable() {
 		return
 	}
 	c.model.SetEnabled(true)
+	c.view.SetStopped("")
 	c.fsm.EventAwaitFocus()
 	c.view.SetRunning(true)
 }
@@ -87,6 +90,7 @@ func (c *CapturePresenter) Tick() {
 	if c.halted.Swap(false) {
 		reason := c.fsm.HaltReason()
 		c.Disable()
+		c.view.SetStopped(reason)
 		if reason != "" {
 			c.view.SetStatus("Stopped: " + reason)
 		}

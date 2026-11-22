@@ -103,6 +103,7 @@ export function setupLive(): (state: State) => void {
   windowSelect.addEventListener("change", () => void Service.SetWindow(windowSelect.value).then(() => Service.CheckGame()));
   windowSelect.addEventListener("mousedown", () => void loadWindows()); // the game may have opened since
   start.addEventListener("click", () => void Service.ToggleCapture());
+  $("stop-help").addEventListener("click", () => void Service.OpenStopHelp());
   // The coffee page opens in the browser and the card hides until the next milestone.
   $("support-open").addEventListener("click", () => void Service.OpenSupport());
   $("support-dismiss").addEventListener("click", () => void Service.DismissSupport());
@@ -123,8 +124,12 @@ export function setupLive(): (state: State) => void {
     if (showFrame && s.frame !== shownFrame) img.src = framesUrl("capture", (shownFrame = s.frame));
     frame.hidden = !showFrame;
     empty.hidden = showFrame;
-    emptyText.textContent = s.running ? "Waiting for the game window" : "Ready to fish";
-    emptyHint.textContent = s.running ? "Bring WoW to the front" : "Start fishing, then keep WoW in front. Go Fish shows what it sees here.";
+    // After a run that stopped by itself the stage says why, where the person looks.
+    const stopped = !s.running && s.stopped !== "";
+    emptyText.textContent = s.running ? "Waiting for the game window" : stopped ? "Stopped by itself" : "Ready to fish";
+    emptyHint.textContent = s.running ? "Bring WoW to the front"
+      : stopped ? s.stopped : "Start fishing, then keep WoW in front. Go Fish shows what it sees here.";
+    $("stop-help").hidden = !stopped;
     if (s.roi && s.roi !== shownRoi) roi.src = framesUrl("roi", (shownRoi = s.roi));
     if (s.scene && s.scene !== shownScene) lockImg.src = framesUrl("scene", (shownScene = s.scene));
     fit();

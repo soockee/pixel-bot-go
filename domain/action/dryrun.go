@@ -5,7 +5,7 @@ import "log/slog"
 // DryRun returns input callbacks that only log the requested action instead
 // of injecting it. Use them to run the bot against a fake or real window
 // without Administrator rights and without sending any input.
-func DryRun(logger *slog.Logger) (pressKey func(vk byte) bool, moveCursor func(x, y int), clickRight func() bool) {
+func DryRun(logger *slog.Logger) (pressKey func(vk byte) bool, moveCursor func(x, y int), clickRight func() error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -14,9 +14,9 @@ func DryRun(logger *slog.Logger) (pressKey func(vk byte) bool, moveCursor func(x
 		return true
 	}
 	moveCursor = func(x, y int) { logger.Info("dry-run action", "action", "move_cursor", "x", x, "y", y) }
-	clickRight = func() bool {
+	clickRight = func() error {
 		logger.Info("dry-run action", "action", "click_right")
-		return true
+		return nil
 	}
 	return
 }

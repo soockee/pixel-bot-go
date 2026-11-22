@@ -38,11 +38,13 @@ type mockView struct {
 	reset   int
 	running bool
 	status  string
+	stopped string
 }
 
-func (v *mockView) PreviewReset()      { v.reset++ }
-func (v *mockView) SetRunning(b bool)  { v.running = b }
-func (v *mockView) SetStatus(s string) { v.status = s }
+func (v *mockView) PreviewReset()       { v.reset++ }
+func (v *mockView) SetRunning(b bool)   { v.running = b }
+func (v *mockView) SetStatus(s string)  { v.status = s }
+func (v *mockView) SetStopped(s string) { v.stopped = s }
 
 func TestCapturePresenterEnableDisableAreIdempotent(t *testing.T) {
 	m := &mockModel{}
@@ -101,8 +103,17 @@ func TestCapturePresenterSaysWhyTheRunHalted(t *testing.T) {
 	p.Enable()
 	p.OnState(fishing.StateMonitoring, fishing.StateHalt)
 	p.Tick()
+	if view.stopped != "5 casts in a row got no bite" {
+		t.Errorf("stopped = %q, want the reason for the card", view.stopped)
+	}
 	if m.Enabled() || view.status != "Stopped: 5 casts in a row got no bite" {
 		t.Fatalf("a halt on its own: enabled=%v status=%q", m.Enabled(), view.status)
+	}
+
+	// The next start clears it.
+	p.Enable()
+	if view.stopped != "" {
+		t.Errorf("stopped = %q after a new start, want empty", view.stopped)
 	}
 }
 

@@ -105,6 +105,13 @@ export function MuteSupport(): $CancellablePromise<void> {
 }
 
 /**
+ * OpenStopHelp opens StopHelpURL in the browser.
+ */
+export function OpenStopHelp(): $CancellablePromise<void> {
+    return $Call.ByID(2264157952);
+}
+
+/**
  * OpenSupport opens the coffee page in the browser and hides the thank-you card.
  */
 export function OpenSupport(): $CancellablePromise<void> {

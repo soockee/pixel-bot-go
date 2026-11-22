@@ -99,6 +99,11 @@ export interface State {
      */
     "recordingName": string;
     "status": string;
+
+    /**
+     * why the last run halted on its own; "" when the person stopped it or a run is going
+     */
+    "stopped": string;
     "window": string;
     "sessionSeconds": number;
 

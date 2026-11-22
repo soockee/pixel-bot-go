@@ -1,6 +1,7 @@
 package action
 
 import (
+	"errors"
 	"image"
 	"log/slog"
 	"slices"
@@ -31,7 +32,7 @@ func newGuardFixture() *guardFixture {
 			f.sent = append(f.sent, "move")
 			return nil
 		},
-		Click: func() bool { f.sent = append(f.sent, "click"); return true },
+		Click: func() error { f.sent = append(f.sent, "click"); return nil },
 	}
 	return f
 }
@@ -117,11 +118,11 @@ func TestGuardToleratesASmallDrift(t *testing.T) {
 	f := newGuardFixture()
 	f.MoveCursor(150, 150)
 	f.cursor = image.Pt(152, 149)
-	if !f.ClickRight() || f.takeovers != 0 {
+	if f.ClickRight() != nil || f.takeovers != 0 {
 		t.Fatalf("a 2 px drift stopped the click: takeovers=%d", f.takeovers)
 	}
 	f.cursor = image.Pt(150+takeoverSlack+1, 150)
-	if f.ClickRight() || f.takeovers != 1 {
+	if f.ClickRight() == nil || f.takeovers != 1 {
 		t.Fatalf("a move past the slack did not hand over: takeovers=%d", f.takeovers)
 	}
 }
@@ -145,5 +146,30 @@ func TestCameraDragRequiresRoomAndFocus(t *testing.T) {
 	called = false
 	if attempted, moved := f.DragCamera(12, drag); !attempted || moved || called {
 		t.Fatal("lost focus should block the drag and its fallback")
+	}
+}
+
+// A refused click says why, so the run can stop with that reason.
+func TestGuardClickSaysWhy(t *testing.T) {
+	tests := []struct {
+		name string
+		set  func(f *guardFixture)
+		want string
+	}{
+		{"no move before", func(f *guardFixture) { f.ResetCursor() }, "the pointer was not on the bobber"},
+		{"game behind", func(f *guardFixture) { f.inFront = false }, "the game was not in front"},
+		{"window shrank", func(f *guardFixture) { r := image.Rect(100, 100, 120, 120); f.area = &r }, "the bobber was outside the game window"},
+		{"mouse moved", func(f *guardFixture) { f.cursor = image.Pt(170, 150) }, "the mouse was moved"},
+		{"board failed", func(f *guardFixture) { f.Click = func() error { return errors.New("board said no") } }, "board said no"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := newGuardFixture()
+			f.MoveCursor(150, 150)
+			tt.set(f)
+			if err := f.ClickRight(); err == nil || err.Error() != tt.want {
+				t.Errorf("err = %v, want %q", err, tt.want)
+			}
+		})
 	}
 }
