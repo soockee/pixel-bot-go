@@ -85,6 +85,10 @@ func evaluateLocator(l detect.Locator, d *dataset.Dataset, c *LocatorCounts) ([]
 }
 
 // watch is what the app would watch in a cast: an area, from the frame it locks on.
+// fallbackWatchPx is the side of the square watched around the labelled bobber
+// in a cast where the marker never shows.
+const fallbackWatchPx = 80
+
 type watch struct {
 	Area   image.Rectangle
 	FromMS int64
@@ -95,7 +99,7 @@ type watch struct {
 // cast's start when no marker shows. The search starts at the cast and skips a
 // marker left from the cast before, so every bite detector sees what the app sees,
 // landing included.
-func watchAreas(d *dataset.Dataset, roiSize int) ([]watch, error) {
+func watchAreas(d *dataset.Dataset) ([]watch, error) {
 	marker := detect.NewMarkerLocator()
 	watches := make([]watch, len(d.Labels.Casts))
 	prevReel := int64(-1)
@@ -103,7 +107,7 @@ func watchAreas(d *dataset.Dataset, roiSize int) ([]watch, error) {
 		from := max(cast.StartMS-dataset.LandingMS, prevReel+1) // a cast cannot start before the last reel
 		prevReel = cast.EndMS
 		b := cast.Bobber.Image()
-		half := roiSize / 2
+		half := fallbackWatchPx / 2
 		centre := image.Pt((b.Min.X+b.Max.X)/2, (b.Min.Y+b.Max.Y)/2)
 		watches[i] = watch{image.Rect(centre.X-half, centre.Y-half, centre.X+half, centre.Y+half), cast.StartMS}
 		for _, f := range d.FramesIn(dataset.Span{StartMS: from, EndMS: cast.EndMS}) {

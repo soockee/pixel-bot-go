@@ -8,10 +8,6 @@ order: 6
 
 Set `"debug": true` in `pixle_bot_config.json` then start the app. Visit `http://localhost:6060/debug/pprof/` for profiles. Disable via `"debug": false`. Debug mode switches on the developer tools (pprof, `/debug/state`, DevTools, the Recorder tab and the detection settings); the log holds the Debug lines, such as `splash seen` and `detection.search`, in every mode.
 
-## Observability & Metrics
-
-Enable debug → inspect per‑scale timing to see if one scale dominates. If refinement always costs little and improves accuracy, keep it on; if negligible improvement disable for marginal speed gain.
-
 ## Collect CPU / Heap Profiles
 
 1. Start capture so detection runs.

@@ -24,7 +24,7 @@ type indexRow struct {
 
 // export saves each cast's watch area as small PNGs plus an index.jsonl, which
 // is all that training needs and far smaller than the full frames.
-func export(out string, dirs []string, roiSize int, status io.Writer) error {
+func export(out string, dirs []string, status io.Writer) error {
 	if len(dirs) == 0 {
 		return fmt.Errorf("no datasets given")
 	}
@@ -44,7 +44,7 @@ func export(out string, dirs []string, roiSize int, status io.Writer) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", dir, err)
 		}
-		watches, err := watchAreas(d, roiSize)
+		watches, err := watchAreas(d)
 		if err != nil {
 			return fmt.Errorf("%s: %w", dir, err)
 		}

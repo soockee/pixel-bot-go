@@ -26,8 +26,8 @@ const (
 	// detection reads, and leave the rest black, which PNG stores in almost no
 	// space; without a bobber they are skipped.
 	fullEvery = 10 * time.Second
-	// keepSide is the smallest square kept around the bobber: larger than any
-	// watch area (roi_size_px), and keepPad more than the marker on each side.
+	// keepSide is the smallest square kept around the bobber, and keepPad is
+	// how much more than the marker is kept on each side.
 	keepSide = 256
 	keepPad  = 32
 )

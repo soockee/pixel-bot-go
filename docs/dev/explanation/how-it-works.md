@@ -12,19 +12,11 @@ The first addon used, NaowhForever's Glimmer, draws soft brackets blended additi
 
 ## Detection Mental Model
 
-Imagine laying the template on every possible position on the frame (like a stencil) and asking “How similar is this patch?” Keep the highest score. Brute force plus shortcuts (stride, integral images, early stop, parallel scales) keeps it fast.
+The locator scans the game window for the addon's magenta corners and pairs them into a box. There is no score to tune: the colour is fixed, so a box is either there or not.
 
 ## Bite Detection Concept
 
 While monitoring, a grayscale ROI stream feeds statistical heuristics (EMA + window diffs). A spike or a jump from the baseline makes the Engine send `EventFishBite()`. If no bite comes, a deadline ends the cast after `max_cast_duration_seconds`.
-
-## NCC Overview
-
-Normalized cross‑correlation (NCC) outputs -1..+1. Near +1 = strong match, ~0 = unrelated. We normalize (subtract mean, divide by std) so lighting shifts don’t break matches.
-
-## Multi-Scale Matching
-
-Template is resized across a range (`MinScale..MaxScale` step `ScaleStep`) because apparent object size changes (UI scale, distance). Each scale matched; best overall retained. More scales = more work; refine pass tightens coordinates.
 
 ## Summary Mental Model
 

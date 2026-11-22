@@ -6,7 +6,7 @@ order: 3
 
 ## Profiling Interpretation (Heap / CPU)
 
-Large retained memory usually from buffers not reused (frames, scaled templates). High GC time indicates allocation churn (temporary slices). Hot CPU spots in NCC or scaling suggest tuning scale range or stride before deeper optimization.
+Large retained memory usually from buffers not reused (frames, scaled templates). High GC time indicates allocation churn (temporary slices).
 
 ## CPU Profile Signals
 

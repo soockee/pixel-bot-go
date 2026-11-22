@@ -40,14 +40,14 @@ func TestPickWindow(t *testing.T) {
 func TestSettingsApply(t *testing.T) {
 	base := *config.DefaultConfig()
 	good := settingsOf(&base)
-	good.CastKey, good.ROISizePx = "r", 9999
+	good.CastKey, good.CooldownSeconds = "r", 9999
 
 	got, err := good.apply(base)
 	if err != nil {
 		t.Fatalf("valid settings: %v", err)
 	}
-	if got.CastKey != "r" || got.ROISizePx != 256 {
-		t.Errorf("cast key %q, roi %d; want r and the clamped 256", got.CastKey, got.ROISizePx)
+	if got.CastKey != "r" || got.CooldownSeconds != 60 {
+		t.Errorf("cast key %q, cooldown %d; want r and the clamped 60", got.CastKey, got.CooldownSeconds)
 	}
 
 	bad := good

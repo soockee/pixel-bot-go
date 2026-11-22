@@ -14,33 +14,26 @@ import (
 
 // Settings are the config values a person can edit in the window.
 type Settings struct {
-	MinScale               float64 `json:"minScale"`
-	MaxScale               float64 `json:"maxScale"`
-	ScaleStep              float64 `json:"scaleStep"`
-	Threshold              float64 `json:"threshold"`
-	Stride                 int     `json:"stride"`
-	Refine                 bool    `json:"refine"`
-	CastKey                string  `json:"castKey"`
-	ReelMethod             string  `json:"reelMethod"`
-	InteractKey            string  `json:"interactKey"`
-	ESP32Port              string  `json:"esp32Port"`
-	IdleMoves              bool    `json:"idleMoves"`
-	Reposition             bool    `json:"reposition"`
-	MaxFailedCasts         int     `json:"maxFailedCasts"`
-	MaxSessionMinutes      int     `json:"maxSessionMinutes"`
-	Schedule               bool    `json:"schedule"`
-	PlayMinMinutes         int     `json:"playMinMinutes"`
-	PlayMaxMinutes         int     `json:"playMaxMinutes"`
-	BreakMinMinutes        int     `json:"breakMinMinutes"`
-	BreakMaxMinutes        int     `json:"breakMaxMinutes"`
-	LogoutKey              string  `json:"logoutKey"`
-	Locator                string  `json:"locator"`
-	BiteDetector           string  `json:"biteDetector"`
-	RecordDir              string  `json:"recordDir"`
-	RecordKeys             bool    `json:"recordKeys"`
-	ROISizePx              int     `json:"roiSizePx"`
-	CooldownSeconds        int     `json:"cooldownSeconds"`
-	MaxCastDurationSeconds int     `json:"maxCastDurationSeconds"`
+	CastKey                string `json:"castKey"`
+	ReelMethod             string `json:"reelMethod"`
+	InteractKey            string `json:"interactKey"`
+	ESP32Port              string `json:"esp32Port"`
+	IdleMoves              bool   `json:"idleMoves"`
+	Reposition             bool   `json:"reposition"`
+	MaxFailedCasts         int    `json:"maxFailedCasts"`
+	MaxSessionMinutes      int    `json:"maxSessionMinutes"`
+	Schedule               bool   `json:"schedule"`
+	PlayMinMinutes         int    `json:"playMinMinutes"`
+	PlayMaxMinutes         int    `json:"playMaxMinutes"`
+	BreakMinMinutes        int    `json:"breakMinMinutes"`
+	BreakMaxMinutes        int    `json:"breakMaxMinutes"`
+	LogoutKey              string `json:"logoutKey"`
+	Locator                string `json:"locator"`
+	BiteDetector           string `json:"biteDetector"`
+	RecordDir              string `json:"recordDir"`
+	RecordKeys             bool   `json:"recordKeys"`
+	CooldownSeconds        int    `json:"cooldownSeconds"`
+	MaxCastDurationSeconds int    `json:"maxCastDurationSeconds"`
 }
 
 // SettingsForm is the form content: the values and the choices for the
@@ -53,8 +46,7 @@ type SettingsForm struct {
 
 func settingsOf(c *config.Config) Settings {
 	return Settings{
-		MinScale: c.MinScale, MaxScale: c.MaxScale, ScaleStep: c.ScaleStep, Threshold: c.Threshold,
-		Stride: c.Stride, Refine: c.Refine, CastKey: c.CastKey,
+		CastKey:    c.CastKey,
 		ReelMethod: c.ReelMethod, InteractKey: c.InteractKey, ESP32Port: c.ESP32Port,
 		IdleMoves: c.IdleMoves, Reposition: c.Reposition,
 		MaxFailedCasts: c.MaxFailedCasts, MaxSessionMinutes: c.MaxSessionMinutes,
@@ -62,7 +54,7 @@ func settingsOf(c *config.Config) Settings {
 		BreakMinMinutes: c.BreakMinMinutes, BreakMaxMinutes: c.BreakMaxMinutes,
 		LogoutKey: c.LogoutKey,
 		Locator:   c.Locator, BiteDetector: c.BiteDetector, RecordDir: c.RecordDir, RecordKeys: c.RecordKeys,
-		ROISizePx: c.ROISizePx, CooldownSeconds: c.CooldownSeconds, MaxCastDurationSeconds: c.MaxCastDurationSeconds,
+		CooldownSeconds: c.CooldownSeconds, MaxCastDurationSeconds: c.MaxCastDurationSeconds,
 	}
 }
 
@@ -117,8 +109,7 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Logout")
 		}
 	}
-	c.MinScale, c.MaxScale, c.ScaleStep, c.Threshold = s.MinScale, s.MaxScale, s.ScaleStep, s.Threshold
-	c.Stride, c.Refine, c.CastKey = s.Stride, s.Refine, s.CastKey
+	c.CastKey = s.CastKey
 	c.ReelMethod, c.InteractKey, c.ESP32Port = s.ReelMethod, s.InteractKey, port
 	c.MaxFailedCasts, c.MaxSessionMinutes = s.MaxFailedCasts, s.MaxSessionMinutes
 	c.IdleMoves, c.Reposition = s.IdleMoves, s.Reposition
@@ -128,7 +119,7 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	c.LogoutKey = s.LogoutKey
 	c.Locator, c.BiteDetector = s.Locator, s.BiteDetector
 	c.RecordDir, c.RecordKeys = strings.TrimSpace(s.RecordDir), s.RecordKeys
-	c.ROISizePx, c.CooldownSeconds, c.MaxCastDurationSeconds = s.ROISizePx, s.CooldownSeconds, s.MaxCastDurationSeconds
+	c.CooldownSeconds, c.MaxCastDurationSeconds = s.CooldownSeconds, s.MaxCastDurationSeconds
 	if err := c.Validate(); err != nil {
 		return c, err
 	}

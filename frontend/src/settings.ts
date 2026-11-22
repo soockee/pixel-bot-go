@@ -12,8 +12,7 @@ type Field = { key: Key; label: string; hint: string; when?: (v: Settings) => bo
   | { kind: "slider"; min: number; max: number; step: number; unit?: string; zero?: string }
 );
 
-/** User groups come first; dev groups (detection tuning) show only in debug
- * mode. */
+/** User groups come first; dev groups show only in debug mode. */
 const breaks = (v: Settings) => v.schedule;
 const logout = (v: Settings) => v.schedule || v.reposition;
 
@@ -78,19 +77,6 @@ const groups: { title: string; show?: "debug"; fields: Field[] }[] = [
     fields: [
       { key: "locator", label: "Locator", hint: "Finds the bobber in the game window", kind: "locator" },
       { key: "biteDetector", label: "Bite detector", hint: "Decides when a fish bites", kind: "biteDetector" },
-      { key: "roiSizePx", label: "Watch area", hint: "Side of the square watched for a bite (ncc locator)", kind: "slider", min: 32, max: 256, step: 8, unit: "px" },
-    ],
-  },
-  {
-    title: "Template search",
-    show: "debug",
-    fields: [
-      { key: "minScale", label: "Min scale", hint: "Smallest template size tried", kind: "slider", min: 0.5, max: 2, step: 0.05 },
-      { key: "maxScale", label: "Max scale", hint: "Largest template size tried", kind: "slider", min: 0.5, max: 2, step: 0.05 },
-      { key: "scaleStep", label: "Scale step", hint: "Size change between tries", kind: "slider", min: 0.01, max: 0.2, step: 0.01 },
-      { key: "threshold", label: "Threshold", hint: "Match score needed", kind: "slider", min: 0.5, max: 0.99, step: 0.01 },
-      { key: "stride", label: "Stride", hint: "Pixels between search positions", kind: "slider", min: 1, max: 16, step: 1, unit: "px" },
-      { key: "refine", label: "Refine", hint: "Search around the best match at every pixel", kind: "switch" },
     ],
   },
 ];

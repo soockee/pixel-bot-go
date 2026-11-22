@@ -6,10 +6,6 @@ order: 2
 
 | Setting                     | Meaning                                     | Tradeoff                               |
 | --------------------------- | ------------------------------------------- | -------------------------------------- |
-| Threshold                   | Minimum NCC score considered a hit          | ↑ fewer false positives, ↓ sensitivity |
-| Stride                      | Pixel step while scanning, capped at a quarter of the template short side | Above the cap it has no effect |
-| Refine                      | Precise second pass around best coarse spot | Slight cost, better accuracy           |
-| MinScale/MaxScale/ScaleStep | Scale search range                          | Wide + tiny step = heavier workload    |
 | CastKey (`cast_key`)        | Unmodified key that casts: F1 to F12, a letter, a top-row digit, `Mouse4` or `Mouse5` | An unknown key halts the run           |
 | ReelMethod (`reel_method`)  | How to interact with the bobber             | `right_click` by default, or `interact_key` with the marker locator |
 | InteractKey (`interact_key`) | Native Interact binding for key-based reeling, using the same supported keys as CastKey | F10 by default; the addon binds it only with the Interact reel. Key-based reeling requires a binding distinct from Cast and Stop. |

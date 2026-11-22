@@ -4,8 +4,7 @@ summary: "Everything Go Fish does, in one list."
 order: 1
 ---
 
-* Watch a screen region for the bobber template.
-* Multi-scale template matching with stride + refine pass.
+* Find the bobber from the Bobber Marker addon's magenta brackets.
 * Response state machine (cast → search → monitor → reel → cooldown).
 * Bite detection (`splash_sound`): a splash at the centre of the marker box confirmed by the game's bite sound, or the splash alone when the game plays no bite sound.
 * Desktop window focused on fishing: the live capture with the locked bobber, the cycle, catches this run and how each reel ended, and progress toward the session and failed-cast limits. Settings holds keys and run limits. With `"debug": true` a Recorder tab, the bite watch and the detection settings appear. The app finds the game window itself: it searches the window's client area and, once the bobber is locked, captures only its box.

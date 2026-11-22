@@ -44,4 +44,4 @@ The `color` locator finds the bobber without the addon. It takes the water's col
 
 ## Limitations
 
-Lighting shifts, motion blur, busy backgrounds, rotation/perspective changes, extreme scale ranges degrade accuracy or performance. The approach is 2D template matching + light motion heuristics (not full CV/ML).
+The bobber comes from the addon's brackets, so the bot finds nothing without Bobber Marker. Bite detection is a splash heuristic plus the game's bite sound (not full CV/ML), so heavy effects at the bobber can still fool it.

@@ -35,12 +35,6 @@ export interface Rect {
  * Settings are the config values a person can edit in the window.
  */
 export interface Settings {
-    "minScale": number;
-    "maxScale": number;
-    "scaleStep": number;
-    "threshold": number;
-    "stride": number;
-    "refine": boolean;
     "castKey": string;
     "reelMethod": string;
     "interactKey": string;
@@ -59,7 +53,6 @@ export interface Settings {
     "biteDetector": string;
     "recordDir": string;
     "recordKeys": boolean;
-    "roiSizePx": number;
     "cooldownSeconds": number;
     "maxCastDurationSeconds": number;
 }

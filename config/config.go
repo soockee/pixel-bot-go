@@ -62,14 +62,6 @@ type Config struct {
 	// app captures that window's client area.
 	AutoWindow string `json:"-"`
 	AutoStart  bool   `json:"-"`
-	// Detection parameters
-	MinScale  float64 `json:"min_scale"`
-	MaxScale  float64 `json:"max_scale"`
-	ScaleStep float64 `json:"scale_step"`
-	Threshold float64 `json:"threshold"`
-	Stride    int     `json:"stride"`
-	Refine    bool    `json:"refine"`
-
 	// CastKey is the key that casts (e.g. "F3" or "R").
 	CastKey string `json:"cast_key"`
 	// ReelMethod selects how the app interacts with a marked bobber.
@@ -103,8 +95,6 @@ type Config struct {
 	// RecordKeys records keys in the selected window as well as the mouse.
 	RecordKeys bool `json:"record_keys"`
 
-	// Bite detection configuration (only actively used fields retained).
-	ROISizePx int `json:"roi_size_px"` // square ROI side length in pixels
 	// MaxCastDurationSeconds defines the maximum expected lifetime of a fishing cast (bobber present).
 	// If monitoring exceeds this duration, the target is considered lost and the system returns to searching.
 	MaxCastDurationSeconds int `json:"max_cast_duration_seconds"`
@@ -132,12 +122,6 @@ type Config struct {
 // DefaultConfig returns a Config populated with standard defaults.
 func DefaultConfig() *Config {
 	return &Config{
-		MinScale:  0.90,
-		MaxScale:  1.20,
-		ScaleStep: 0.05,
-		Threshold: 0.73,
-		Stride:    6,
-		Refine:    true,
 		// F9 to F12 are free in WoW's default bindings.
 		CastKey:                "F9",
 		InteractKey:            "F10",
@@ -153,7 +137,6 @@ func DefaultConfig() *Config {
 		BiteDetector:           "splash_sound",
 		RecordDir:              "datasets",
 		RecordKeys:             false,
-		ROISizePx:              80,
 		MaxCastDurationSeconds: 30,
 		CooldownSeconds:        0,
 		OverlayX:               0.5,
@@ -164,24 +147,6 @@ func DefaultConfig() *Config {
 // Validate clamps/normalizes values to safe ranges.
 func (c *Config) Validate() error {
 	d := DefaultConfig()
-	if c.MinScale <= 0 {
-		c.MinScale = d.MinScale
-	}
-	if c.MaxScale < c.MinScale {
-		c.MaxScale = c.MinScale + d.MaxScale - d.MinScale
-	}
-	if c.ScaleStep <= 0 {
-		c.ScaleStep = d.ScaleStep
-	}
-	if span := c.MaxScale - c.MinScale; span > 0 && c.ScaleStep > span {
-		c.ScaleStep = span / 4
-	}
-	if c.Threshold <= 0 || c.Threshold > 1 {
-		c.Threshold = d.Threshold
-	}
-	if c.Stride <= 0 {
-		c.Stride = d.Stride
-	}
 	if c.CastKey == "" {
 		c.CastKey = d.CastKey
 	}
@@ -215,7 +180,7 @@ func (c *Config) Validate() error {
 		c.BreakMaxMinutes = d.BreakMaxMinutes
 	}
 	c.LogoutKey = strings.TrimSpace(c.LogoutKey)
-	if c.Locator == "" {
+	if c.Locator == "" || c.Locator == "ncc" { // ncc was removed
 		c.Locator = d.Locator
 	}
 	if c.BiteDetector == "" || slices.Contains([]string{"motion", "splash", "histogram"}, c.BiteDetector) { // removed detectors
@@ -224,7 +189,6 @@ func (c *Config) Validate() error {
 	if c.RecordDir == "" {
 		c.RecordDir = d.RecordDir
 	}
-	c.ROISizePx = min(max(c.ROISizePx, 32), 256) // keep the ROI modest for performance
 	c.MaxCastDurationSeconds = min(max(c.MaxCastDurationSeconds, 5), 180)
 	c.CooldownSeconds = min(max(c.CooldownSeconds, 0), 60)
 	c.Screen = max(c.Screen, 0)

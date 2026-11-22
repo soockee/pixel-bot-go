@@ -70,8 +70,6 @@ Per default scenario loop (9.6 s): after the bobber appears the bot reaches `mon
 
 ## Known issues
 
-- Default `threshold: 0.73` can match the desktop wallpaper (scores up to about 0.77 seen), which puts the FSM into `monitoring` at a wrong location. Use 0.80 for fake-game runs.
-
 To merge logs with the fake game's UTC timestamps, note that `pixel_bot_logs.json` uses local time.
 
 ## Limits

@@ -6,7 +6,6 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/soocke/pixel-bot-go/assets"
 	"github.com/soocke/pixel-bot-go/config"
 )
 
@@ -16,13 +15,6 @@ var (
 	locators = map[string]func(config.Config) (Locator, error){
 		"color":  func(config.Config) (Locator, error) { return NewColorLocator(), nil },
 		"marker": func(config.Config) (Locator, error) { return NewMarkerLocator(), nil },
-		"ncc": func(cfg config.Config) (Locator, error) {
-			tmpl, err := assets.FishingTargetImage()
-			if err != nil {
-				return nil, fmt.Errorf("load bobber template: %w", err)
-			}
-			return NewNCCLocator(tmpl, cfg), nil
-		},
 	}
 	biteDetectors = map[string]func(*slog.Logger) BiteDetector{
 		"splash_sound": func(logger *slog.Logger) BiteDetector { return NewSplashSoundDetector(logger) },
