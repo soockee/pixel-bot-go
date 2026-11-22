@@ -200,3 +200,31 @@ func TestTapGetsPastALostReply(t *testing.T) {
 		t.Fatalf("a lost OK: err %v, port open %v; want nil and an open port", err, k.port != nil)
 	}
 }
+
+// droppedLinkPort is firmware whose Bluetooth link drops before the first
+// action and is back after one HELLO.
+type droppedLinkPort struct {
+	lostReplyPort
+	hellos int
+}
+
+func (p *droppedLinkPort) Write(b []byte) (int, error) {
+	if string(b) != "HELLO\n" {
+		p.replies.WriteString("ERR disconnected\r\n")
+		return len(b), nil
+	}
+	if p.hellos++; p.hellos == 1 {
+		p.replies.WriteString("GOFISH 1 WAITING\r\n")
+	} else {
+		p.replies.WriteString("GOFISH 1 READY\r\n")
+	}
+	return len(b), nil
+}
+
+func TestTapWaitsForTheBluetoothLink(t *testing.T) {
+	port := &droppedLinkPort{}
+	k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port})}
+	if err := k.Tap(0x3E); err != nil || k.port == nil || port.hellos != 2 {
+		t.Fatalf("err %v, port open %v, %d HELLOs; want nil, open, 2", err, k.port != nil, port.hellos)
+	}
+}
