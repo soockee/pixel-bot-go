@@ -1,6 +1,7 @@
 package fishing
 
 import (
+	"errors"
 	"image"
 	"time"
 
@@ -84,6 +85,10 @@ type CursorStep struct {
 	After time.Duration
 	Point image.Point
 }
+
+// ErrPointerMissed is a Cursor.Move error for a pointer that still works but
+// did not land on the point. The FSM gives up that cast instead of halting.
+var ErrPointerMissed = errors.New("the pointer did not land on the bobber")
 
 // CursorCallbacks plans and executes a path on the FSM loop. False from Plan
 // or Move means the app cannot safely take control of the pointer.

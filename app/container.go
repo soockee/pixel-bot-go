@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"image"
 	"io"
 	"log/slog"
@@ -176,6 +177,9 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		move := func(x, y int) error {
 			if err := keyboard.MoveTo(image.Pt(x, y), action.CursorPos); err != nil {
 				logger.Error("ESP32 pointer move failed", "error", err)
+				if keyboard.CanPoint() { // the port is still open: only this aim missed
+					return fmt.Errorf("%w; see pixel_bot_logs.json", fishing.ErrPointerMissed)
+				}
 				return errors.New("the ESP32 could not put the pointer on the target; see pixel_bot_logs.json")
 			}
 			return nil
