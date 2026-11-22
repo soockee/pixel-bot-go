@@ -1,55 +1,56 @@
 # Go Fish
 
-Go Fish is a Windows app for studying visual event detection and response timing, using fishing in World of Warcraft: Forever as the test scene. A small addon marks your bobber, the app finds the marker in the game window, watches the box for the splash of a bite, and answers with a click. A local simulator plays the same scene with scripted bites, so everything can be tested without the game.
+Go Fish fishes for you in World of Warcraft: Forever. A small addon marks your bobber, Go Fish watches it for the bite, and an ESP32 board, paired as a Bluetooth keyboard and mouse, casts and reels in.
 
 https://github.com/user-attachments/assets/b5e026ad-c879-4a48-ba24-902346012309
 
-**Documentation:** [soockee.github.io/pixel-bot-go](https://soockee.github.io/pixel-bot-go/)
+[Download for Windows](https://github.com/soockee/pixel-bot-go/releases/latest) · [Player guide](https://soockee.github.io/pixel-bot-go/) · [Buy me a coffee](https://buymeacoffee.com/socke)
 
-[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-socke-ffdd00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/socke)
+## What you need
 
-## Install
+- A Windows PC with World of Warcraft: Forever and a character who can fish
+- An ESP32 board (the original ESP32, such as an ESP32-WROOM-32 development board) with the [Go Fish firmware](firmware/esp32_ble_probe), paired in Windows Bluetooth settings and plugged in by USB. Every key and click Go Fish sends goes through this board
 
-1. Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest) (`CHECKSUMS.txt` beside it lists its SHA-256). Connect and pair a [Go Fish ESP32 Probe](https://github.com/soockee/pixel-bot-go/tree/main/firmware/esp32_ble_probe), then start the game and the exe.
-2. In **Settings → ESP32 board**, choose **Auto** or the board's COM port. The paired board sends all live game input over Bluetooth.
-3. In **Set up fishing** on the Fishing tab, click **Find and test the board**, confirm the suggested F9 to F12 keys with **Use these keys**, then click **Install addon** to put the Bobber Marker addon into the game, then type `/reload` in the game.
-4. Stand at the water and press **Start fishing**. Click **Stop** in Go Fish to end the run.
+## Get started
 
-Go Fish updates itself: it checks GitHub at start and every hour, and **Update to vX.Y.Z** in the top bar or **Settings → Updates** installs a new release after checking its checksum.
+1. Download `pixel-bot-go-windows-amd64.exe` from the [latest release](https://github.com/soockee/pixel-bot-go/releases/latest). `CHECKSUMS.txt` next to it lists its SHA-256.
+2. Start the game, log in, then start Go Fish. **Set up fishing** walks you through four steps:
+   - **Game window**: found by itself
+   - **ESP32 board**: click **Find and test the board**. Go Fish checks that the board answers over USB and that its test key reaches Windows over Bluetooth
+   - **Game keys**: F9 casts. F10 (Interact) and F12 (Logout) are asked for only when your settings use them. WoW leaves these keys free; keep them or press other spare keys, then click **Use these keys**
+   - **Bobber Marker addon**: click **Install addon**, then type `/reload` in the game
+3. Turn on **Auto Loot** in the game, stand at the water, click **Start fishing** in Go Fish, and click into the game.
 
-## What it does
+The [first catch walkthrough](https://soockee.github.io/pixel-bot-go/tutorials/first-catch/) covers each step in more detail.
 
-* Finds the bobber by the magenta brackets the Bobber Marker addon draws, then watches only that box at 30 fps.
-* Detects a bite from the splash at your bobber and the bite sound that follows it. Keep the game's sound effects on: with them off, the first three bites of each run get away before it reels on the splash alone.
-* Runs a state machine: cast, search, watch, reel, pause, and stops after a session limit or too many casts without a bite.
-* Stops when you click **Stop** in Go Fish.
-* Dry-run mode logs intended key presses, clicks and cursor moves. It works without an ESP32.
-* Records sessions (frames, input and sound) for comparing detectors offline.
+## How it works
+
+- **Seeing the bobber.** Bobber Marker draws pink brackets around your own bobber, and only while you fish. Go Fish finds them in the game window and from then on watches only that box.
+- **The bite.** A bite is the splash at your bobber followed by the game's bite sound, so other players' bites and spells don't fool it. Keep the game's sound effects on: without them, Go Fish needs three casts without a reel before it reels on the splash alone.
+- **Reeling in.** The board moves the pointer onto the bobber and right-clicks, or presses your Interact key if you pick that reel method. Then Go Fish pauses and casts again.
+- **Stopping.** A run ends after the session limit (60 minutes by default) or five casts in a row without a bite. The Fishing view then says why it stopped, with a link to what to do.
+
+While it fishes, leave the mouse alone and keep the game in front. Moving the mouse stops the run, so Go Fish never fights you for it.
+
+## In the app
+
+- **Fishing**: what Go Fish sees, the step it is on (Focus, Search, Watch, Reel, Pause, Cast), your catches this run and how each reel ended: caught, got away or not hooked
+- **Overlay**: a small pill over the game that shows how the run goes. It takes no clicks, and you can move it out of your way
+- **Between catches**, all optional: nudge the mouse or camera now and then, change spot every 45 to 55 catches, and take logged-out breaks on a schedule
+- **Updates**: Go Fish checks GitHub when it starts and every hour, verifies the download against the release's checksum and replaces itself. **Settings → Addon** installs and updates Bobber Marker
+- **Problems**: **Report a problem** opens a GitHub issue in your browser with the version and recent warnings filled in; nothing is sent until you submit it. See [what Go Fish sends](https://soockee.github.io/pixel-bot-go/explanation/data-sharing/)
 
 ## Develop
 
 Go 1.26 and Node 24 on Windows. In PowerShell:
 
 ```powershell
-go run ./cmd/fakegame          # the simulator, in one terminal
-./run.ps1 -dry-run             # builds the frontend and the app, then starts it
+go run ./cmd/fakegame    # a simulated fishing scene with scripted bites
+./run.ps1 -dry-run       # builds the frontend and the app, then starts it
 go test ./...
 ```
 
-Pick **Fake Game** as the game window and press **Start fishing**; the log `pixel_bot_logs.json` shows each state change and the clicks a real run would send. [AGENTS.md](AGENTS.md) describes the layout and conventions, and [`docs/dev`](docs/dev) holds the technical docs: detection, config and flags, the benchmark, profiling.
-
-## Documentation
-
-The player guide follows [Diataxis](https://diataxis.fr/):
-
-* [Get started](https://soockee.github.io/pixel-bot-go/tutorials/first-catch/): your first catch.
-* [How-to guides](https://soockee.github.io/pixel-bot-go/#how-to): install the addon, change settings, update, fix problems.
-* [Reference](https://soockee.github.io/pixel-bot-go/#reference): settings, the Fishing tab, addon commands, files.
-* [Understand](https://soockee.github.io/pixel-bot-go/#explanation): how Go Fish works, and [what Go Fish sends](https://soockee.github.io/pixel-bot-go/explanation/data-sharing/).
-
-## Support
-
-Go Fish is free and made in spare time. If it saves you time, you can [buy me a coffee](https://buymeacoffee.com/socke).
+Pick **Fake Game** as the game window and click **Start fishing**. A dry run logs the keys, pointer moves and clicks it would send to `pixel_bot_logs.json` instead of sending them, so it needs no board. [AGENTS.md](AGENTS.md) maps the code and its conventions, and [`docs/dev`](docs/dev) holds the technical docs.
 
 ## License
 
