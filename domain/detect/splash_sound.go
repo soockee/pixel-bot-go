@@ -50,6 +50,7 @@ type SplashSoundDetector struct {
 	sound      onsets
 	onset      time.Time // the latest sound onset, for a splash that crosses the bar just after it
 	fired      bool
+	peak       float64 // the largest spray share under the bar this cast, in hundredths, for the logs
 
 	// Kept across casts for the run.
 	heardGame   bool // the game made some sound
@@ -137,6 +138,7 @@ func (s *SplashSoundDetector) Feed(roi *image.RGBA, t time.Time) bool {
 		s.level.add(t, share)
 	}
 	if !splash {
+		s.logWeakSpray(settled, share, t)
 		return false
 	}
 	if s.splash.IsZero() || t.Sub(s.splash) > soundAfterSplash {
@@ -182,6 +184,9 @@ func (s *SplashSoundDetector) Hear(pcm []byte, t time.Time) bool {
 	if ok {
 		s.onset = at
 	}
+	if ok && s.splash.IsZero() && !s.start.IsZero() {
+		s.logger.Debug("sound without a splash", "after_lock_ms", at.Sub(s.start).Milliseconds())
+	}
 	if !ok || s.splash.IsZero() {
 		return false
 	}
@@ -195,6 +200,21 @@ func (s *SplashSoundDetector) Hear(pcm []byte, t time.Time) bool {
 		s.logger.Info("bite detected", "detector", "splash_sound", "sound_after_splash_ms", gap.Milliseconds())
 	}
 	return s.fired
+}
+
+// weakSpray is the smallest spray share under the bar that the logs mention.
+const weakSpray = 0.04
+
+// logWeakSpray logs spray that stays under the bar each time it reaches a new
+// hundredth this cast, so a report shows how close a missed bite came.
+func (s *SplashSoundDetector) logWeakSpray(settled bool, share float64, t time.Time) {
+	share = math.Floor(share*100) / 100
+	if !settled || share < weakSpray || share <= s.peak {
+		return
+	}
+	s.peak = share
+	s.logger.Debug("spray under the bar", "share", share,
+		"bar", math.Round(s.level.threshold(t)*100)/100, "after_lock_ms", t.Sub(s.start).Milliseconds())
 }
 
 var _ SoundBiteDetector = (*SplashSoundDetector)(nil)

@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log/slog"
 	"math"
 	"math/rand/v2"
+	"strings"
 	"testing"
 	"time"
 
@@ -509,5 +511,35 @@ func TestSplashSoundStandsOutFromAPoolsFoam(t *testing.T) {
 				t.Errorf("fired = %v, want %v", fired, tt.want)
 			}
 		})
+	}
+}
+
+// A splash too small to count and its bite sound both reach the log, so a
+// report shows how close a missed bite came.
+func TestSplashSoundLogsWhatMissedTheBar(t *testing.T) {
+	var logs strings.Builder
+	d := NewSplashSoundDetector(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	start := time.Unix(0, 0)
+	quiet, loud := tone(5), tone(200)
+	for at := time.Duration(0); at < 7*time.Second; at += 10 * time.Millisecond {
+		if at%(100*time.Millisecond) == 0 {
+			frame := water(0, 0, 0)
+			if at == 4*time.Second {
+				frame = water(50, 45, 5)
+			}
+			if d.Feed(frame, start.Add(at)) {
+				t.Fatal("a splash under the bar was a bite")
+			}
+		}
+		packet := quiet
+		if at >= 2*time.Second && at < 2300*time.Millisecond {
+			packet = loud
+		}
+		d.Hear(packet, start.Add(at))
+	}
+	for _, want := range []string{`"msg":"spray under the bar","share":0.05,"bar":0.09`, `"msg":"sound without a splash"`} {
+		if !strings.Contains(logs.String(), want) {
+			t.Errorf("log lacks %s:\n%s", want, logs.String())
+		}
 	}
 }

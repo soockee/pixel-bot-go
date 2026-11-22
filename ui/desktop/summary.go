@@ -37,7 +37,8 @@ type summaryCast struct {
 	at, end   time.Time
 	splashes  int
 	share     float64 // the largest splash share
-	offSounds int     // sounds that came outside a splash
+	weak      float64 // the largest spray share under the bar
+	offSounds int     // sounds that came without a bite
 	bite      string  // "" or what the bite detection logged
 	result    string
 }
@@ -83,7 +84,9 @@ func summarize(path string) string {
 		case msg == "splash seen" && cur != nil:
 			cur.splashes++
 			cur.share = math.Max(cur.share, number(e, "share"))
-		case msg == "sound outside the splash" && cur != nil:
+		case msg == "spray under the bar" && cur != nil:
+			cur.weak = math.Max(cur.weak, number(e, "share"))
+		case (msg == "sound outside the splash" || msg == "sound without a splash") && cur != nil:
 			cur.offSounds++
 		case msg == "bite detected":
 			bites++
@@ -162,15 +165,18 @@ func summarize(path string) string {
 	if pointerFails > 0 {
 		fmt.Fprintf(&b, "Pointer moves failed %d times, the last: %s\n", pointerFails, cut(lastTrail, 300))
 	}
-	b.WriteString("Last casts (lock, watched, splashes and largest share, sounds outside a splash, result):\n")
+	b.WriteString("Last casts (lock, watched, splashes and largest share or largest spray under the bar, sounds without a bite, result):\n")
 	for _, c := range watched[max(0, len(watched)-summaryCasts):] {
 		watched := "still watching"
 		if !c.end.IsZero() {
 			watched = fmt.Sprintf("%.1fs", c.end.Sub(c.at).Seconds())
 		}
 		splashes := fmt.Sprint(c.splashes)
-		if c.splashes > 0 {
+		switch {
+		case c.splashes > 0:
 			splashes += fmt.Sprintf(" (%.2f)", c.share)
+		case c.weak > 0:
+			splashes += fmt.Sprintf(" (under the bar %.2f)", c.weak)
 		}
 		result := cmp.Or(c.result, "-")
 		if c.bite != "" {
