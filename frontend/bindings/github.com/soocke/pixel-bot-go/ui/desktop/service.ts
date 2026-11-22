@@ -164,9 +164,9 @@ export function SetWindow(title: string): $CancellablePromise<void> {
 }
 
 /**
- * Settings returns the settings form.
+ * Settings returns the values for the settings form.
  */
-export function Settings(): $CancellablePromise<$models.SettingsForm> {
+export function Settings(): $CancellablePromise<$models.Settings> {
     return $Call.ByID(1422890970);
 }
 

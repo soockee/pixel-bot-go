@@ -51,9 +51,9 @@ func TestSettingsApply(t *testing.T) {
 	}
 
 	bad := good
-	bad.CastKey, bad.Locator, bad.RecordDir = "Ctrl", "nope", " "
+	bad.CastKey, bad.RecordDir = "Ctrl", " "
 	if _, err := bad.apply(base); err == nil ||
-		!strings.Contains(err.Error(), "Cast key, Locator, Recording folder") {
+		!strings.Contains(err.Error(), "Cast key, Recording folder") {
 		t.Errorf("invalid settings: err = %v", err)
 	}
 }

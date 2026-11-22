@@ -1,6 +1,6 @@
 // Settings: every change saves at once, and Go validates and clamps it. Keys
 // are set by pressing them, numbers with sliders, techniques with dropdowns.
-import { Service, type Settings, type SettingsForm, type State } from "./api";
+import { Service, type Settings, type State } from "./api";
 import { $, h, keyLabel } from "./dom";
 
 type Key = keyof Settings;
@@ -8,7 +8,7 @@ type Value = Settings[Key];
 
 /** when hides a field the other values make pointless. */
 type Field = { key: Key; label: string; hint: string; when?: (v: Settings) => boolean } & (
-  | { kind: "key" | "switch" | "text" | "port" | "locator" | "biteDetector" | "reelMethod" }
+  | { kind: "key" | "switch" | "text" | "port" | "reelMethod" }
   | { kind: "slider"; min: number; max: number; step: number; unit?: string; zero?: string }
 );
 
@@ -69,14 +69,6 @@ const groups: { title: string; show?: "debug"; fields: Field[] }[] = [
     fields: [
       { key: "recordDir", label: "Recording folder", hint: "Each recording gets a new folder in here", kind: "text" },
       { key: "recordKeys", label: "Record keys", hint: "Record keys as well as the mouse, including what you type in chat", kind: "switch" },
-    ],
-  },
-  {
-    title: "Detection",
-    show: "debug",
-    fields: [
-      { key: "locator", label: "Locator", hint: "Finds the bobber in the game window", kind: "locator" },
-      { key: "biteDetector", label: "Bite detector", hint: "Decides when a fish bites", kind: "biteDetector" },
     ],
   },
 ];
@@ -363,7 +355,7 @@ export function setupSettings() {
     };
   }
 
-  function control(f: Field, data: SettingsForm): Control {
+  function control(f: Field): Control {
     switch (f.kind) {
       case "key": return keyControl(f);
       case "slider": return sliderControl(f);
@@ -371,8 +363,6 @@ export function setupSettings() {
       case "text": return textControl();
       case "port": return portControl();
       case "reelMethod": return selectControl(["right_click", "interact_key"], { right_click: "Right click", interact_key: "Interact key" });
-      case "locator": return selectControl(data.locators ?? []);
-      case "biteDetector": return selectControl(data.biteDetectors ?? []);
     }
   }
 
@@ -395,16 +385,16 @@ export function setupSettings() {
   }
 
   async function build() {
-    const data = await Service.Settings();
-    savedValues = data.values;
+    const values = await Service.Settings();
+    savedValues = values;
     const sections = groups.map((g) => {
       const fs = h("fieldset");
       fs.append(h("legend", g.title));
       if (g.show) gated.push(fs);
       fs.hidden = Boolean(g.show) && !shown;
       for (const f of g.fields) {
-        const c = control(f, data);
-        c.set(data.values[f.key]);
+        const c = control(f);
+        c.set(values[f.key]);
         controls.set(f.key, c);
         const r = row(`setting-${f.key}`, f.label, f.hint, c.el, c.input);
         if (c.after) r.append(c.after);
@@ -415,7 +405,7 @@ export function setupSettings() {
       }
       return fs;
     });
-    refresh(data.values);
+    refresh(values);
     form.replaceChildren(message, ...sections);
     placeSetup();
     lock();

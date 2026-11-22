@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/soocke/pixel-bot-go/config"
-	"github.com/soocke/pixel-bot-go/domain/detect"
 	"github.com/soocke/pixel-bot-go/internal/esp32"
 	"github.com/soocke/pixel-bot-go/internal/recorder"
 )
@@ -144,10 +143,10 @@ func (s *Service) ToggleCapture() { _ = s.do(s.cmds.ToggleCapture) }
 // ToggleRecord starts or stops a recording.
 func (s *Service) ToggleRecord() { _ = s.do(s.cmds.ToggleRecord) }
 
-// Settings returns the settings form.
-func (s *Service) Settings() (form SettingsForm) {
-	_ = s.do(func() { form = newSettingsForm(s.cfg) })
-	return form
+// Settings returns the values for the settings form.
+func (s *Service) Settings() (values Settings) {
+	_ = s.do(func() { values = settingsOf(s.cfg) })
+	return values
 }
 
 // SaveSettings validates and saves settings, and returns the values as saved,
@@ -292,10 +291,6 @@ func (s *Service) MoveOverlay(on bool) (err error) {
 
 // Exit closes the app.
 func (s *Service) Exit() { _ = s.do(s.cmds.Exit) }
-
-func newSettingsForm(c *config.Config) SettingsForm {
-	return SettingsForm{Values: settingsOf(c), Locators: detect.LocatorNames(), BiteDetectors: detect.BiteDetectorNames()}
-}
 
 // defaultWindow is selected until the person picks another.
 const defaultWindow = "World of Warcraft"

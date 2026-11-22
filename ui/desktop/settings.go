@@ -2,12 +2,10 @@ package desktop
 
 import (
 	"errors"
-	"slices"
 	"strings"
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/action"
-	"github.com/soocke/pixel-bot-go/domain/detect"
 	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/internal/esp32"
 )
@@ -28,20 +26,10 @@ type Settings struct {
 	BreakMinMinutes        int    `json:"breakMinMinutes"`
 	BreakMaxMinutes        int    `json:"breakMaxMinutes"`
 	LogoutKey              string `json:"logoutKey"`
-	Locator                string `json:"locator"`
-	BiteDetector           string `json:"biteDetector"`
 	RecordDir              string `json:"recordDir"`
 	RecordKeys             bool   `json:"recordKeys"`
 	CooldownSeconds        int    `json:"cooldownSeconds"`
 	MaxCastDurationSeconds int    `json:"maxCastDurationSeconds"`
-}
-
-// SettingsForm is the form content: the values and the choices for the
-// technique fields.
-type SettingsForm struct {
-	Values        Settings `json:"values"`
-	Locators      []string `json:"locators"`
-	BiteDetectors []string `json:"biteDetectors"`
 }
 
 func settingsOf(c *config.Config) Settings {
@@ -53,7 +41,7 @@ func settingsOf(c *config.Config) Settings {
 		Schedule: c.Schedule, PlayMinMinutes: c.PlayMinMinutes, PlayMaxMinutes: c.PlayMaxMinutes,
 		BreakMinMinutes: c.BreakMinMinutes, BreakMaxMinutes: c.BreakMaxMinutes,
 		LogoutKey: c.LogoutKey,
-		Locator:   c.Locator, BiteDetector: c.BiteDetector, RecordDir: c.RecordDir, RecordKeys: c.RecordKeys,
+		RecordDir: c.RecordDir, RecordKeys: c.RecordKeys,
 		CooldownSeconds: c.CooldownSeconds, MaxCastDurationSeconds: c.MaxCastDurationSeconds,
 	}
 }
@@ -78,9 +66,6 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 		if sameKey(s.InteractKey, s.CastKey) {
 			return c, errors.New("the Interact key must differ from the Cast key")
 		}
-		if s.Locator != "marker" {
-			return c, errors.New("Interact key requires the marker locator")
-		}
 	} else if strings.TrimSpace(s.InteractKey) != "" {
 		check(interactOK, "Interact key")
 	}
@@ -91,8 +76,6 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	if s.ReelMethod == config.ReelInteractKey && !esp32.SupportsKey(interactVK) {
 		return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Interact")
 	}
-	check(slices.Contains(detect.LocatorNames(), s.Locator), "Locator")
-	check(slices.Contains(detect.BiteDetectorNames(), s.BiteDetector), "Bite detector")
 	check(strings.TrimSpace(s.RecordDir) != "", "Recording folder")
 	if len(invalid) > 0 {
 		return c, errors.New("not saved, invalid: " + strings.Join(invalid, ", "))
@@ -117,7 +100,6 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	c.PlayMinMinutes, c.PlayMaxMinutes = s.PlayMinMinutes, s.PlayMaxMinutes
 	c.BreakMinMinutes, c.BreakMaxMinutes = s.BreakMinMinutes, s.BreakMaxMinutes
 	c.LogoutKey = s.LogoutKey
-	c.Locator, c.BiteDetector = s.Locator, s.BiteDetector
 	c.RecordDir, c.RecordKeys = strings.TrimSpace(s.RecordDir), s.RecordKeys
 	c.CooldownSeconds, c.MaxCastDurationSeconds = s.CooldownSeconds, s.MaxCastDurationSeconds
 	if err := c.Validate(); err != nil {

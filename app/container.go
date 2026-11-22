@@ -269,13 +269,8 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	}
 	c.FSM = fishing.NewFSM(logger, cfg, callbacks)
 
-	detectors := func(run config.Config) (detect.Locator, detect.BiteDetector, error) {
-		locator, err := detect.NewLocator(run.Locator, run)
-		if err != nil {
-			return nil, nil, err
-		}
-		bite, err := detect.NewBiteDetector(run.BiteDetector, logger)
-		return locator, bite, err
+	detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
+		return detect.NewMarkerLocator(), detect.NewSplashSoundDetector(logger), nil
 	}
 	sound := func(ctx context.Context, emit func([]byte, time.Time) error) error {
 		target := c.gameWindow.Load()

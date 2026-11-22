@@ -33,13 +33,9 @@ func TestEveryRegisteredDetectorRuns(t *testing.T) {
 	}
 }
 
-func TestDefaultsAreRegistered(t *testing.T) {
-	cfg := config.DefaultConfig()
-	if !slices.Contains(LocatorNames(), cfg.Locator) {
-		t.Errorf("default locator %q is not registered", cfg.Locator)
-	}
-	if !slices.Contains(BiteDetectorNames(), cfg.BiteDetector) {
-		t.Errorf("default bite detector %q is not registered", cfg.BiteDetector)
+func TestTheAppsDetectorsAreRegistered(t *testing.T) {
+	if !slices.Contains(LocatorNames(), "marker") || !slices.Contains(BiteDetectorNames(), SplashSoundName) {
+		t.Errorf("locators %v, bite detectors %v; want marker and %s", LocatorNames(), BiteDetectorNames(), SplashSoundName)
 	}
 }
 

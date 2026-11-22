@@ -49,22 +49,10 @@ export interface Settings {
     "breakMinMinutes": number;
     "breakMaxMinutes": number;
     "logoutKey": string;
-    "locator": string;
-    "biteDetector": string;
     "recordDir": string;
     "recordKeys": boolean;
     "cooldownSeconds": number;
     "maxCastDurationSeconds": number;
-}
-
-/**
- * SettingsForm is the form content: the values and the choices for the
- * technique fields.
- */
-export interface SettingsForm {
-    "values": Settings;
-    "locators": string[] | null;
-    "biteDetectors": string[] | null;
 }
 
 /**

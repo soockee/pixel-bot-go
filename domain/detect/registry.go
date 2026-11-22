@@ -9,15 +9,15 @@ import (
 	"github.com/soocke/pixel-bot-go/config"
 )
 
-// To add a technique, implement Locator or BiteDetector and add one line here.
-// The app config, the config panel and detecteval all pick it up by name.
+// To try a technique, implement Locator or BiteDetector and add one line here;
+// detecteval then compares it by name. The app always uses marker and
+// splash_sound.
 var (
 	locators = map[string]func(config.Config) (Locator, error){
-		"color":  func(config.Config) (Locator, error) { return NewColorLocator(), nil },
 		"marker": func(config.Config) (Locator, error) { return NewMarkerLocator(), nil },
 	}
 	biteDetectors = map[string]func(*slog.Logger) BiteDetector{
-		"splash_sound": func(logger *slog.Logger) BiteDetector { return NewSplashSoundDetector(logger) },
+		SplashSoundName: func(logger *slog.Logger) BiteDetector { return NewSplashSoundDetector(logger) },
 	}
 )
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 )
 
@@ -86,10 +85,6 @@ type Config struct {
 	BreakMinMinutes int    `json:"break_min_minutes"`
 	BreakMaxMinutes int    `json:"break_max_minutes"`
 	LogoutKey       string `json:"logout_key,omitempty"`
-	// Locator and BiteDetector name the techniques to use. The registered names
-	// are in domain/detect/registry.go.
-	Locator      string `json:"locator"`
-	BiteDetector string `json:"bite_detector"`
 	// RecordDir is the folder that holds one new directory per recording.
 	RecordDir string `json:"record_dir"`
 	// RecordKeys records keys in the selected window as well as the mouse.
@@ -133,8 +128,6 @@ func DefaultConfig() *Config {
 		PlayMaxMinutes:         45,
 		BreakMinMinutes:        5,
 		BreakMaxMinutes:        15,
-		Locator:                "marker",
-		BiteDetector:           "splash_sound",
 		RecordDir:              "datasets",
 		RecordKeys:             false,
 		MaxCastDurationSeconds: 30,
@@ -180,12 +173,6 @@ func (c *Config) Validate() error {
 		c.BreakMaxMinutes = d.BreakMaxMinutes
 	}
 	c.LogoutKey = strings.TrimSpace(c.LogoutKey)
-	if c.Locator == "" || c.Locator == "ncc" { // ncc was removed
-		c.Locator = d.Locator
-	}
-	if c.BiteDetector == "" || slices.Contains([]string{"motion", "splash", "histogram"}, c.BiteDetector) { // removed detectors
-		c.BiteDetector = d.BiteDetector
-	}
 	if c.RecordDir == "" {
 		c.RecordDir = d.RecordDir
 	}

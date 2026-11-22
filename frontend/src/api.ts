@@ -6,7 +6,7 @@ import type { State } from "../bindings/github.com/soocke/pixel-bot-go/ui/deskto
 import * as AppEvents from "../bindings/events";
 
 export { Service };
-export type { Recording, Settings, SettingsForm, State } from "../bindings/github.com/soocke/pixel-bot-go/ui/desktop";
+export type { Recording, Settings, State } from "../bindings/github.com/soocke/pixel-bot-go/ui/desktop";
 export type { EventPage } from "../bindings/github.com/soocke/pixel-bot-go/internal/recorder";
 
 /** onState calls fn with the current state and with every change. */
