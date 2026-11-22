@@ -5,12 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Go Fish</title>
   <link rel="stylesheet" href="/src/style.css">
-  <link rel="stylesheet" href="/src/themes.css">
   <script type="module" src="/src/main.ts"></script>
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><img class="brand-icon" id="brand-icon" alt=""><span>Go Fish</span></div>
+    <div class="brand"><img class="brand-icon" src="/icon.svg" alt=""><span>Go Fish</span></div>
     <nav class="tabs" role="tablist" aria-label="Views">
       <button role="tab" id="tab-live" aria-controls="view-live" data-tab="live">Fishing</button>
       <button role="tab" id="tab-recorder" aria-controls="view-recorder" data-tab="recorder" hidden>Recorder</button>
@@ -47,7 +46,18 @@
             <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
           </div>
           <div class="empty" id="capture-empty">
-            <p id="capture-empty-text">Start to see the fishing area here</p>
+            <!-- What the bot looks for: the bobber on the water inside Bobber Marker's brackets. -->
+            <svg class="idle-scene" viewBox="0 0 240 140" aria-hidden="true">
+              <defs><clipPath id="bobber"><circle cx="120" cy="76" r="17"/></clipPath></defs>
+              <ellipse class="ripple" cx="120" cy="98" rx="84" ry="11"/>
+              <ellipse class="ripple near" cx="120" cy="98" rx="46" ry="6"/>
+              <g clip-path="url(#bobber)"><rect class="bobber-top" x="100" y="56" width="40" height="20"/><rect class="bobber-base" x="100" y="76" width="40" height="20"/></g>
+              <rect class="bobber-base" x="117" y="48" width="6" height="14" rx="3"/>
+              <path class="bracket" d="M84 58V40h18M156 58V40h-18M84 96v18h18M156 96v18h-18"/>
+            </svg>
+            <p class="empty-title" id="capture-empty-text">Ready to fish</p>
+            <p class="muted" id="capture-empty-hint"></p>
+            <button class="link" id="stop-help" type="button" title="Opens the Go Fish guide in your browser" hidden>What to do</button>
           </div>
           <p class="caption" id="caption" hidden><span class="dot" aria-hidden="true"></span><span id="caption-text"></span><span class="mono" id="caption-time"></span></p>
         </div>
@@ -70,7 +80,10 @@
             <span class="muted" id="reels-label">reels sent this run</span>
           </div>
           <p class="muted small" id="casts">No casts yet</p>
-          <p class="muted small mono" id="outcomes" hidden></p>
+          <div class="outcomes" id="outcomes" hidden>
+            <div class="split" aria-hidden="true"><i class="caught" id="split-caught"></i><i class="away" id="split-away"></i><i class="missed" id="split-missed"></i></div>
+            <p class="small"><span><i class="caught"></i><span class="mono" id="n-caught"></span> caught</span><span><i class="away"></i><span class="mono" id="n-away"></span> got away</span><span><i class="missed"></i><span class="mono" id="n-missed"></span> not hooked</span></p>
+          </div>
           <div class="meter" id="meter-session">
             <div class="meter-head"><span>Session</span><span class="mono" id="session-text"></span></div>
             <div class="bar"><i id="session-bar"></i></div>
@@ -170,7 +183,7 @@
           </div>
           <p class="update-warning" id="update-warning" hidden><span id="warning-icon" aria-hidden="true"></span><span id="update-warning-text"></span></p>
           <div class="update-app">
-            <span class="update-icon" aria-hidden="true"><span class="brand-mark"></span></span>
+            <span class="update-icon" aria-hidden="true"><img src="/icon.svg" alt=""></span>
             <div class="update-info">
               <strong>Go Fish</strong>
               <span class="hint"><span id="update-detail"></span><button class="link" id="release-notes" type="button" hidden>What's new</button> · <button class="link" id="support-updates" type="button" title="Opens buymeacoffee.com/socke in your browser">Support Go Fish</button></span>
@@ -178,7 +191,7 @@
             <span class="pill" id="update-pill" hidden></span>
             <button class="button primary" id="install-update" type="button" hidden></button>
           </div>
-          <p class="hint">Each download is checked against the SHA-256 checksum GitHub publishes with the release before the app replaces itself.</p>
+          <p class="hint">Each download is checked against the SHA-256 checksum published with the GitHub release before the app replaces itself.</p>
         </section>
         <section class="updates" aria-labelledby="addon-title">
           <div class="updates-head">
@@ -197,7 +210,7 @@
             <span class="pill" id="addon-pill" hidden></span>
             <button class="button primary" id="install-addon" type="button" hidden></button>
           </div>
-          <p class="hint">Draws the pink brackets around your bobber that Go Fish looks for. Go Fish installs it into the game's AddOns folder and touches no other addon.</p>
+          <p class="hint">Draws the pink brackets around your bobber that Go Fish looks for. It goes into the game's AddOns folder; no other addon is touched.</p>
         </section>
         <section class="updates" aria-labelledby="overlay-title">
           <div class="updates-head">
@@ -207,7 +220,7 @@
             </div>
             <button class="button" id="move-overlay" type="button">Move overlay</button>
           </div>
-          <p class="hint">The pill over the game that shows how a run is going. It takes no clicks, so the game stays in charge of the mouse. Move it to where it is out of your way.</p>
+          <p class="hint">A small pill over the game that shows how the run goes. It takes no clicks, so the game keeps the mouse.</p>
         </section>
         <section class="updates" aria-labelledby="report-title">
           <div class="updates-head">
@@ -217,7 +230,7 @@
             </div>
             <button class="button" id="save-report" type="button">Save report file</button>
           </div>
-          <p class="hint">Only when asked in a bug report: saves the last logs and your settings into one file and shows it in File Explorer, so you can drag it into the issue. Nothing is sent.</p>
+          <p class="hint">Only when a bug report asks for it. Saves the last logs and your settings into one file and shows it in File Explorer, ready to drag into the issue. Nothing is sent.</p>
         </section>
       </div>
       <form class="settings-form" id="settings" novalidate></form>

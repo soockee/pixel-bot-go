@@ -40,7 +40,7 @@ func TestProblemURLFillsTheForm(t *testing.T) {
 		t.Errorf("version %q, windows %q", q.Get(issueVersion), q.Get(issueWindows))
 	}
 	details := q.Get(issueDetails)
-	for _, want := range []string{"Run: monitoring, running true", `"World of Warcraft"`, "biteDetector: splash_sound", "castKey: " + cfg.CastKey, "sound capture failed (access denied)"} {
+	for _, want := range []string{"Run: monitoring, running true", `"World of Warcraft"`, "reelMethod: right_click", "castKey: " + cfg.CastKey, "sound capture failed (access denied)"} {
 		if !strings.Contains(details, want) {
 			t.Errorf("details lack %q:\n%s", want, details)
 		}

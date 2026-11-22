@@ -2,10 +2,7 @@
 // the run is going against the limits that stop it.
 import { framesUrl, Service, type State } from "./api";
 import { $, clock, h } from "./dom";
-import { themeById } from "./themes";
-
-/** The fishing cycle in order, as fishing.FishingState names; the theme names each step. */
-const cycle = ["focus", "searching", "monitoring", "reeling", "cooldown", "casting"];
+import { caption as captionFor, catches, cycle } from "./cycle";
 
 export function setupLive(): (state: State) => void {
   const img = $<HTMLImageElement>("capture-img");
@@ -15,6 +12,7 @@ export function setupLive(): (state: State) => void {
   const lockImg = $<HTMLImageElement>("lock-img");
   const empty = $("capture-empty");
   const emptyText = $("capture-empty-text");
+  const emptyHint = $("capture-empty-hint");
   const caption = $("caption");
   const captionText = $("caption-text");
   const captionTime = $("caption-time");
@@ -23,8 +21,8 @@ export function setupLive(): (state: State) => void {
   const windowSelect = $<HTMLSelectElement>("window");
   const start = $<HTMLButtonElement>("start");
 
-  const steps = cycle.map((key) => {
-    const li = h("li");
+  const steps = cycle.map(([key, name]) => {
+    const li = h("li", name);
     li.dataset.state = key;
     return li;
   });
@@ -36,6 +34,15 @@ export function setupLive(): (state: State) => void {
   let shownScene = 0;
   let stepSince = performance.now();
   let lastFsm = "";
+  let shownReels = -1;
+  // A catch lights the count for a moment.
+  const count = $("reels");
+  const bump = () => {
+    count.classList.remove("bump");
+    void count.offsetWidth; // restart the animation
+    count.classList.add("bump");
+  };
+  count.addEventListener("animationend", () => count.classList.remove("bump"));
 
   async function loadWindows() {
     const titles = (await Service.Windows()) ?? [];
@@ -82,11 +89,12 @@ export function setupLive(): (state: State) => void {
     frame.style.transform = `translate(${tx}px, ${ty}px) scale(${zoom})`;
   }
 
-  function meter(id: string, value: number, limit: number, text: string) {
+  // warn marks a limit one step away; only a running bot can still reach it.
+  function meter(id: string, value: number, limit: number, text: string, warn: boolean) {
     $(`${id}-text`).textContent = text;
     const bar = $(`${id}-bar`);
     bar.style.transform = `scaleX(${limit > 0 ? Math.min(1, value / limit) : 0})`;
-    bar.classList.toggle("warn", limit > 1 && value >= limit - 1);
+    bar.classList.toggle("warn", warn && limit > 1 && value >= limit - 1);
   }
 
   img.addEventListener("load", fit);
@@ -95,6 +103,7 @@ export function setupLive(): (state: State) => void {
   windowSelect.addEventListener("change", () => void Service.SetWindow(windowSelect.value).then(() => Service.CheckGame()));
   windowSelect.addEventListener("mousedown", () => void loadWindows()); // the game may have opened since
   start.addEventListener("click", () => void Service.ToggleCapture());
+  $("stop-help").addEventListener("click", () => void Service.OpenStopHelp());
   // The coffee page opens in the browser and the card hides until the next milestone.
   $("support-open").addEventListener("click", () => void Service.OpenSupport());
   $("support-dismiss").addEventListener("click", () => void Service.DismissSupport());
@@ -110,14 +119,17 @@ export function setupLive(): (state: State) => void {
 
   return (s) => {
     state = s;
-    const words = themeById(s.theme).words;
-    steps.forEach((li, i) => (li.textContent = words.cycle[cycle[i]][0]));
     const showFrame = s.running && s.frame > 0;
 
     if (showFrame && s.frame !== shownFrame) img.src = framesUrl("capture", (shownFrame = s.frame));
     frame.hidden = !showFrame;
     empty.hidden = showFrame;
-    emptyText.textContent = s.running ? "Waiting for the game window" : words.empty;
+    // After a run that stopped by itself the stage says why, where the person looks.
+    const stopped = !s.running && s.stopped !== "";
+    emptyText.textContent = s.running ? "Waiting for the game window" : stopped ? "Stopped by itself" : "Ready to fish";
+    emptyHint.textContent = s.running ? "Bring WoW to the front"
+      : stopped ? s.stopped : "Start fishing, then keep WoW in front. Go Fish shows what it sees here.";
+    $("stop-help").hidden = !stopped;
     if (s.roi && s.roi !== shownRoi) roi.src = framesUrl("roi", (shownRoi = s.roi));
     if (s.scene && s.scene !== shownScene) lockImg.src = framesUrl("scene", (shownScene = s.scene));
     fit();
@@ -127,9 +139,9 @@ export function setupLive(): (state: State) => void {
       lastFsm = fsm;
       stepSince = performance.now();
     }
-    const step = words.cycle[fsm];
+    const step = captionFor(fsm);
     caption.hidden = !step;
-    if (step) captionText.textContent = step[1];
+    captionText.textContent = step;
     for (const li of steps) li.classList.toggle("current", li.dataset.state === fsm);
 
     $("watch-panel").hidden = !s.debug;
@@ -145,26 +157,36 @@ export function setupLive(): (state: State) => void {
       windowSelect.value = s.window;
     }
     windowSelect.disabled = s.running;
-    start.textContent = s.running ? words.stop : words.start;
+    start.textContent = s.running ? "Stop" : "Start fishing";
     start.classList.toggle("primary", !s.running && s.setupDone);
     start.classList.toggle("stop", s.running);
-    $("start-hint").hidden = true;
+    // Starting stays possible, in case a check is wrong, but says what is missing.
+    const setup = s.setup.filter((step) => step.id !== "");
+    const next = setup.findIndex((step) => !step.done);
+    $("start-hint").hidden = s.running || s.setupDone || next < 0;
+    $("start-hint").textContent = `Finish setup first: ${setup[next]?.title}, step ${next + 1} of ${setup.length}`;
 
+    if (s.reels > shownReels && shownReels >= 0) bump(); // not for the count the window opens with
+    shownReels = s.reels;
     $("reels").textContent = String(s.reels);
-    $("reels-label").textContent = words.catches[s.reels === 1 ? 0 : 1];
-    $("casts").textContent = s.casts ? `${s.casts} casts · ${s.reelInputs} of ${s.reelAttempts} reel inputs sent` : "No casts yet";
+    $("reels-label").textContent = catches(s.reels);
+    const blocked = s.reelAttempts - s.reelInputs;
+    $("casts").textContent = !s.casts ? "No casts yet"
+      : `${s.casts} ${s.casts === 1 ? "cast" : "casts"}${blocked > 0 ? ` · ${blocked} ${blocked === 1 ? "reel" : "reels"} blocked` : ""}`;
     // How reels ended, from Bobber Marker: "not hooked" is a reel on a false bite.
     const told = s.caught + s.gotAway + s.notHooked;
     $("outcomes").hidden = told === 0;
-    $("outcomes").textContent = `${s.caught} caught · ${s.gotAway} got away · ${s.notHooked} not hooked`;
-    meter("session", s.sessionSeconds, s.sessionLimit * 60, `${clock(s.sessionSeconds)} of ${s.sessionLimit} min`);
-    meter("failed", s.failedInRow, s.maxFailed, `${s.failedInRow} of ${s.maxFailed}`);
+    for (const [id, n] of [["caught", s.caught], ["away", s.gotAway], ["missed", s.notHooked]] as const) {
+      $(`split-${id}`).style.flexGrow = String(n);
+      $(`n-${id}`).textContent = String(n);
+    }
+    meter("session", s.sessionSeconds, s.sessionLimit * 60, `${clock(s.sessionSeconds)} of ${s.sessionLimit} min`, s.running);
+    meter("failed", s.failedInRow, s.maxFailed, `${s.failedInRow} of ${s.maxFailed}`, s.running);
 
     // The thank-you card: Go decides when it shows (ui/desktop/support.go), at
     // catch milestones after a good run.
     const thanks = s.support;
     $("support-card").hidden = !thanks.ask;
-    $("support-open").textContent = words.support;
     if (thanks.ask) {
       const hours = Math.floor(thanks.seconds / 3600);
       const fished = hours >= 1 ? `${hours} ${hours === 1 ? "hour" : "hours"}` : `${Math.max(1, Math.round(thanks.seconds / 60))} minutes`;

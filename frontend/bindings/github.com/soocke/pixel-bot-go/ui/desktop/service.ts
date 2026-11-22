@@ -105,6 +105,13 @@ export function MuteSupport(): $CancellablePromise<void> {
 }
 
 /**
+ * OpenStopHelp opens StopHelpURL in the browser.
+ */
+export function OpenStopHelp(): $CancellablePromise<void> {
+    return $Call.ByID(2264157952);
+}
+
+/**
  * OpenSupport opens the coffee page in the browser and hides the thank-you card.
  */
 export function OpenSupport(): $CancellablePromise<void> {
@@ -157,13 +164,6 @@ export function SaveSettings(values: $models.Settings): $CancellablePromise<$mod
 }
 
 /**
- * SetTheme saves the window's look, one of config.Themes.
- */
-export function SetTheme(theme: string): $CancellablePromise<void> {
-    return $Call.ByID(798552314, theme);
-}
-
-/**
  * SetWindow makes title the target window.
  */
 export function SetWindow(title: string): $CancellablePromise<void> {
@@ -171,9 +171,9 @@ export function SetWindow(title: string): $CancellablePromise<void> {
 }
 
 /**
- * Settings returns the settings form.
+ * Settings returns the values for the settings form.
  */
-export function Settings(): $CancellablePromise<$models.SettingsForm> {
+export function Settings(): $CancellablePromise<$models.Settings> {
     return $Call.ByID(1422890970);
 }
 

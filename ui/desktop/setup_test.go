@@ -23,9 +23,9 @@ func TestSetupSteps(t *testing.T) {
 	}{
 		{"nothing is running", State{Window: defaultWindow}, false, 0, "", "Waiting for the WoW window"},
 		{"a chosen window is closed", State{Window: "Fake Game"}, false, 0, "", `"Fake Game" is not open`},
-		{"game folder unknown", State{Window: defaultWindow}, false, 3, "", "find the game folder"},
+		{"game folder unknown", State{Window: defaultWindow}, false, 3, "", "needs the game folder"},
 		{"already open", State{Window: defaultWindow, GameFound: true}, false, 0, "", "Found the World of Warcraft window"},
-		{"no board chosen", State{GameFound: true, Addon: "current"}, false, 1, "Find and test the board", "USB cable"},
+		{"no board chosen", State{GameFound: true, Addon: "current"}, false, 1, "Find and test the board", "by USB"},
 		{"board found", State{GameFound: true, ESP32Port: "AUTO", BoardFound: "COM5"}, false, 1, "", "on COM5"},
 		{"board tested", State{GameFound: true, ESP32Port: "COM5", BoardFound: "COM5", BoardTest: "Board on COM5: 20 of 20 answers"}, false, 1, "", "20 of 20 answers"},
 		{"board on auto", State{GameFound: true, ESP32Port: "AUTO"}, false, 1, "", "when fishing starts"},

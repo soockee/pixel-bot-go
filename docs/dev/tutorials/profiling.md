@@ -9,7 +9,7 @@ order: 4
 1. Enable `"debug": true`.
 2. Run capture for 30s while searching & monitoring states cycle.
 3. Gather CPU profile & heap snapshot.
-4. Identify top hotspots; if NCC dominates, adjust stride/scale before code changes.
+4. Identify top hotspots.
 5. Disable debug mode afterwards.
 
 ## Memory that keeps growing

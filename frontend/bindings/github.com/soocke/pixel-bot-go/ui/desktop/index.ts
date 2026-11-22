@@ -11,7 +11,6 @@ export type {
     Recording,
     Rect,
     Settings,
-    SettingsForm,
     SetupStep,
     State,
     Support

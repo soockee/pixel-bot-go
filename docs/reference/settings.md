@@ -26,8 +26,6 @@ order: 1
 | Shortest / longest break | 5 / 15 min | Shown with breaks on: the range for each logged-out break. |
 | Logout key | F12 | Shown with breaks or Change spot on: a spare key. The addon puts a **Logout** macro on it after an **Update addon** and `/reload`. |
 | Move overlay | Top centre | A button, not a setting you type: drag the pill that shows a run over the game, then click **Done** to keep its place. See [Change keys and limits](../how-to/settings.md#move-the-overlay). |
-| Theme | Graphite | The window's look, words, icon and catch sound: Graphite, Tavern Ledger, Arcane Grimoire, Frostwater, Felfire Forge or Tidecaller. |
-| Theme sounds | on | Plays the theme's sound on each catch. Kept on this computer only. |
 
 With **Change spot** on, Go Fish moves after 45 to 55 catches. If the board
 supports camera drags and the pointer is inside the game window, Go Fish may

@@ -1,6 +1,6 @@
-/* Graphite instrument panel, the default theme: neutral surfaces, one amber
-   signal accent, and the addon's magenta brackets as the signature around
-   live imagery. The other themes are in themes.css. */
+/* Graphite instrument panel: neutral surfaces, one amber signal accent (quest
+   gold), and the addon's magenta brackets as the signature, used only where
+   the bot looks: around the live capture, the idle scene and the marks. */
 :root {
   --bg: #121314;
   --surface: #18191b;
@@ -10,17 +10,17 @@
   --line-strong: rgba(232, 234, 237, 0.14);
   --text: #e8eaed;
   --text-2: #a4a8ae;
-  --text-3: #6f747b;
+  --text-3: #868b92; /* 4.5:1 on --surface, for hints */
   --accent: #f0a63a;
   --accent-ink: #1c1306;
   --accent-text: #f0a63a;
   --accent-soft: rgba(240, 166, 58, 0.14);
   --marker: #e544e5;
+  --bobber: #d9604c;
   --good: #6cbf8f;
   --bad: #e2725f;
   --heat-lo: 72, 98, 122;
   --heat-hi: 196, 224, 247;
-  --shadow: none;
 
   --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --mono: "Cascadia Mono", "Cascadia Code", Consolas, monospace;
@@ -76,7 +76,7 @@ button, select, input { font: inherit; color: inherit; }
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -219,7 +219,6 @@ main { min-height: 0; overflow: hidden; }
   border: 1px solid var(--line);
   border-radius: var(--r-panel);
   background: var(--surface);
-  box-shadow: var(--shadow);
   min-width: 0;
 }
 
@@ -283,7 +282,6 @@ main { min-height: 0; overflow: hidden; }
 .corner.bl { bottom: -6px; left: -6px; border-bottom-width: 2px; border-left-width: 2px; }
 .corner.br { bottom: -6px; right: -6px; border-bottom-width: 2px; border-right-width: 2px; }
 
-
 .lock {
   position: absolute;
   border: 1px solid var(--accent);
@@ -298,12 +296,27 @@ main { min-height: 0; overflow: hidden; }
 .empty {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   padding: 24px;
-  color: var(--text-2);
   text-align: center;
 }
+.empty p { max-width: 400px; text-wrap: balance; }
+.empty-title { font-size: 16px; font-weight: 500; }
+#capture-empty-hint::first-letter { text-transform: uppercase; } /* Go's reasons start lowercase */
+#stop-help { margin-top: 4px; }
+
+/* The idle scene: what the bot looks for, the bobber on the water inside the
+   addon's brackets. Drawn still; nothing moves until a run starts. */
+.idle-scene { width: 240px; height: 140px; margin-bottom: 8px; }
+.idle-scene .ripple { fill: none; stroke: var(--line-strong); stroke-width: 1.5; }
+.idle-scene .ripple.near { stroke: var(--text-3); stroke-opacity: 0.5; }
+.idle-scene .bobber-top { fill: var(--bobber); }
+.idle-scene .bobber-base { fill: var(--text); }
+.idle-scene .bracket { fill: none; stroke: var(--marker); stroke-width: 3; }
 
 /* The caption sits on the stage under the image: the step and its time. */
 .caption {
@@ -357,9 +370,23 @@ main { min-height: 0; overflow: hidden; }
 .catch { gap: 16px; }
 .figure { display: flex; align-items: baseline; gap: 8px; }
 .big { font-size: 40px; line-height: 1; color: var(--text); }
+/* A catch lights the count in the accent for a moment. */
+.big.bump { animation: catch 900ms var(--ease); }
+@keyframes catch { from { color: var(--accent-text); } }
+
+/* How reels ended, as one split bar: caught leads in the accent. */
+.outcomes { display: flex; flex-direction: column; gap: 8px; }
+.split { display: flex; gap: 2px; height: 4px; border-radius: 2px; overflow: hidden; }
+.split i { flex: 0 1 0; min-width: 0; }
+.outcomes .caught { background: var(--accent); }
+.outcomes .away { background: var(--text-3); }
+.outcomes .missed { background: var(--bad); }
+.outcomes p { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--text-2); }
+.outcomes p > span { display: inline-flex; align-items: center; gap: 4px; }
+.outcomes p i { width: 8px; height: 8px; border-radius: 2px; }
 .catch > p { margin-top: -8px; }
 
-.meter { display: flex; flex-direction: column; gap: 6px; }
+.meter { display: flex; flex-direction: column; gap: 8px; }
 .meter-head { display: flex; justify-content: space-between; gap: 8px; color: var(--text-2); font-size: 12px; }
 .bar { height: 4px; border-radius: 2px; background: var(--sunken); overflow: hidden; }
 .bar i {
@@ -393,6 +420,8 @@ main { min-height: 0; overflow: hidden; }
 .setup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .setup-reload { padding: 8px 12px; border-left: 2px solid var(--good); background: var(--raised); }
 #setup-keys { padding: 0 12px 8px; border: 1px solid var(--line-strong); border-radius: var(--r-control); }
+/* The step above already says what the settings shown with it are for. */
+#setup-keys .row > label .hint { display: none; }
 .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .step {
   display: grid;
@@ -417,7 +446,7 @@ main { min-height: 0; overflow: hidden; }
 .step .mark svg { width: 12px; height: 12px; stroke-width: 2; }
 .step[aria-current="step"] .mark { border-color: var(--accent); color: var(--accent-text); }
 .step.done .mark { border-color: var(--good); color: var(--good); }
-.step .title { font-weight: 600; }
+.step .title { font-weight: 500; }
 .step .detail { grid-column: 2; color: var(--text-2); font-size: 12px; }
 
 .watch-box {
@@ -502,14 +531,14 @@ main { min-height: 0; overflow: hidden; }
 .stats dd { margin: 4px 0 0; font: 400 20px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
 
 .layers { display: flex; gap: 16px; color: var(--text-2); font-size: 12px; }
-.layers label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.layers label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 
 #map { width: 100%; height: clamp(260px, 46vh, 520px); }
 #camera, #activity { width: 100%; height: 168px; }
 #trace-frame { width: 100%; height: 168px; object-fit: contain; border-radius: 8px; background: var(--sunken); }
 
 .legend { display: flex; flex-wrap: wrap; gap: 16px; color: var(--text-2); font-size: 12px; }
-.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
 .legend i { width: 8px; height: 8px; border-radius: 4px; }
 .legend i.heat { width: 24px; height: 8px; border-radius: 2px; }
 
@@ -521,7 +550,7 @@ main { min-height: 0; overflow: hidden; }
 
 .log { width: 100%; border-collapse: collapse; font-size: 12px; }
 .log th { padding: 0 8px 8px; color: var(--text-3); font-weight: 400; text-align: left; }
-.log td { padding: 6px 8px; border-top: 1px solid var(--line); color: var(--text-2); }
+.log td { padding: 8px; border-top: 1px solid var(--line); color: var(--text-2); }
 .log td:first-child { width: 96px; font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text-3); }
 .log td:nth-child(2) { color: var(--text); }
 
@@ -554,7 +583,7 @@ main { min-height: 0; overflow: hidden; }
   align-items: center;
   gap: 16px;
   min-height: 44px;
-  padding: 6px 0;
+  padding: 8px 0;
   border-top: 1px solid var(--line);
 }
 .row:first-of-type { border-top: 0; }
@@ -565,7 +594,8 @@ main { min-height: 0; overflow: hidden; }
 .row .port-result { grid-column: 1 / -1; margin: 0; }
 .row .port-result.bad { color: var(--bad); }
 
-.settings-status { color: var(--text-3); font-size: 12px; min-height: 18px; }
+.settings-status { color: var(--text-3); font-size: 12px; }
+.settings-status:empty { display: none; }
 
 /* Updates: the app's own release, shaped like one row of an add-on list. */
 .updates {
@@ -580,11 +610,12 @@ main { min-height: 0; overflow: hidden; }
 .updates .hint { color: var(--text-3); font-size: 12px; margin: 0; }
 .updates .hint.bad { color: var(--bad); }
 .updates-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+#update-checked::first-letter { text-transform: uppercase; } /* Go errors start lowercase */
 .updates-head h2 { margin: 0 0 2px; font-size: 14px; font-weight: 500; }
 .updates-head .button, .update-warning { display: inline-flex; align-items: center; gap: 8px; }
 .update-warning {
   margin: 0;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   border-radius: var(--r-control);
   background: var(--accent-soft);
@@ -594,7 +625,7 @@ main { min-height: 0; overflow: hidden; }
 .update-app {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   padding: 12px 0;
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
@@ -610,7 +641,8 @@ main { min-height: 0; overflow: hidden; }
   background: var(--raised);
 }
 .update-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.update-info .hint { font-family: var(--mono); font-size: 11px; }
+.update-icon img { width: 32px; height: 32px; }
+.update-info .hint { font-variant-numeric: tabular-nums; }
 .link {
   padding: 0;
   border: 0;
@@ -621,14 +653,15 @@ main { min-height: 0; overflow: hidden; }
 }
 .link:hover { text-decoration: underline; }
 .pill {
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: var(--raised);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   color: var(--text-2);
   font-size: 12px;
   white-space: nowrap;
 }
-.pill.good { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+.pill::before { content: ""; width: 8px; height: 8px; border-radius: 4px; background: var(--text-3); }
+.pill.good::before { background: var(--good); }
 .settings-status.bad { color: var(--bad); }
 
 /* A key is set by pressing it: the button shows the key as a keycap. */
@@ -702,39 +735,6 @@ input.switch:checked { background: var(--accent); }
 input.switch:checked::after { transform: translateX(16px); background: var(--accent-ink); }
 input.switch:disabled { opacity: 0.5; cursor: default; }
 
-/* Theme picker: each card previews its theme's colours and type. */
-.theme-picker {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
-  margin-bottom: 8px;
-}
-.theme-card {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: 10px;
-  background: var(--p-bg);
-  color: var(--p-fg);
-  cursor: pointer;
-  transition: transform var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
-}
-.theme-card:hover { transform: translateY(-1px); }
-.theme-card:has(input:checked) { box-shadow: 0 0 0 2px var(--p-ac); }
-.theme-card:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
-.theme-card input { position: absolute; opacity: 0; pointer-events: none; }
-.theme-card img { width: 48px; height: 48px; flex: none; }
-.theme-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.theme-text strong { font-weight: 600; }
-.theme-text .hint { color: inherit; opacity: 0.72; font-size: 12px; line-height: 1.35; }
-
-/* Catch burst pieces; themes.css shapes and moves them per theme. */
-.particle { position: absolute; left: var(--x); top: var(--y); z-index: 5; pointer-events: none; animation: particle-fade 1s forwards; }
-@keyframes particle-fade { to { opacity: 0; } }
-
 /* Status bar */
 
 .statusbar {
@@ -751,7 +751,7 @@ input.switch:disabled { opacity: 0.5; cursor: default; }
 }
 #status { overflow: hidden; text-overflow: ellipsis; }
 .statusbar-end { display: flex; align-items: center; gap: 16px; }
-.statusbar .link { color: inherit; } /* the accent of a light theme is unreadable on its dark bar */
+.statusbar .link { color: inherit; }
 #dry-run { color: var(--accent-text); }
 
 /* Smaller windows */
@@ -769,14 +769,11 @@ input.switch:disabled { opacity: 0.5; cursor: default; }
 .trace > *, .trace-body > * { flex: none; }
 .lock img { display: block; width: 100%; height: 100%; }
 
-
-
 /* The thank-you card after a run that saved time */
 .thanks {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin-top: 4px;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--r-control);

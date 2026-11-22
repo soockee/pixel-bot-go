@@ -53,7 +53,7 @@ func ProblemDetails(s State, cfg *config.Config, summary string, warnings []stri
 	fmt.Fprintf(&b, "Status: %s\n", s.Status)
 	fmt.Fprintf(&b, "Game window: %q, found %v\n", s.Window, s.GameFound)
 	fmt.Fprintf(&b, "Addon: %s (app carries %s)\n", cmp.Or(s.Addon, "game not found"), s.AddonVersion)
-	fmt.Fprintf(&b, "Setup done: %v, dry run %v, debug %v, theme %s\n", s.SetupDone, s.DryRun, s.Debug, s.Theme)
+	fmt.Fprintf(&b, "Setup done: %v, dry run %v, debug %v\n", s.SetupDone, s.DryRun, s.Debug)
 	if summary != "" {
 		b.WriteString("\nRuns in the log:\n" + summary)
 	}

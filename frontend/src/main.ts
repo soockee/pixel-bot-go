@@ -7,7 +7,6 @@ import { setupLive } from "./live";
 import { setupMoveOverlay } from "./move-overlay";
 import { setupRecorder } from "./recorder";
 import { setupSettings } from "./settings";
-import { burst, playSound, themeById } from "./themes";
 import { setupWizard } from "./setup";
 import { setupUpdates } from "./updates";
 
@@ -74,26 +73,8 @@ const settings = setupSettings();
 const wizard = setupWizard(settings.finishSaving, () => settings.setValue("esp32Port", "AUTO"));
 const updates = setupUpdates();
 show(wanted);
-let theme = "";
-let reels = -1; // -1 until the first state, so opening the window celebrates nothing
 
 function render(s: State) {
-  if (s.theme !== theme) {
-    theme = s.theme;
-    document.documentElement.dataset.theme = theme;
-    $<HTMLImageElement>("brand-icon").src = `/themes/${theme}.svg`;
-    const words = themeById(theme).words;
-    for (const t of tabs) $(`tab-${t}`).textContent = words.tabs[t];
-    $("support-link").textContent = words.support;
-    recorder.shown(); // canvases read the theme colours
-  }
-  // Themes react to the fishing step, for example a glow while watching.
-  document.body.dataset.fsm = s.running ? s.fsm : "";
-  if (reels >= 0 && s.reels > reels) {
-    playSound(themeById(theme));
-    burst(themeById(theme), $("stage"));
-  }
-  reels = s.reels;
   if (s.debug !== recorderShown) {
     recorderShown = s.debug;
     show(wanted);

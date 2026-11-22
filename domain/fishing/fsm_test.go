@@ -1,6 +1,7 @@
 package fishing
 
 import (
+	"errors"
 	"fmt"
 	"image"
 	"slices"
@@ -37,7 +38,7 @@ func recordingActions(log *actionLog) ActionCallbacks {
 	return ActionCallbacks{
 		PressKey:   func(byte) bool { log.add("press"); return true },
 		MoveCursor: func(x, y int) { log.add("move") },
-		ClickRight: func() bool { log.add("click"); return true },
+		ClickRight: func() error { log.add("click"); return nil },
 		ParseVK:    func(string) (byte, bool) { return 0, true },
 	}
 }
@@ -297,12 +298,12 @@ func TestOffTargetReel(t *testing.T) {
 				aim := image.Pt(52, 100)
 				at := image.Point{}
 				actions.MoveCursor = func(x, y int) { at = image.Pt(x, y) }
-				actions.ClickRight = func() bool {
+				actions.ClickRight = func() error {
 					if at != aim {
 						log.add("wrong click point")
 					}
 					log.add("click")
-					return true
+					return nil
 				}
 				m := NewFSM(nil, cfg, actions)
 				defer m.Close()
@@ -498,7 +499,7 @@ func TestAutomaticRepositionDragsThroughESP32(t *testing.T) {
 func TestBlockedRightClickIsOnlyAnAttempt(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		actions := recordingActions(&actionLog{})
-		actions.ClickRight = func() bool { return false }
+		actions.ClickRight = func() error { return errors.New("the mouse was moved") }
 		m := NewFSM(nil, testConfig(), actions)
 		defer m.Close()
 		startMonitoring(t, m)
@@ -507,6 +508,9 @@ func TestBlockedRightClickIsOnlyAnAttempt(t *testing.T) {
 		wantState(t, m, StateHalt)
 		if got := m.Stats(); got.ReelAttempts != 1 || got.ReelInputs != 0 || got.Reels != 0 {
 			t.Fatalf("blocked click changed the confirmed counts: %+v", got)
+		}
+		if got := m.HaltReason(); got != "could not reel: the mouse was moved" {
+			t.Errorf("halt reason %q, want the click's own reason", got)
 		}
 	})
 }

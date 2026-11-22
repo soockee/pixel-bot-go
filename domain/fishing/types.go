@@ -46,8 +46,9 @@ type ActionCallbacks struct {
 	PressKey   func(vk byte) bool
 	MoveCursor func(x, y int)
 	// CursorPos reads the pointer, where a between-catch wander starts.
-	CursorPos  func() (x, y int, ok bool)
-	ClickRight func() bool
+	CursorPos func() (x, y int, ok bool)
+	// ClickRight clicks the bobber, or says why it could not.
+	ClickRight func() error
 	ParseVK    func(key string) (byte, bool)
 	// CanAct checks focus just before dispatching an optional action.
 	CanAct func() bool

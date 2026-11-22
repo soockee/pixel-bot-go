@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
+	"github.com/soocke/pixel-bot-go/domain/detect"
 )
 
 const (
@@ -603,7 +604,7 @@ func (f *FishingFSM) startReel() {
 	}
 	f.reelDelay = reelClickDelay
 	if f.actions.PlanReel != nil {
-		f.reelTiming = f.actions.PlanReel(f.cfg.BiteDetector)
+		f.reelTiming = f.actions.PlanReel(detect.SplashSoundName)
 		if f.reelTiming.Cooldown == 0 {
 			f.reelTiming.Cooldown = f.pause()
 		}
@@ -688,8 +689,8 @@ func (f *FishingFSM) finishReel() {
 			}
 		} else {
 			f.stats.reelAttempts.Add(1)
-			if !f.actions.ClickRight() {
-				f.why("reel click was blocked")
+			if err := f.actions.ClickRight(); err != nil {
+				f.why("could not reel: " + err.Error())
 				f.halt()
 				return
 			}
@@ -788,7 +789,7 @@ func (f *FishingFSM) resumeSearch() {
 func (f *FishingFSM) observeReelTiming(kind, reason string) {
 	if f.actions.ObserveReelTiming != nil {
 		f.actions.ObserveReelTiming(ReelTimingEvent{
-			Kind: kind, Reason: reason, Detector: f.cfg.BiteDetector,
+			Kind: kind, Reason: reason, Detector: detect.SplashSoundName,
 			DetectorAt: f.detectorAt, Timing: f.reelTiming, Delay: f.reelDelay,
 		})
 	}

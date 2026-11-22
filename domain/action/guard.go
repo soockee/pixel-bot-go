@@ -16,7 +16,7 @@ type Guard struct {
 	OnTakeover func()                     // the user moved the pointer
 	Press      func(vk byte) bool         // input that is sent when allowed
 	Move       func(x, y int) error       //
-	Click      func() bool                //
+	Click      func() error               //
 	target     image.Point                // where the last Move left the pointer
 	hasTarget  bool
 }
@@ -99,23 +99,34 @@ func (g *Guard) DragCamera(dx int, drag func(int, func() bool) bool) (attempted,
 	return true, drag(dx, func() bool { return g.InFront() && !g.userMoved() })
 }
 
-// ClickRight clicks if the pointer is still where MoveCursor left it.
-func (g *Guard) ClickRight() bool {
-	return g.canClick() && g.Click()
+// ClickRight clicks if the pointer is still where MoveCursor left it, or
+// says why it did not.
+func (g *Guard) ClickRight() error {
+	if err := g.canClick(); err != nil {
+		return err
+	}
+	return g.Click()
 }
 
-func (g *Guard) canClick() bool {
-	if !g.hasTarget || !g.InFront() {
-		g.Logger.Warn("input dropped: no target or window not in front", "action", "click_right")
-		return false
+func (g *Guard) canClick() error {
+	if !g.hasTarget {
+		g.Logger.Warn("input dropped: no target", "action", "click_right")
+		return errors.New("the pointer was not on the bobber")
+	}
+	if !g.InFront() {
+		g.Logger.Warn("input dropped: window not in front", "action", "click_right")
+		return errors.New("the game was not in front")
 	}
 	area := g.Area()
 	if area == nil || !g.target.In(*area) {
 		g.Logger.Warn("input dropped: target is outside the window", "action", "click_right")
 		g.hasTarget = false
-		return false
+		return errors.New("the bobber was outside the game window")
 	}
-	return !g.userMoved()
+	if g.userMoved() {
+		return errors.New("the mouse was moved")
+	}
+	return nil
 }
 
 // userMoved reports whether the pointer left the last target, which means the

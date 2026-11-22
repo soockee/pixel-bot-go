@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 )
 
@@ -62,14 +61,6 @@ type Config struct {
 	// app captures that window's client area.
 	AutoWindow string `json:"-"`
 	AutoStart  bool   `json:"-"`
-	// Detection parameters
-	MinScale  float64 `json:"min_scale"`
-	MaxScale  float64 `json:"max_scale"`
-	ScaleStep float64 `json:"scale_step"`
-	Threshold float64 `json:"threshold"`
-	Stride    int     `json:"stride"`
-	Refine    bool    `json:"refine"`
-
 	// CastKey is the key that casts (e.g. "F3" or "R").
 	CastKey string `json:"cast_key"`
 	// ReelMethod selects how the app interacts with a marked bobber.
@@ -94,26 +85,17 @@ type Config struct {
 	BreakMinMinutes int    `json:"break_min_minutes"`
 	BreakMaxMinutes int    `json:"break_max_minutes"`
 	LogoutKey       string `json:"logout_key,omitempty"`
-	// Locator and BiteDetector name the techniques to use. The registered names
-	// are in domain/detect/registry.go.
-	Locator      string `json:"locator"`
-	BiteDetector string `json:"bite_detector"`
 	// RecordDir is the folder that holds one new directory per recording.
 	RecordDir string `json:"record_dir"`
 	// RecordKeys records keys in the selected window as well as the mouse.
 	RecordKeys bool `json:"record_keys"`
 
-	// Bite detection configuration (only actively used fields retained).
-	ROISizePx int `json:"roi_size_px"` // square ROI side length in pixels
 	// MaxCastDurationSeconds defines the maximum expected lifetime of a fishing cast (bobber present).
 	// If monitoring exceeds this duration, the target is considered lost and the system returns to searching.
 	MaxCastDurationSeconds int `json:"max_cast_duration_seconds"`
 	// CooldownSeconds defines how long to wait after reeling before attempting the next cast.
 	// 0, the default, casts again quickly, after a random 0.4 to 1.2 seconds.
 	CooldownSeconds int `json:"cooldown_seconds"`
-
-	// Theme is the window's look, one of Themes.
-	Theme string `json:"theme"`
 
 	// OverlayX and OverlayY place the overlay's status pill on the game window,
 	// each as a share of the free space: 0 puts it against the left or top edge,
@@ -132,18 +114,9 @@ type Config struct {
 	SupportMuted        bool `json:"support_muted"`
 }
 
-// Themes are the window's looks; the first is the default.
-var Themes = []string{"graphite", "tavern", "arcane", "frost", "fel", "tide"}
-
 // DefaultConfig returns a Config populated with standard defaults.
 func DefaultConfig() *Config {
 	return &Config{
-		MinScale:  0.90,
-		MaxScale:  1.20,
-		ScaleStep: 0.05,
-		Threshold: 0.73,
-		Stride:    6,
-		Refine:    true,
 		// F9 to F12 are free in WoW's default bindings.
 		CastKey:                "F9",
 		InteractKey:            "F10",
@@ -155,14 +128,10 @@ func DefaultConfig() *Config {
 		PlayMaxMinutes:         45,
 		BreakMinMinutes:        5,
 		BreakMaxMinutes:        15,
-		Locator:                "marker",
-		BiteDetector:           "splash_sound",
 		RecordDir:              "datasets",
 		RecordKeys:             false,
-		ROISizePx:              80,
 		MaxCastDurationSeconds: 30,
 		CooldownSeconds:        0,
-		Theme:                  Themes[0],
 		OverlayX:               0.5,
 		OverlayY:               0.01,
 	}
@@ -171,24 +140,6 @@ func DefaultConfig() *Config {
 // Validate clamps/normalizes values to safe ranges.
 func (c *Config) Validate() error {
 	d := DefaultConfig()
-	if c.MinScale <= 0 {
-		c.MinScale = d.MinScale
-	}
-	if c.MaxScale < c.MinScale {
-		c.MaxScale = c.MinScale + d.MaxScale - d.MinScale
-	}
-	if c.ScaleStep <= 0 {
-		c.ScaleStep = d.ScaleStep
-	}
-	if span := c.MaxScale - c.MinScale; span > 0 && c.ScaleStep > span {
-		c.ScaleStep = span / 4
-	}
-	if c.Threshold <= 0 || c.Threshold > 1 {
-		c.Threshold = d.Threshold
-	}
-	if c.Stride <= 0 {
-		c.Stride = d.Stride
-	}
 	if c.CastKey == "" {
 		c.CastKey = d.CastKey
 	}
@@ -222,22 +173,12 @@ func (c *Config) Validate() error {
 		c.BreakMaxMinutes = d.BreakMaxMinutes
 	}
 	c.LogoutKey = strings.TrimSpace(c.LogoutKey)
-	if c.Locator == "" {
-		c.Locator = d.Locator
-	}
-	if c.BiteDetector == "" || slices.Contains([]string{"motion", "splash", "histogram"}, c.BiteDetector) { // removed detectors
-		c.BiteDetector = d.BiteDetector
-	}
 	if c.RecordDir == "" {
 		c.RecordDir = d.RecordDir
 	}
-	c.ROISizePx = min(max(c.ROISizePx, 32), 256) // keep the ROI modest for performance
 	c.MaxCastDurationSeconds = min(max(c.MaxCastDurationSeconds, 5), 180)
 	c.CooldownSeconds = min(max(c.CooldownSeconds, 0), 60)
 	c.Screen = max(c.Screen, 0)
-	if !slices.Contains(Themes, c.Theme) {
-		c.Theme = d.Theme
-	}
 	return nil
 }
 

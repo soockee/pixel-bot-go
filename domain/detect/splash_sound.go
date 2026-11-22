@@ -58,6 +58,10 @@ type SplashSoundDetector struct {
 	noBiteSound bool // the game plays no bite sound
 }
 
+// SplashSoundName names the app's bite detector in detecteval, reel timing
+// calibration and traces.
+const SplashSoundName = "splash_sound"
+
 const (
 	splashSettle    = 3 * time.Second        // landing ripples fade within this time after the lock
 	splashRise      = 12                     // luminance above the baseline that counts as spray

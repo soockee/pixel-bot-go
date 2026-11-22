@@ -44,15 +44,4 @@ While Go Fish fishes, a small pill sits over the top of the game and shows what 
 
 The place stays when you resize the game window. Once you are done, the pill lets every click through to the game again.
 
-## Appearance
-
-- **Theme**: pick one of six looks. Each changes more than colours: the words on the buttons and tabs, the layout, the window and taskbar icon, and what happens when you land a fish.
-  - **Graphite**: the plain dark panel. Quiet.
-  - **Tavern Ledger**: parchment and brass like a quest log. Catches rain gold coins.
-  - **Arcane Grimoire**: violet runes turn around the picture and speed up while it watches for a bite.
-  - **Frostwater**: light and calm with falling snow. While it watches, everything but the water fades back.
-  - **Felfire Forge**: black and green, loud and sharp, with the controls on the left.
-  - **Tidecaller**: bright beach colours, waves and bubbles, with the tabs at the bottom.
-- **Theme sounds**: turn the catch sound off or on.
-
 All settings with their defaults are listed under [Settings](../reference/settings.md).

@@ -35,12 +35,6 @@ export interface Rect {
  * Settings are the config values a person can edit in the window.
  */
 export interface Settings {
-    "minScale": number;
-    "maxScale": number;
-    "scaleStep": number;
-    "threshold": number;
-    "stride": number;
-    "refine": boolean;
     "castKey": string;
     "reelMethod": string;
     "interactKey": string;
@@ -55,23 +49,10 @@ export interface Settings {
     "breakMinMinutes": number;
     "breakMaxMinutes": number;
     "logoutKey": string;
-    "locator": string;
-    "biteDetector": string;
     "recordDir": string;
     "recordKeys": boolean;
-    "roiSizePx": number;
     "cooldownSeconds": number;
     "maxCastDurationSeconds": number;
-}
-
-/**
- * SettingsForm is the form content: the values and the choices for the
- * technique fields.
- */
-export interface SettingsForm {
-    "values": Settings;
-    "locators": string[] | null;
-    "biteDetectors": string[] | null;
 }
 
 /**
@@ -118,6 +99,11 @@ export interface State {
      */
     "recordingName": string;
     "status": string;
+
+    /**
+     * why the last run halted on its own; "" when the person stopped it or a run is going
+     */
+    "stopped": string;
     "window": string;
     "sessionSeconds": number;
 
@@ -193,11 +179,6 @@ export interface State {
      */
     "sceneBox": Rect;
     "dryRun": boolean;
-
-    /**
-     * one of config.Themes
-     */
-    "theme": string;
 
     /**
      * show the developer views

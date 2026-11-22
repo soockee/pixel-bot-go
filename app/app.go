@@ -97,7 +97,6 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		MoveOverlay:   a.setOverlayMove,
 		FindBoard:     findBoard,
 		TestBoard:     testBoard,
-		SetTheme:      a.setTheme,
 	}, c.Recordings, cfg, config.FilePath, logger)
 
 	assets := http.NewServeMux()
@@ -135,7 +134,7 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 			} else if cfg.Screen > 0 {
 				logger.Warn("configured screen not found; using default placement", "screen", cfg.Screen)
 			}
-			a.setTheme(cfg.Theme)
+			a.setIcon()
 			a.main.Show()
 		})
 	})
@@ -163,7 +162,6 @@ func (a *app) Run() error {
 	}
 	c.View.SetInfo(cfg.DryRun, cfg.Debug)
 	c.View.SetInput(cfg)
-	c.View.SetTheme(cfg.Theme)
 	c.View.SetOverlay(cfg.OverlayX, cfg.OverlayY, false)
 	c.View.SetAddonVersion(addon.Version())
 	a.checkAddon()
@@ -267,7 +265,7 @@ func (a *app) toggleCapture() {
 	c := a.container
 	if a.schedule != nil {
 		c.FSM.TakeRepositionLogout()
-		a.stopSchedule("Schedule stopped")
+		a.stopSchedule("Stopped")
 		return
 	}
 	if !c.Capture.Enabled() {

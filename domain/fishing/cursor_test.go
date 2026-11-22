@@ -126,13 +126,13 @@ func TestPairedCursorReplay(t *testing.T) {
 				var fsm *FishingFSM
 				var presses, cues []time.Time
 				var moves int
-				actions.ClickRight = func() bool {
+				actions.ClickRight = func() error {
 					x, y, ok := fsm.TargetCoordinates()
 					if !ok || position != image.Pt(x, y) {
 						t.Errorf("reel attempted at %v, target is (%d,%d)", position, x, y)
 					}
 					presses = append(presses, time.Now())
-					return true
+					return nil
 				}
 				actions.MoveCursor = func(x, y int) {
 					position = image.Pt(x, y)

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/soocke/pixel-bot-go/assets"
-	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/detect"
 )
 
@@ -33,14 +32,14 @@ func TestPhaseAt(t *testing.T) {
 	}
 }
 
-// The real detector must find the bobber in a bobber frame and not in an empty one.
+// The app's locator must find the marked bobber in a bobber frame and not in an empty one.
 func TestDetectorFindsRenderedBobber(t *testing.T) {
 	tmpl, err := assets.FishingTargetImage()
 	if err != nil {
 		t.Fatal(err)
 	}
 	r := NewRenderer(DefaultScenario(), tmpl)
-	locator := detect.NewNCCLocator(tmpl, *config.DefaultConfig())
+	locator := detect.NewMarkerLocator()
 	m, found := locator.Locate(r.Render(PhaseBobber))
 	if !found {
 		t.Fatalf("bobber not found: %+v", m)

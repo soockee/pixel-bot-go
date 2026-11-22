@@ -2,67 +2,47 @@ package desktop
 
 import (
 	"errors"
-	"slices"
 	"strings"
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/action"
-	"github.com/soocke/pixel-bot-go/domain/detect"
 	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/internal/esp32"
 )
 
 // Settings are the config values a person can edit in the window.
 type Settings struct {
-	MinScale               float64 `json:"minScale"`
-	MaxScale               float64 `json:"maxScale"`
-	ScaleStep              float64 `json:"scaleStep"`
-	Threshold              float64 `json:"threshold"`
-	Stride                 int     `json:"stride"`
-	Refine                 bool    `json:"refine"`
-	CastKey                string  `json:"castKey"`
-	ReelMethod             string  `json:"reelMethod"`
-	InteractKey            string  `json:"interactKey"`
-	ESP32Port              string  `json:"esp32Port"`
-	IdleMoves              bool    `json:"idleMoves"`
-	Reposition             bool    `json:"reposition"`
-	MaxFailedCasts         int     `json:"maxFailedCasts"`
-	MaxSessionMinutes      int     `json:"maxSessionMinutes"`
-	Schedule               bool    `json:"schedule"`
-	PlayMinMinutes         int     `json:"playMinMinutes"`
-	PlayMaxMinutes         int     `json:"playMaxMinutes"`
-	BreakMinMinutes        int     `json:"breakMinMinutes"`
-	BreakMaxMinutes        int     `json:"breakMaxMinutes"`
-	LogoutKey              string  `json:"logoutKey"`
-	Locator                string  `json:"locator"`
-	BiteDetector           string  `json:"biteDetector"`
-	RecordDir              string  `json:"recordDir"`
-	RecordKeys             bool    `json:"recordKeys"`
-	ROISizePx              int     `json:"roiSizePx"`
-	CooldownSeconds        int     `json:"cooldownSeconds"`
-	MaxCastDurationSeconds int     `json:"maxCastDurationSeconds"`
-}
-
-// SettingsForm is the form content: the values and the choices for the
-// technique fields.
-type SettingsForm struct {
-	Values        Settings `json:"values"`
-	Locators      []string `json:"locators"`
-	BiteDetectors []string `json:"biteDetectors"`
+	CastKey                string `json:"castKey"`
+	ReelMethod             string `json:"reelMethod"`
+	InteractKey            string `json:"interactKey"`
+	ESP32Port              string `json:"esp32Port"`
+	IdleMoves              bool   `json:"idleMoves"`
+	Reposition             bool   `json:"reposition"`
+	MaxFailedCasts         int    `json:"maxFailedCasts"`
+	MaxSessionMinutes      int    `json:"maxSessionMinutes"`
+	Schedule               bool   `json:"schedule"`
+	PlayMinMinutes         int    `json:"playMinMinutes"`
+	PlayMaxMinutes         int    `json:"playMaxMinutes"`
+	BreakMinMinutes        int    `json:"breakMinMinutes"`
+	BreakMaxMinutes        int    `json:"breakMaxMinutes"`
+	LogoutKey              string `json:"logoutKey"`
+	RecordDir              string `json:"recordDir"`
+	RecordKeys             bool   `json:"recordKeys"`
+	CooldownSeconds        int    `json:"cooldownSeconds"`
+	MaxCastDurationSeconds int    `json:"maxCastDurationSeconds"`
 }
 
 func settingsOf(c *config.Config) Settings {
 	return Settings{
-		MinScale: c.MinScale, MaxScale: c.MaxScale, ScaleStep: c.ScaleStep, Threshold: c.Threshold,
-		Stride: c.Stride, Refine: c.Refine, CastKey: c.CastKey,
+		CastKey:    c.CastKey,
 		ReelMethod: c.ReelMethod, InteractKey: c.InteractKey, ESP32Port: c.ESP32Port,
 		IdleMoves: c.IdleMoves, Reposition: c.Reposition,
 		MaxFailedCasts: c.MaxFailedCasts, MaxSessionMinutes: c.MaxSessionMinutes,
 		Schedule: c.Schedule, PlayMinMinutes: c.PlayMinMinutes, PlayMaxMinutes: c.PlayMaxMinutes,
 		BreakMinMinutes: c.BreakMinMinutes, BreakMaxMinutes: c.BreakMaxMinutes,
 		LogoutKey: c.LogoutKey,
-		Locator:   c.Locator, BiteDetector: c.BiteDetector, RecordDir: c.RecordDir, RecordKeys: c.RecordKeys,
-		ROISizePx: c.ROISizePx, CooldownSeconds: c.CooldownSeconds, MaxCastDurationSeconds: c.MaxCastDurationSeconds,
+		RecordDir: c.RecordDir, RecordKeys: c.RecordKeys,
+		CooldownSeconds: c.CooldownSeconds, MaxCastDurationSeconds: c.MaxCastDurationSeconds,
 	}
 }
 
@@ -86,9 +66,6 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 		if sameKey(s.InteractKey, s.CastKey) {
 			return c, errors.New("the Interact key must differ from the Cast key")
 		}
-		if s.Locator != "marker" {
-			return c, errors.New("Interact key requires the marker locator")
-		}
 	} else if strings.TrimSpace(s.InteractKey) != "" {
 		check(interactOK, "Interact key")
 	}
@@ -99,8 +76,6 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	if s.ReelMethod == config.ReelInteractKey && !esp32.SupportsKey(interactVK) {
 		return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Interact")
 	}
-	check(slices.Contains(detect.LocatorNames(), s.Locator), "Locator")
-	check(slices.Contains(detect.BiteDetectorNames(), s.BiteDetector), "Bite detector")
 	check(strings.TrimSpace(s.RecordDir) != "", "Recording folder")
 	if len(invalid) > 0 {
 		return c, errors.New("not saved, invalid: " + strings.Join(invalid, ", "))
@@ -117,8 +92,7 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Logout")
 		}
 	}
-	c.MinScale, c.MaxScale, c.ScaleStep, c.Threshold = s.MinScale, s.MaxScale, s.ScaleStep, s.Threshold
-	c.Stride, c.Refine, c.CastKey = s.Stride, s.Refine, s.CastKey
+	c.CastKey = s.CastKey
 	c.ReelMethod, c.InteractKey, c.ESP32Port = s.ReelMethod, s.InteractKey, port
 	c.MaxFailedCasts, c.MaxSessionMinutes = s.MaxFailedCasts, s.MaxSessionMinutes
 	c.IdleMoves, c.Reposition = s.IdleMoves, s.Reposition
@@ -126,9 +100,8 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	c.PlayMinMinutes, c.PlayMaxMinutes = s.PlayMinMinutes, s.PlayMaxMinutes
 	c.BreakMinMinutes, c.BreakMaxMinutes = s.BreakMinMinutes, s.BreakMaxMinutes
 	c.LogoutKey = s.LogoutKey
-	c.Locator, c.BiteDetector = s.Locator, s.BiteDetector
 	c.RecordDir, c.RecordKeys = strings.TrimSpace(s.RecordDir), s.RecordKeys
-	c.ROISizePx, c.CooldownSeconds, c.MaxCastDurationSeconds = s.ROISizePx, s.CooldownSeconds, s.MaxCastDurationSeconds
+	c.CooldownSeconds, c.MaxCastDurationSeconds = s.CooldownSeconds, s.MaxCastDurationSeconds
 	if err := c.Validate(); err != nil {
 		return c, err
 	}

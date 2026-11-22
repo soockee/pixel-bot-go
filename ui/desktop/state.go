@@ -28,6 +28,7 @@ type State struct {
 	Recording      bool                  `json:"recording"`
 	RecordingName  string                `json:"recordingName"` // directory name of the active recording, or ""
 	Status         string                `json:"status"`
+	Stopped        string                `json:"stopped"` // why the last run halted on its own; "" when the person stopped it or a run is going
 	Window         string                `json:"window"`
 	SessionSeconds int                   `json:"sessionSeconds"`
 	SessionLimit   int                   `json:"sessionLimit"` // minutes; the run stops at the first cast after it
@@ -47,7 +48,6 @@ type State struct {
 	Scene          int                   `json:"scene"`       // version of /frames/scene, the live area around the ROI while watching; 0 means none
 	SceneBox       Rect                  `json:"sceneBox"`    // where the scene sits on the capture
 	DryRun         bool                  `json:"dryRun"`
-	Theme          string                `json:"theme"`          // one of config.Themes
 	Debug          bool                  `json:"debug"`          // show the developer views
 	Update         string                `json:"update"`         // newer release tag on offer, or ""
 	Updating       bool                  `json:"updating"`       // the update downloads or installs

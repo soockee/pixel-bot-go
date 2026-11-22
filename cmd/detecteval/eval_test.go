@@ -147,7 +147,7 @@ func TestPrintedReportHasOneColumnPerTechnique(t *testing.T) {
 	if err := run("", "all", "all", false, []string{writeFakeDataset(t)}, &out); err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"marker", "ncc", "splash_sound", "Bobber found per cast", ">= 98%", "100.0%", "Search time p95"} {
+	for _, want := range []string{"marker", "splash_sound", "Bobber found per cast", ">= 98%", "100.0%", "Search time p95"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output lacks %q:\n%s", want, out.String())
 		}
@@ -202,11 +202,11 @@ func TestBitesAreWatchedInTheMarkerBox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	watches, err := watchAreas(d, 80)
+	watches, err := watchAreas(d)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := watches[0].Area; got.Dx() == 80 || !got.Overlaps(d.Labels.Casts[0].Bobber.Image()) {
+	if got := watches[0].Area; got.Dx() == fallbackWatchPx || !got.Overlaps(d.Labels.Casts[0].Bobber.Image()) {
 		t.Errorf("area = %v, want the marker's box", got)
 	}
 }
@@ -295,7 +295,7 @@ func TestExportWritesCropsAndAnIndex(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "crops")
 	var status bytes.Buffer
 
-	if err := export(out, []string{src}, 80, &status); err != nil {
+	if err := export(out, []string{src}, &status); err != nil {
 		t.Fatal(err)
 	}
 
@@ -337,7 +337,7 @@ func TestExportWritesCropsAndAnIndex(t *testing.T) {
 }
 
 func TestExportRefusesAnExistingDirectory(t *testing.T) {
-	if err := export(t.TempDir(), []string{writeFakeDataset(t)}, 80, &bytes.Buffer{}); err == nil {
+	if err := export(t.TempDir(), []string{writeFakeDataset(t)}, &bytes.Buffer{}); err == nil {
 		t.Error("want an error")
 	}
 }

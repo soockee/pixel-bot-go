@@ -49,10 +49,7 @@ func main() {
 	case *labelBot != "":
 		err = writeBotLabels(*labelBot, *box, os.Stdout)
 	case *exportDir != "":
-		var cfg *config.Config
-		if cfg, err = loadConfig(*configPath); err == nil {
-			err = export(*exportDir, flag.Args(), cfg.ROISizePx, os.Stdout)
-		}
+		err = export(*exportDir, flag.Args(), os.Stdout)
 	default:
 		err = run(*configPath, *locatorNames, *biteNames, *asJSON, flag.Args(), os.Stdout)
 	}
@@ -141,7 +138,7 @@ func run(configPath, locatorArg, biteArg string, asJSON bool, dirs []string, out
 			report.Locators[name] = counts
 			searches[name] = append(searches[name], times...)
 		}
-		watches, err := watchAreas(d, cfg.ROISizePx)
+		watches, err := watchAreas(d)
 		if err != nil {
 			return fmt.Errorf("%s: %w", dir, err)
 		}

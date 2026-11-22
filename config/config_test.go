@@ -24,8 +24,6 @@ func TestValidateClamps(t *testing.T) {
 		got  func(*Config) any
 		want any
 	}{
-		{"roi floor", func(c *Config) { c.ROISizePx = 1 }, func(c *Config) any { return c.ROISizePx }, 32},
-		{"roi ceiling", func(c *Config) { c.ROISizePx = 1000 }, func(c *Config) any { return c.ROISizePx }, 256},
 		{"max cast floor", func(c *Config) { c.MaxCastDurationSeconds = 1 }, func(c *Config) any { return c.MaxCastDurationSeconds }, 5},
 		{"max cast ceiling", func(c *Config) { c.MaxCastDurationSeconds = 999 }, func(c *Config) any { return c.MaxCastDurationSeconds }, 180},
 		{"cooldown floor", func(c *Config) { c.CooldownSeconds = -1 }, func(c *Config) any { return c.CooldownSeconds }, 0},
@@ -33,9 +31,6 @@ func TestValidateClamps(t *testing.T) {
 		{"negative screen", func(c *Config) { c.Screen = -1 }, func(c *Config) any { return c.Screen }, 0},
 		{"empty cast key", func(c *Config) { c.CastKey = "" }, func(c *Config) any { return c.CastKey }, "F9"},
 		{"failed casts unset", func(c *Config) { c.MaxFailedCasts = 0 }, func(c *Config) any { return c.MaxFailedCasts }, 5},
-		{"empty locator", func(c *Config) { c.Locator = "" }, func(c *Config) any { return c.Locator }, "marker"},
-		{"empty bite detector", func(c *Config) { c.BiteDetector = "" }, func(c *Config) any { return c.BiteDetector }, "splash_sound"},
-		{"removed bite detector", func(c *Config) { c.BiteDetector = "motion" }, func(c *Config) any { return c.BiteDetector }, "splash_sound"},
 		{"empty record folder", func(c *Config) { c.RecordDir = "" }, func(c *Config) any { return c.RecordDir }, "datasets"},
 		{"session limit unset", func(c *Config) { c.MaxSessionMinutes = 0 }, func(c *Config) any { return c.MaxSessionMinutes }, 60},
 	}
@@ -50,31 +45,6 @@ func TestValidateClamps(t *testing.T) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})
-	}
-}
-
-func TestValidateFallsBackToTheDefaults(t *testing.T) {
-	c := &Config{Threshold: 7, Theme: "dark"}
-	if err := c.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	d := DefaultConfig()
-	if c.MinScale != d.MinScale || c.ScaleStep != d.ScaleStep || c.Threshold != d.Threshold || c.Stride != d.Stride || c.Theme != d.Theme {
-		t.Errorf("got %+v, want the defaults", c)
-	}
-	if c.MaxScale < c.MinScale {
-		t.Errorf("MaxScale = %v is below MinScale", c.MaxScale)
-	}
-}
-
-func TestValidateKeepsASingleScale(t *testing.T) {
-	c := DefaultConfig()
-	c.MinScale, c.MaxScale, c.ScaleStep = 1, 1, 0.05
-	if err := c.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	if c.ScaleStep <= 0 {
-		t.Errorf("ScaleStep = %v, a zero step disables the search", c.ScaleStep)
 	}
 }
 
@@ -104,18 +74,18 @@ func TestLoadInvalidJSONReturnsError(t *testing.T) {
 
 func TestLoadKeepsDefaultsAndClampsValues(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "partial.json")
-	if err := os.WriteFile(path, []byte(`{"roi_size_px": 1000, "background": true}`), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(`{"cooldown_seconds": 1000, "background": true}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.ROISizePx != 256 {
-		t.Errorf("ROISizePx = %d, want the clamped 256", got.ROISizePx)
+	if got.CooldownSeconds != 60 {
+		t.Errorf("CooldownSeconds = %d, want the clamped 60", got.CooldownSeconds)
 	}
-	if got.Threshold != DefaultConfig().Threshold {
-		t.Errorf("Threshold = %v, want the default", got.Threshold)
+	if got.CastKey != DefaultConfig().CastKey {
+		t.Errorf("CastKey = %q, want the default", got.CastKey)
 	}
 	if err := got.Save(path); err != nil {
 		t.Fatal(err)

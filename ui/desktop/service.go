@@ -6,7 +6,6 @@ import (
 	"slices"
 
 	"github.com/soocke/pixel-bot-go/config"
-	"github.com/soocke/pixel-bot-go/domain/detect"
 	"github.com/soocke/pixel-bot-go/internal/esp32"
 	"github.com/soocke/pixel-bot-go/internal/recorder"
 )
@@ -34,8 +33,6 @@ type Commands struct {
 	OpenURL      func(url string)
 	CheckAddon   func()
 	InstallAddon func() error
-	// SetTheme shows the theme's icon on the window and the taskbar.
-	SetTheme func(theme string)
 	// MoveOverlay starts or ends placing the overlay; ending saves its place.
 	MoveOverlay func(on bool) error
 	// FindBoard asks for the Go Fish firmware on port, or on every USB serial
@@ -146,10 +143,10 @@ func (s *Service) ToggleCapture() { _ = s.do(s.cmds.ToggleCapture) }
 // ToggleRecord starts or stops a recording.
 func (s *Service) ToggleRecord() { _ = s.do(s.cmds.ToggleRecord) }
 
-// Settings returns the settings form.
-func (s *Service) Settings() (form SettingsForm) {
-	_ = s.do(func() { form = newSettingsForm(s.cfg) })
-	return form
+// Settings returns the values for the settings form.
+func (s *Service) Settings() (values Settings) {
+	_ = s.do(func() { values = settingsOf(s.cfg) })
+	return values
 }
 
 // SaveSettings validates and saves settings, and returns the values as saved,
@@ -182,21 +179,6 @@ func (s *Service) SaveSettings(values Settings) (saved Settings, err error) {
 	return saved, err
 }
 
-// SetTheme saves the window's look, one of config.Themes.
-func (s *Service) SetTheme(theme string) {
-	if !slices.Contains(config.Themes, theme) {
-		return
-	}
-	_ = s.do(func() {
-		s.cfg.Theme = theme
-		s.view.SetTheme(theme)
-		s.cmds.SetTheme(theme)
-		if err := s.cfg.Save(s.cfgPath); err != nil {
-			s.logger.Error("persist theme failed", "error", err)
-		}
-	})
-}
-
 // Recordings lists the saved recordings, newest first.
 func (s *Service) Recordings() ([]Recording, error) { return s.recordings.List() }
 
@@ -217,6 +199,12 @@ func (s *Service) ReleaseNotes() { _ = s.do(s.cmds.ReleaseNotes) }
 // ReportProblem opens a new GitHub issue on the problem form in the browser,
 // with the version, Windows and app details filled in.
 func (s *Service) ReportProblem() { _ = s.do(s.cmds.ReportProblem) }
+
+// StopHelpURL is the player guide's list of reasons a run stops by itself.
+const StopHelpURL = "https://soockee.github.io/pixel-bot-go/how-to/fix-problems/#it-stopped-by-itself"
+
+// OpenStopHelp opens StopHelpURL in the browser.
+func (s *Service) OpenStopHelp() { _ = s.do(func() { s.cmds.OpenURL(StopHelpURL) }) }
 
 // SaveReport saves a report file, for a bug report where the log was asked
 // for, shows it in File Explorer and returns its path. Nothing is sent.
@@ -309,10 +297,6 @@ func (s *Service) MoveOverlay(on bool) (err error) {
 
 // Exit closes the app.
 func (s *Service) Exit() { _ = s.do(s.cmds.Exit) }
-
-func newSettingsForm(c *config.Config) SettingsForm {
-	return SettingsForm{Values: settingsOf(c), Locators: detect.LocatorNames(), BiteDetectors: detect.BiteDetectorNames()}
-}
 
 // defaultWindow is selected until the person picks another.
 const defaultWindow = "World of Warcraft"

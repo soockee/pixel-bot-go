@@ -40,20 +40,20 @@ func TestPickWindow(t *testing.T) {
 func TestSettingsApply(t *testing.T) {
 	base := *config.DefaultConfig()
 	good := settingsOf(&base)
-	good.CastKey, good.ROISizePx = "r", 9999
+	good.CastKey, good.CooldownSeconds = "r", 9999
 
 	got, err := good.apply(base)
 	if err != nil {
 		t.Fatalf("valid settings: %v", err)
 	}
-	if got.CastKey != "r" || got.ROISizePx != 256 {
-		t.Errorf("cast key %q, roi %d; want r and the clamped 256", got.CastKey, got.ROISizePx)
+	if got.CastKey != "r" || got.CooldownSeconds != 60 {
+		t.Errorf("cast key %q, cooldown %d; want r and the clamped 60", got.CastKey, got.CooldownSeconds)
 	}
 
 	bad := good
-	bad.CastKey, bad.Locator, bad.RecordDir = "Ctrl", "nope", " "
+	bad.CastKey, bad.RecordDir = "Ctrl", " "
 	if _, err := bad.apply(base); err == nil ||
-		!strings.Contains(err.Error(), "Cast key, Locator, Recording folder") {
+		!strings.Contains(err.Error(), "Cast key, Recording folder") {
 		t.Errorf("invalid settings: err = %v", err)
 	}
 }
@@ -126,30 +126,6 @@ func TestESP32PortSettings(t *testing.T) {
 	values.ReelMethod, values.InteractKey = config.ReelInteractKey, "Mouse5"
 	if _, err := values.apply(*base); err != nil {
 		t.Errorf("Mouse 5 for Interact with the ESP32: %v", err)
-	}
-}
-
-func TestSetThemeSavesKnownThemesOnly(t *testing.T) {
-	cfg := config.DefaultConfig()
-	view := NewView(NewFrames(), func(State) {})
-	loop := NewLoop(func() {})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go loop.Run(ctx, time.Hour)
-	var icons []string
-	path := filepath.Join(t.TempDir(), "config.json")
-	s := NewService(loop, view, Commands{SetTheme: func(theme string) { icons = append(icons, theme) }}, nil, cfg,
-		path, slog.New(slog.DiscardHandler))
-
-	s.SetTheme("fel")
-	s.SetTheme("no-such-theme")
-	saved, err := config.Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.Theme != "fel" || s.State().Theme != "fel" || saved.Theme != "fel" || len(icons) != 1 {
-		t.Fatalf("theme %q, shown %q, saved %q, icons %v; want fel everywhere and one icon change",
-			cfg.Theme, s.State().Theme, saved.Theme, icons)
 	}
 }
 

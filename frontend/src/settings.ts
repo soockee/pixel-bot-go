@@ -1,20 +1,18 @@
 // Settings: every change saves at once, and Go validates and clamps it. Keys
 // are set by pressing them, numbers with sliders, techniques with dropdowns.
-import { Service, type Settings, type SettingsForm, type State } from "./api";
+import { Service, type Settings, type State } from "./api";
 import { $, h, keyLabel } from "./dom";
-import { playSound, sounds, themes } from "./themes";
 
 type Key = keyof Settings;
 type Value = Settings[Key];
 
 /** when hides a field the other values make pointless. */
 type Field = { key: Key; label: string; hint: string; when?: (v: Settings) => boolean } & (
-  | { kind: "key" | "switch" | "text" | "port" | "locator" | "biteDetector" | "reelMethod" }
+  | { kind: "key" | "switch" | "text" | "port" | "reelMethod" }
   | { kind: "slider"; min: number; max: number; step: number; unit?: string; zero?: string }
 );
 
-/** User groups come first; dev groups (detection tuning) show only in debug
- * mode. */
+/** User groups come first; dev groups show only in debug mode. */
 const breaks = (v: Settings) => v.schedule;
 const logout = (v: Settings) => v.schedule || v.reposition;
 
@@ -35,7 +33,7 @@ const groups: { title: string; show?: "debug"; fields: Field[] }[] = [
   {
     title: "Input",
     fields: [
-      { key: "esp32Port", label: "ESP32 board", hint: "Required for live input. Connect the paired Go Fish ESP32 Probe over USB, or choose its COM port.", kind: "port" },
+      { key: "esp32Port", label: "ESP32 board", hint: "Sends the keys and clicks. Auto finds it on USB, or choose its COM port and test it.", kind: "port" },
     ],
   },
   {
@@ -71,27 +69,6 @@ const groups: { title: string; show?: "debug"; fields: Field[] }[] = [
     fields: [
       { key: "recordDir", label: "Recording folder", hint: "Each recording gets a new folder in here", kind: "text" },
       { key: "recordKeys", label: "Record keys", hint: "Record keys as well as the mouse, including what you type in chat", kind: "switch" },
-    ],
-  },
-  {
-    title: "Detection",
-    show: "debug",
-    fields: [
-      { key: "locator", label: "Locator", hint: "Finds the bobber in the game window", kind: "locator" },
-      { key: "biteDetector", label: "Bite detector", hint: "Decides when a fish bites", kind: "biteDetector" },
-      { key: "roiSizePx", label: "Watch area", hint: "Side of the square watched for a bite (ncc locator)", kind: "slider", min: 32, max: 256, step: 8, unit: "px" },
-    ],
-  },
-  {
-    title: "Template search",
-    show: "debug",
-    fields: [
-      { key: "minScale", label: "Min scale", hint: "Smallest template size tried", kind: "slider", min: 0.5, max: 2, step: 0.05 },
-      { key: "maxScale", label: "Max scale", hint: "Largest template size tried", kind: "slider", min: 0.5, max: 2, step: 0.05 },
-      { key: "scaleStep", label: "Scale step", hint: "Size change between tries", kind: "slider", min: 0.01, max: 0.2, step: 0.01 },
-      { key: "threshold", label: "Threshold", hint: "Match score needed", kind: "slider", min: 0.5, max: 0.99, step: 0.01 },
-      { key: "stride", label: "Stride", hint: "Pixels between search positions", kind: "slider", min: 1, max: 16, step: 1, unit: "px" },
-      { key: "refine", label: "Refine", hint: "Search around the best match at every pixel", kind: "switch" },
     ],
   },
 ];
@@ -131,7 +108,7 @@ export function setupSettings() {
     if (option) option.disabled = !v.interactKey && v.reelMethod !== "interact_key";
   };
   const gated: HTMLElement[] = [];
-  const message = h("p", "Changes save as you make them", "settings-status");
+  const message = h("p", "", "settings-status");
   let running = false;
   let shown = false;
   let saving = Promise.resolve();
@@ -378,7 +355,7 @@ export function setupSettings() {
     };
   }
 
-  function control(f: Field, data: SettingsForm): Control {
+  function control(f: Field): Control {
     switch (f.kind) {
       case "key": return keyControl(f);
       case "slider": return sliderControl(f);
@@ -386,8 +363,6 @@ export function setupSettings() {
       case "text": return textControl();
       case "port": return portControl();
       case "reelMethod": return selectControl(["right_click", "interact_key"], { right_click: "Right click", interact_key: "Interact key" });
-      case "locator": return selectControl(data.locators ?? []);
-      case "biteDetector": return selectControl(data.biteDetectors ?? []);
     }
   }
 
@@ -403,53 +378,23 @@ export function setupSettings() {
     return r;
   }
 
-  // Each theme is a card with its icon; picking one plays its catch sound.
-  const picker = h("div", "", "theme-picker");
-  picker.setAttribute("role", "radiogroup");
-  picker.setAttribute("aria-label", "Theme");
-  const choices = themes.map((t) => {
-    const input = document.createElement("input");
-    input.type = "radio";
-    input.name = "theme";
-    input.value = t.id;
-    input.addEventListener("change", () => {
-      void Service.SetTheme(t.id);
-      playSound(t);
-    });
-    const icon = document.createElement("img");
-    icon.src = `/themes/${t.id}.svg`;
-    icon.alt = "";
-    const card = h("label", "", "theme-card");
-    card.dataset.preview = t.id;
-    const text = h("span", "", "theme-text");
-    text.append(h("strong", t.name), h("span", t.blurb, "hint"));
-    card.append(input, icon, text);
-    picker.append(card);
-    return input;
-  });
-  const sound = document.createElement("input");
-  sound.type = "checkbox";
-  sound.className = "switch";
-  sound.checked = sounds.on();
-  sound.addEventListener("change", () => sounds.set(sound.checked));
-
   function lock() {
     for (const c of controls.values()) c.enable(!running);
     if (running) setMessage("Stop the run to change settings");
-    else if (message.textContent === "Stop the run to change settings") setMessage("Changes save as you make them");
+    else if (message.textContent === "Stop the run to change settings") setMessage("");
   }
 
   async function build() {
-    const data = await Service.Settings();
-    savedValues = data.values;
+    const values = await Service.Settings();
+    savedValues = values;
     const sections = groups.map((g) => {
       const fs = h("fieldset");
       fs.append(h("legend", g.title));
       if (g.show) gated.push(fs);
       fs.hidden = Boolean(g.show) && !shown;
       for (const f of g.fields) {
-        const c = control(f, data);
-        c.set(data.values[f.key]);
+        const c = control(f);
+        c.set(values[f.key]);
         controls.set(f.key, c);
         const r = row(`setting-${f.key}`, f.label, f.hint, c.el, c.input);
         if (c.after) r.append(c.after);
@@ -460,11 +405,8 @@ export function setupSettings() {
       }
       return fs;
     });
-    refresh(data.values);
-    const look = h("fieldset");
-    look.append(h("legend", "Theme"), picker, row("setting-sounds", "Theme sounds", "Each theme greets a catch with its own sound", sound, sound));
-    const user = groups.findIndex((g) => g.show); // the theme ends the user groups
-    form.replaceChildren(message, ...sections.slice(0, user), look, ...sections.slice(user));
+    refresh(values);
+    form.replaceChildren(message, ...sections);
     placeSetup();
     lock();
   }
@@ -473,7 +415,6 @@ export function setupSettings() {
   const built = build();
 
   function render(s: State) {
-    for (const c of choices) c.checked = c.value === s.theme;
     if (s.debug !== shown) {
       shown = s.debug;
       for (const fs of gated) fs.hidden = !shown;

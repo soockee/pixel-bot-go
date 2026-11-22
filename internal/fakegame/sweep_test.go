@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/soocke/pixel-bot-go/assets"
-	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/detect"
 )
 
@@ -24,14 +23,14 @@ func desktopFrame(scene *image.RGBA, ox, oy int) *image.RGBA {
 	return out
 }
 
-// With the default config the matcher must find the bobber at every pixel
-// alignment. A coarse stride once skipped the true position and missed it.
+// The marker locator must find the bobber at every pixel alignment, also with
+// the scene inside a larger frame.
 func TestDetectorFindsBobberAtEveryAlignment(t *testing.T) {
 	tmpl, err := assets.FishingTargetImage()
 	if err != nil {
 		t.Fatal(err)
 	}
-	locator := detect.NewNCCLocator(tmpl, *config.DefaultConfig())
+	locator := detect.NewMarkerLocator()
 	misses := 0
 	for dy := 0; dy < 6; dy++ {
 		for dx := 0; dx < 6; dx++ {
