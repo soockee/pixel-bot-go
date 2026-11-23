@@ -45,6 +45,7 @@ type AppContainer struct {
 	trace      *liveTrace
 	gameWindow atomic.Pointer[capture.WindowIdentity]
 	board      boardOwner
+	input      fishing.Input // the run's, which a scheduled key uses too
 }
 
 // TraceOptions configures desktop tracing and the optional reel timing profile.
@@ -242,6 +243,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			return timing
 		}
 	}
+	c.input = callbacks.Input
 	c.FSM = fishing.NewFSM(logger, cfg, callbacks)
 
 	detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
