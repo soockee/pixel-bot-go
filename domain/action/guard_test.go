@@ -7,27 +7,27 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/soocke/pixel-bot-go/domain/fishing"
 )
 
 type guardFixture struct {
 	Guard
-	inFront   bool
-	area      *image.Rectangle
-	cursor    image.Point
-	sent      []string
-	takeovers int
+	inFront bool
+	area    *image.Rectangle
+	cursor  image.Point
+	sent    []string
 }
 
 func newGuardFixture() *guardFixture {
 	area := image.Rect(100, 100, 200, 200)
 	f := &guardFixture{inFront: true, area: &area}
 	f.Guard = Guard{
-		Logger:     slog.New(slog.DiscardHandler),
-		InFront:    func() bool { return f.inFront },
-		Area:       func() *image.Rectangle { return f.area },
-		CursorPos:  func() (int, int, bool) { return f.cursor.X, f.cursor.Y, true },
-		OnTakeover: func() { f.takeovers++ },
-		Press:      func(byte, time.Duration) error { f.sent = append(f.sent, "press"); return nil },
+		Logger:    slog.New(slog.DiscardHandler),
+		InFront:   func() bool { return f.inFront },
+		Area:      func() *image.Rectangle { return f.area },
+		CursorPos: func() (int, int, bool) { return f.cursor.X, f.cursor.Y, true },
+		Press:     func(byte, time.Duration) error { f.sent = append(f.sent, "press"); return nil },
 		Move: func(x, y int) error {
 			f.cursor = image.Pt(x, y)
 			f.sent = append(f.sent, "move")
@@ -48,9 +48,6 @@ func TestGuardAllowsNormalCycle(t *testing.T) {
 	f.ClickRight()
 	if want := []string{"press", "move", "move", "click"}; !slices.Equal(f.sent, want) {
 		t.Errorf("sent = %v, want %v", f.sent, want)
-	}
-	if f.takeovers != 0 {
-		t.Errorf("takeovers = %d, want 0", f.takeovers)
 	}
 }
 
@@ -81,22 +78,22 @@ func TestGuardKeepsMovesInsideTheArea(t *testing.T) {
 func TestGuardDetectsTakeoverBeforeFirstWaypoint(t *testing.T) {
 	f := newGuardFixture()
 	f.cursor = image.Pt(150, 150)
-	if _, _, ok := f.BeginCursor(); !ok {
+	if _, _, err := f.BeginCursor(); err != nil {
 		t.Fatal("expected a plan to start inside the window")
 	}
 	f.cursor.X += 20 // a hand on the mouse
-	if f.MoveTo(image.Pt(160, 150)) == nil || f.takeovers != 1 || len(f.sent) != 0 {
-		t.Fatalf("takeover did not stop the waypoint: sent=%v takeovers=%d", f.sent, f.takeovers)
+	if err := f.MoveTo(image.Pt(160, 150)); !errors.Is(err, fishing.ErrMouseMoved) || len(f.sent) != 0 {
+		t.Fatalf("takeover did not stop the waypoint: sent=%v err=%v", f.sent, err)
 	}
 }
 
 func TestGuardHandsOverWhenTheUserMovesTheCursor(t *testing.T) {
 	tests := []struct {
 		name string
-		act  func(*guardFixture)
+		act  func(*guardFixture) error
 	}{
-		{"before the click", func(f *guardFixture) { f.ClickRight() }},
-		{"before the next move", func(f *guardFixture) { f.MoveTo(image.Pt(150, 150)) }},
+		{"before the click", func(f *guardFixture) error { return f.ClickRight() }},
+		{"before the next move", func(f *guardFixture) error { return f.MoveTo(image.Pt(150, 150)) }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -104,12 +101,12 @@ func TestGuardHandsOverWhenTheUserMovesTheCursor(t *testing.T) {
 			f.MoveTo(image.Pt(150, 150))
 			f.sent = nil
 			f.cursor = image.Pt(170, 150) // a hand on the mouse
-			tt.act(f)
+			err := tt.act(f)
 			if len(f.sent) != 0 {
 				t.Errorf("sent = %v, want nothing", f.sent)
 			}
-			if f.takeovers != 1 {
-				t.Errorf("takeovers = %d, want 1", f.takeovers)
+			if !errors.Is(err, fishing.ErrMouseMoved) {
+				t.Errorf("err = %v, want the mouse pause", err)
 			}
 		})
 	}
@@ -121,27 +118,27 @@ func TestGuardToleratesASmallDrift(t *testing.T) {
 	f := newGuardFixture()
 	f.MoveTo(image.Pt(150, 150))
 	f.cursor = image.Pt(152, 149)
-	if f.ClickRight() != nil || f.takeovers != 0 {
-		t.Fatalf("a 2 px drift stopped the click: takeovers=%d", f.takeovers)
+	if err := f.ClickRight(); err != nil {
+		t.Fatalf("a 2 px drift stopped the click: %v", err)
 	}
 	f.cursor = image.Pt(150+takeoverSlack+1, 150)
-	if f.ClickRight() == nil || f.takeovers != 1 {
-		t.Fatalf("a move past the slack did not hand over: takeovers=%d", f.takeovers)
+	if err := f.ClickRight(); !errors.Is(err, fishing.ErrMouseMoved) {
+		t.Fatalf("a move past the slack did not hand over: %v", err)
 	}
 }
 
 func TestCameraDragRequiresRoomAndFocus(t *testing.T) {
 	f := newGuardFixture()
 	f.cursor = image.Pt(90, 150)
-	if attempted, moved := f.DragCamera(12); attempted || moved || len(f.sent) != 0 {
+	if attempted, err := f.DragCamera(12); attempted || err != nil || len(f.sent) != 0 {
 		t.Fatal("drag was attempted with the pointer outside the game")
 	}
 	f.cursor = image.Pt(150, 150)
-	if attempted, moved := f.DragCamera(12); !attempted || !moved || len(f.sent) != 1 {
+	if attempted, err := f.DragCamera(12); !attempted || err != nil || len(f.sent) != 1 {
 		t.Fatal("drag did not run inside the focused game")
 	}
 	f.inFront = false
-	if attempted, moved := f.DragCamera(12); !attempted || moved || len(f.sent) != 1 {
+	if attempted, err := f.DragCamera(12); !attempted || !errors.Is(err, fishing.ErrNotInFront) || len(f.sent) != 1 {
 		t.Fatal("lost focus should block the drag and its fallback")
 	}
 	f.inFront = true

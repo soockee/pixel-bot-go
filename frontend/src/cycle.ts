@@ -9,8 +9,18 @@ export const cycle: [state: string, step: string, caption: string][] = [
   ["casting", "Cast", "Casting"],
 ];
 
+// The person's mouse paused the run: the focus step, waiting for the mouse to
+// rest instead of for focus (presenter.MousePauseLabel).
+const mousePause = "mouse";
+
+/** stepOf is the cycle step a state shows as current. */
+export const stepOf = (state: string) => (state === mousePause ? "focus" : state);
+
 /** caption is what the bot is doing in state, or "" outside the cycle. */
-export const caption = (state: string) => cycle.find(([s]) => s === state)?.[2] ?? "";
+export const caption = (state: string) =>
+  state === mousePause
+    ? "Paused because you moved the mouse. Rest it in the game to go on"
+    : (cycle.find(([s]) => s === state)?.[2] ?? "");
 
 /** catches labels the catch count. */
 export const catches = (n: number) => (n === 1 ? "catch this run" : "catches this run");

@@ -412,13 +412,13 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 					InFront:  func() bool { return true },
 					Input:    input,
 				}
-				input.drag = func(dx int) (bool, bool) {
+				input.drag = func(dx int) (bool, error) {
 					if firstMove.IsZero() {
 						firstMove = time.Now()
 					}
 					drags = append(drags, dx)
 					heading += dx
-					return true, true
+					return true, nil
 				}
 				input.tap = func(vk byte, _ time.Duration) error {
 					switch vk {

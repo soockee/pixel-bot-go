@@ -10,17 +10,23 @@ The status bar at the bottom of Go Fish usually says what is wrong. These are th
 
 Something in **Set up fishing** is still missing, and the line under **Start fishing** names the step. Usually the game isn't open, the ESP32 board isn't found, or the addon needs an install or update. Follow the list; see [Install the addon](install-addon.md).
 
+## It paused
+
+Go Fish pauses, and does not stop, when you need the game or the mouse for a moment:
+
+- **Waiting for the game window to have focus.** Another window came to the front. Click back into the game and it goes on by itself.
+- **Paused because you moved the mouse.** Go Fish parks the pointer on the bobber while it waits, and pauses when you move the mouse so that it never fights you for it. Rest the mouse inside the game for two seconds and it goes on by itself.
+
+Press **Stop** to end the run instead.
+
 ## It stopped by itself
 
 When Go Fish stops without you pressing Stop, the Fishing view says **Stopped by itself** and why, with a **What to do** link to this list. The status bar says it too:
 
 - **N casts in a row got no bite.** It cast the number of times you set under **Casts without a bite** and none got a bite. Check that the pink brackets show around your bobber, and that you fish where fish bite.
-- **The mouse was moved.** Go Fish parks the pointer on the bobber while it waits, and stops when you move the mouse so that it never fights you for it. Leave the mouse alone while it fishes, and click **Start fishing** again.
-- **The game was not in front.** Another window took the focus while Go Fish moved the pointer. Keep the game in front while it fishes.
 - **The pointer path left the game window.** Keep the bobber away from the edges of the game window.
 - **Could not reel**, and why:
   - **the pointer was not on the bobber**: the move to the bobber did not finish before the bite. Start again; if it repeats, see the ESP32 line below.
-  - **the game was not in front** or **the mouse was moved**: as above.
   - **the bobber was outside the game window**: keep the bobber away from the edges of the game window.
   - **the ESP32 could not click**: the board did not answer the click. Click **Test** under **Settings → Input → ESP32 board**; see [Nothing happens in the game](#nothing-happens-in-the-game).
 - **The ESP32 could not put the pointer on the target.** The board's pointer moves did not arrive in time, usually over a weak Bluetooth link. One miss only costs that cast. Go Fish stops when the board stops answering, or with **The pointer did not land on the bobber** when misses fill **Casts without a bite**. Move the board closer to the PC, and turn off the board's Wi-Fi status page while fishing.

@@ -52,4 +52,4 @@ func (d DryRun) ClickRight() error {
 }
 
 // DragCamera never drags: a dry run has no Board, so a reposition walks.
-func (d DryRun) DragCamera(int) (attempted, moved bool) { return false, false }
+func (d DryRun) DragCamera(int) (attempted bool, err error) { return false, nil }

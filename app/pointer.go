@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"image"
 
 	"github.com/soocke/pixel-bot-go/domain/action"
@@ -16,10 +17,10 @@ type livePointer struct {
 	plan  cursormotion.Planner
 }
 
-func (p livePointer) Plan(target image.Point, settle bool) ([]fishing.CursorStep, bool) {
-	start, area, ok := p.guard.BeginCursor()
-	if !ok {
-		return nil, false
+func (p livePointer) Plan(target image.Point, settle bool) ([]fishing.CursorStep, error) {
+	start, area, err := p.guard.BeginCursor()
+	if err != nil {
+		return nil, err
 	}
 	return cursorSteps(p.plan(start, target, area, settle))
 }
@@ -51,10 +52,13 @@ type dryPointer struct {
 	positioned bool
 }
 
-func (p *dryPointer) Plan(target image.Point, settle bool) ([]fishing.CursorStep, bool) {
+func (p *dryPointer) Plan(target image.Point, settle bool) ([]fishing.CursorStep, error) {
+	if !p.inFront() {
+		return nil, fishing.ErrNotInFront
+	}
 	area := p.c.gameArea()
-	if !p.inFront() || area == nil {
-		return nil, false
+	if area == nil {
+		return nil, errors.New("the game window is not known")
 	}
 	if !p.positioned || !p.current.In(*area) {
 		p.current, p.positioned = area.Min.Add(area.Size().Div(2)), true
@@ -78,10 +82,13 @@ func (p *dryPointer) Moved(at image.Point, area image.Rectangle) {
 	}
 }
 
-func cursorSteps(path []cursormotion.Step) ([]fishing.CursorStep, bool) {
+func cursorSteps(path []cursormotion.Step) ([]fishing.CursorStep, error) {
+	if len(path) == 0 {
+		return nil, errors.New("the planner found no path")
+	}
 	steps := make([]fishing.CursorStep, len(path))
 	for i, step := range path {
 		steps[i] = fishing.CursorStep{After: step.After, Point: step.Point}
 	}
-	return steps, len(steps) > 0
+	return steps, nil
 }

@@ -114,9 +114,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		}
 		guard := &action.Guard{
 			Logger: logger, InFront: inFront, Area: c.gameArea, CursorPos: action.CursorPos,
-			// The guard runs on the FSM goroutine, which must not wait on its own queue.
-			OnTakeover: func() { go c.FSM.EventHaltBecause("the mouse was moved") },
-			Press:      board.Press, Move: move, Click: click,
+			Press: board.Press, Move: move, Click: click,
 			CanDrag: func() bool { return board.CanDragCamera() && !action.LeftMouseDown() },
 			Drag:    board.DragCamera,
 		}
@@ -167,7 +165,11 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 
 	c.CapturePresenter = presenter.NewCapturePresenter(c.Capture, c.Engine, c.FSM, c.View)
 	c.RecordPresenter = presenter.NewRecordPresenter(c.prepareRecording, c.View)
-	focusWatcher := presenter.NewFocusWatcher(c.FSM, inFront)
+	focusWatcher := presenter.NewFocusWatcher(c.FSM, inFront, func() (image.Point, bool) {
+		x, y, ok := action.CursorPos()
+		at, area := image.Pt(x, y), c.gameArea()
+		return at, ok && area != nil && at.In(*area)
+	})
 	c.FSM.AddListener(func(prev, next fishing.FishingState) {
 		if dryRun && trace.Output != nil && (next == fishing.StateHalt || next == fishing.StateWaitingFocus) {
 			c.trace.timingGap(next)

@@ -59,6 +59,7 @@ type FishingFSM struct {
 	repositionDirection int
 	repositionDX        int
 	repositionLogout    atomic.Bool
+	pausedByMouse       atomic.Bool // the pause waits for the mouse to rest, not only for focus
 	failedCasts         int
 	sessionEnd          time.Time
 	stats               struct{ casts, reels, reelAttempts, reelInputs, failedInRow, caught, gotAway, notHooked atomic.Int32 } // this run, for the UI
@@ -157,7 +158,11 @@ func (f *FishingFSM) handle(ev any) {
 			f.transition(StateReeling)
 		}
 	case evtFocusAcquired:
-		if f.state == StateWaitingFocus {
+		if f.state == StateWaitingFocus && !f.pausedByMouse.Load() {
+			f.transition(StateSearching)
+		}
+	case evtMouseSettled:
+		if f.state == StateWaitingFocus && f.pausedByMouse.Load() {
 			f.transition(StateSearching)
 		}
 	case evtFocusLost:
@@ -224,6 +229,7 @@ type (
 	evtFishBite          struct{ at time.Time }
 	evtFocusAcquired     struct{}
 	evtFocusLost         struct{}
+	evtMouseSettled      struct{}
 	evtAwaitFocus        struct{ cfg config.Config }
 	evtForceCast         struct{}
 	evtAddListener       struct{ l FishingStateListener }
@@ -326,6 +332,9 @@ func (f *FishingFSM) deadlineReached() {
 					return
 				}
 				f.idleMove()
+				if f.state != StateCooldown {
+					return // the idle move paused the run
+				}
 				f.arm(time.Duration(300+f.deps.Roll(601)) * time.Millisecond)
 				return
 			}
@@ -388,8 +397,6 @@ func (f *FishingFSM) startReposition() {
 	if !f.moveForReposition() {
 		switch {
 		case f.state == StateHalt || f.state == StateWaitingFocus:
-		case !f.deps.InFront():
-			f.transition(StateWaitingFocus)
 		default:
 			f.why("reposition input was blocked. Check the movement binding and game focus")
 			f.halt()
@@ -417,11 +424,13 @@ func (f *FishingFSM) moveForReposition() bool {
 		if cameraAttempt == 1 {
 			dx = -dx
 		}
-		if attempted, moved := f.deps.Input.DragCamera(dx); attempted {
-			if moved {
-				f.logger.Info("reposition camera drag", "dx", dx)
+		if attempted, err := f.deps.Input.DragCamera(dx); attempted {
+			if err != nil {
+				f.inputFailed("could not reposition: ", err)
+				return false
 			}
-			return moved
+			f.logger.Info("reposition camera drag", "dx", dx)
+			return true
 		}
 	}
 	return f.activity(key, "reposition action executed")
@@ -479,6 +488,9 @@ func (f *FishingFSM) transition(next FishingState) {
 	}
 	f.state = next
 	f.cur.Store(int32(next))
+	if next != StateWaitingFocus {
+		f.pausedByMouse.Store(false)
+	}
 	f.logger.Info("fishing state transition", "from", prev.String(), "to", next.String())
 	for _, l := range f.listeners {
 		l(prev, next)
@@ -617,14 +629,15 @@ func (f *FishingFSM) startReel() {
 }
 
 func (f *FishingFSM) beginCursor(target image.Point, settle bool) bool {
-	steps, ok := f.deps.Pointer.Plan(target, settle)
-	if !ok || len(steps) == 0 || steps[len(steps)-1].Point != target {
-		if !f.deps.InFront() {
-			f.transition(StateWaitingFocus)
-			return false
+	steps, err := f.deps.Pointer.Plan(target, settle)
+	if err == nil && (len(steps) == 0 || steps[len(steps)-1].Point != target) {
+		err = errors.New("the path does not end on the bobber")
+	}
+	if err != nil {
+		if !f.pauseFor(err) {
+			f.why("could not aim at the bobber. Keep the pointer inside the focused game window")
+			f.halt()
 		}
-		f.why("could not aim at the bobber. Keep the pointer inside the focused game window")
-		f.halt()
 		return false
 	}
 	f.cursorStart, f.cursorSteps = time.Now(), steps
@@ -710,13 +723,29 @@ func (f *FishingFSM) finishMiss(reason string) {
 // inputFailed pauses the run when the Input dropped input because the game
 // was not in front, and stops it, with what and why, on any other failure.
 func (f *FishingFSM) inputFailed(what string, err error) {
-	if errors.Is(err, ErrNotInFront) {
-		f.logger.Info("paused: the game lost focus", "dropped", what+err.Error())
-		f.transition(StateWaitingFocus)
+	if f.pauseFor(err) {
 		return
 	}
 	f.why(what + err.Error())
 	f.halt()
+}
+
+// pauseFor pauses the run, and reports true, when err is the Input dropping
+// input because the game lost focus or the person moved the mouse.
+func (f *FishingFSM) pauseFor(err error) bool {
+	switch {
+	case errors.Is(err, ErrMouseMoved):
+		f.logger.Info("paused: the mouse was moved")
+		f.pausedByMouse.Store(true)
+	case errors.Is(err, ErrNotInFront):
+		f.logger.Info("paused: the game lost focus")
+	default:
+		return false
+	}
+	if f.state != StateWaitingFocus {
+		f.transition(StateWaitingFocus)
+	}
+	return true
 }
 
 // pause is the wait after a catch before the next cast: the configured
@@ -786,7 +815,17 @@ func (f *FishingFSM) EventHaltBecause(reason string) { f.send(evtHalt{reason: re
 func (f *FishingFSM) EventFishBite()                 { f.send(evtFishBite{at: time.Now()}) }
 func (f *FishingFSM) EventFocusAcquired()            { f.send(evtFocusAcquired{}) }
 func (f *FishingFSM) EventFocusLost()                { f.send(evtFocusLost{}) }
-func (f *FishingFSM) ForceCast()                     { f.send(evtForceCast{}) }
+
+// EventMouseSettled reports that the mouse has rested in the game window with
+// the game in front, which ends a pause the mouse started.
+func (f *FishingFSM) EventMouseSettled() { f.send(evtMouseSettled{}) }
+
+// PausedByMouse reports whether the run is paused until the mouse rests.
+// Safe from any goroutine.
+func (f *FishingFSM) PausedByMouse() bool {
+	return f.Current() == StateWaitingFocus && f.pausedByMouse.Load()
+}
+func (f *FishingFSM) ForceCast() { f.send(evtForceCast{}) }
 
 // EventOutcome reports a reading of Bobber Marker's outcome blocks: a new
 // outcome, or OutcomeNone when they still show an earlier one.

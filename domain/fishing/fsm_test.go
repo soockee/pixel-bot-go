@@ -41,7 +41,7 @@ type testInput struct {
 	tap   func(vk byte, hold time.Duration) error
 	move  func(p image.Point) error
 	click func() error
-	drag  func(dx int) (attempted, moved bool)
+	drag  func(dx int) (attempted bool, err error)
 }
 
 func (i *testInput) Tap(vk byte, hold time.Duration) error {
@@ -65,9 +65,9 @@ func (i *testInput) ClickRight() error {
 	return i.click()
 }
 
-func (i *testInput) DragCamera(dx int) (attempted, moved bool) {
+func (i *testInput) DragCamera(dx int) (attempted bool, err error) {
 	if i.drag == nil {
-		return false, false
+		return false, nil
 	}
 	return i.drag(dx)
 }
@@ -76,14 +76,14 @@ func (i *testInput) DragCamera(dx int) (attempted, moved bool) {
 // an unset field goes straight to the target, waits on the bobber itself and
 // does not know where the pointer is.
 type testPointer struct {
-	plan     func(target image.Point, settle bool) ([]CursorStep, bool)
+	plan     func(target image.Point, settle bool) ([]CursorStep, error)
 	reset    func()
 	approach func(center image.Point, box image.Rectangle) (image.Point, bool)
 }
 
-func (p *testPointer) Plan(target image.Point, settle bool) ([]CursorStep, bool) {
+func (p *testPointer) Plan(target image.Point, settle bool) ([]CursorStep, error) {
 	if p.plan == nil {
-		return []CursorStep{{Point: target}}, true
+		return []CursorStep{{Point: target}}, nil
 	}
 	return p.plan(target, settle)
 }
@@ -572,9 +572,9 @@ func TestAutomaticRepositionDragsThroughESP32(t *testing.T) {
 		logger: testLogger,
 		deps: Deps{
 			InFront: func() bool { return true },
-			Input: &testInput{drag: func(dx int) (bool, bool) {
+			Input: &testInput{drag: func(dx int) (bool, error) {
 				drags = append(drags, dx)
-				return true, true
+				return true, nil
 			}},
 		},
 	}
