@@ -89,3 +89,13 @@ There is no Makefile. Without a frontend build the window is empty (`frontend/di
 - Every push to `main` triggers auto-release: next patch tag `vX.Y.Z` (or run the workflow manually with a `version` input such as `v1.1.0` to pick the tag; tags so far are v1.0.0 to v1.0.7), Windows amd64 build, `CHECKSUMS.txt`, GitHub Release. Put `skip-release` in the commit message for docs-only or non-shippable commits.
 - History was purged of a large demo GIF and a test image and force-pushed (main and tags v1.0.0 to v1.0.7). Do not re-add large binaries (GIFs, videos, screenshots) to git. `.gitattributes` still routes `*.gif` through LFS; decide on LFS before adding GIFs, and prefer a release asset (for example an MP4) linked from the README.
 - Old objects may remain under `refs/pull/1` until PR #1 is deleted or GitHub support clears them.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues in `soockee/pixel-bot-go` through `gh`, labelled `bug` or `enhancement` as the issue forms do. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: `GLOSSARY.md` and `docs/adr/` at the repo root, created when a term or decision is settled (`docs/agents` and `docs/adr` stay out of GitHub Pages). See `docs/agents/domain.md`.

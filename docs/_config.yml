@@ -14,6 +14,8 @@ relative_links:
   enabled: true
 exclude:
   - dev
+  - agents
+  - adr
   - ARCHITECTURE_REVIEW.md
 defaults:
   - scope: { path: "" }
