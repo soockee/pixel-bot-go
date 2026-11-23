@@ -206,6 +206,37 @@ func TestTapGetsPastALostReply(t *testing.T) {
 	}
 }
 
+// shortWritePort takes only half of the first MOVE, so neither the move nor
+// its OK happens; the next line completes the half and the firmware rejects it.
+type shortWritePort struct {
+	lostReplyPort
+	cut bool
+}
+
+func (p *shortWritePort) Write(b []byte) (int, error) {
+	if !p.cut && strings.HasPrefix(string(b), "MOVE") {
+		p.cut = true
+		return len(b) / 2, nil
+	}
+	return p.lostReplyPort.Write(b)
+}
+
+func TestMoveToGetsPastAShortWrite(t *testing.T) {
+	port := &shortWritePort{lostReplyPort: lostReplyPort{mousePort: mousePort{gain: func(int) float64 { return 1 }, x: 500, y: 500}, lost: true}}
+	var log strings.Builder
+	k := &Board{port: port, reader: bufio.NewReader(timeoutReader{port}), pointer: true, Logger: slog.New(slog.NewTextHandler(&log, nil))}
+	pos := func() (int, int, bool) { return port.x, port.y, true }
+	if err := k.MoveTo(image.Pt(700, 450), pos); err != nil {
+		t.Fatalf("a short write stopped the move: %v", err)
+	}
+	if port.x != 700 || port.y != 450 || k.port == nil {
+		t.Fatalf("pointer at %d,%d, port open %v; want 700,450 and an open port", port.x, port.y, k.port != nil)
+	}
+	if !strings.Contains(log.String(), `cause="write cut short"`) {
+		t.Errorf("log = %q, want the recovery", log.String())
+	}
+}
+
 // droppedLinkPort is firmware whose Bluetooth link drops before the first
 // action and is back after one HELLO.
 type droppedLinkPort struct {
