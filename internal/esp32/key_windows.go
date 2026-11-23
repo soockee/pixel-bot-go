@@ -59,13 +59,13 @@ func ForegroundUsage(vk byte) (byte, bool) {
 
 // Press sends one binding: Mouse 4 and 5 as mouse buttons, any other key as
 // the key at its position in the foreground window's layout.
-func (k *Keyboard) Press(vk byte, hold time.Duration) error {
+func (b *Board) Press(vk byte, hold time.Duration) error {
 	if vk == vkMouse4 || vk == vkMouse5 {
-		return k.PressButton(vk, hold)
+		return b.PressButton(vk, hold)
 	}
 	usage, ok := ForegroundUsage(vk)
 	if !ok {
 		return errors.New("ESP32 could not map the key in the active keyboard layout")
 	}
-	return k.TapFor(usage, hold)
+	return b.TapFor(usage, hold)
 }

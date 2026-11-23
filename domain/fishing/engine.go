@@ -122,12 +122,12 @@ func (e *Engine) Start() error {
 	if err != nil {
 		return err
 	}
-	var closeKeyboard func()
-	if !cfg.DryRun && e.fsm.actions.OpenKeyboard != nil {
+	var closeBoard func()
+	if !cfg.DryRun && e.fsm.actions.OpenBoard != nil {
 		if e.fsm.actions.TapKeyboard == nil {
 			return errors.New("ESP32 keyboard backend unavailable")
 		}
-		closeKeyboard, err = e.fsm.actions.OpenKeyboard(cfg)
+		closeBoard, err = e.fsm.actions.OpenBoard(cfg)
 		if err != nil {
 			return err
 		}
@@ -138,7 +138,7 @@ func (e *Engine) Start() error {
 	e.cancel, e.done = cancel, make(chan struct{})
 	r := &run{engine: e, locator: locator, bite: bite, interact: cfg.ReelMethod == config.ReelInteractKey}
 	r.listener, _ = bite.(detect.SoundBiteDetector)
-	go r.loop(ctx, e.done, closeKeyboard)
+	go r.loop(ctx, e.done, closeBoard)
 	return nil
 }
 
@@ -180,10 +180,10 @@ type run struct {
 	outcomes            outcomes
 }
 
-func (r *run) loop(ctx context.Context, done chan<- struct{}, closeKeyboard func()) {
+func (r *run) loop(ctx context.Context, done chan<- struct{}, closeBoard func()) {
 	defer close(done)
-	if closeKeyboard != nil {
-		defer closeKeyboard()
+	if closeBoard != nil {
+		defer closeBoard()
 	}
 	var listening sync.WaitGroup
 	defer listening.Wait()

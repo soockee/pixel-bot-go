@@ -95,8 +95,8 @@ func NewApp(title string, width, height int, cfg *config.Config, logger *slog.Lo
 		CheckAddon:    a.checkAddon,
 		InstallAddon:  a.installAddon,
 		MoveOverlay:   a.setOverlayMove,
-		FindBoard:     findBoard,
-		TestBoard:     testBoard,
+		FindBoard:     c.board.find,
+		TestBoard:     c.board.test,
 	}, c.Recordings, cfg, config.FilePath, logger)
 
 	assets := http.NewServeMux()

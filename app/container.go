@@ -44,6 +44,7 @@ type AppContainer struct {
 	Loop       *presenter.Loop
 	trace      *liveTrace
 	gameWindow atomic.Pointer[capture.WindowIdentity]
+	board      boardOwner
 }
 
 // TraceOptions configures desktop tracing and the optional reel timing profile.
@@ -99,8 +100,9 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	} else {
 		callbacks.ReelRoll = rand.IntN
 		callbacks.RepositionRoll = rand.IntN
-		keyboard := esp32.Keyboard{Logger: logger}
-		callbacks.OpenKeyboard = func(run config.Config) (func(), error) {
+		c.board.board.Logger = logger
+		board := &c.board.board // usable only while a run holds it
+		callbacks.OpenBoard = func(run config.Config) (func(), error) {
 			if run.ESP32Port == "" {
 				return nil, errors.New("select or connect the ESP32 board in Settings")
 			}
@@ -121,63 +123,64 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 					return nil, errors.New("ESP32 supports letters, digits, F1–F12, Mouse 4 and Mouse 5 for configured keys")
 				}
 			}
-			if err := keyboard.Open(port); err != nil {
+			_, release, err := c.board.open(port)
+			if err != nil {
 				return nil, err
 			}
 			keepOpen := false
 			defer func() {
 				if !keepOpen {
-					keyboard.Close()
+					release()
 				}
 			}()
 			if trace.Timing != nil {
-				if err := keyboard.PrepareTimedTaps(); err != nil {
+				if err := board.PrepareTimedTaps(); err != nil {
 					return nil, err
 				}
 			}
 			if run.Reposition || run.IdleMoves {
-				if err := keyboard.PrepareCamera(); err != nil {
+				if err := board.PrepareCamera(); err != nil {
 					return nil, err
 				}
 			}
 			if run.ReelMethod != config.ReelInteractKey || run.IdleMoves {
-				if err := keyboard.PreparePointer(); err != nil {
+				if err := board.PreparePointer(); err != nil {
 					return nil, err
 				}
 			}
-			if err := keyboard.PrepareButtons(); err != nil {
+			if err := board.PrepareButtons(); err != nil {
 				return nil, err
 			}
 			for _, key := range keys {
 				vk, _ := action.ParseVK(key)
-				if (vk == 0x05 || vk == 0x06) && !keyboard.CanPressButtons() {
+				if (vk == 0x05 || vk == 0x06) && !board.CanPressButtons() {
 					return nil, errors.New("flash the current ESP32 firmware to press Mouse 4 and Mouse 5")
 				}
 			}
 			if run.ReelMethod != config.ReelInteractKey {
-				if !keyboard.CanPoint() {
+				if !board.CanPoint() {
 					return nil, errors.New("flash the current ESP32 firmware to reel with a right click")
 				}
 			}
-			if run.IdleMoves && !keyboard.CanPoint() {
+			if run.IdleMoves && !board.CanPoint() {
 				return nil, errors.New("flash the current ESP32 firmware to move the pointer")
 			}
 			// Only what this run asked the board: a capability it never asked reads false.
-			ready := []any{"port", keyboard.Name(), "buttons", keyboard.CanPressButtons()}
+			ready := []any{"port", board.Name(), "buttons", board.CanPressButtons()}
 			if run.Reposition || run.IdleMoves {
-				ready = append(ready, "camera", keyboard.CanDragCamera())
+				ready = append(ready, "camera", board.CanDragCamera())
 			}
 			if run.ReelMethod != config.ReelInteractKey || run.IdleMoves {
-				ready = append(ready, "pointer", keyboard.CanPoint())
+				ready = append(ready, "pointer", board.CanPoint())
 			}
 			logger.Info("ESP32 keyboard ready", ready...)
 			keepOpen = true
-			return keyboard.Close, nil
+			return release, nil
 		}
 		move := func(x, y int) error {
-			if err := keyboard.MoveTo(image.Pt(x, y), action.CursorPos); err != nil {
+			if err := board.MoveTo(image.Pt(x, y), action.CursorPos); err != nil {
 				logger.Error("ESP32 pointer move failed", "error", err)
-				if keyboard.CanPoint() { // the port is still open: only this aim missed
+				if board.CanPoint() { // the port is still open: only this aim missed
 					return fmt.Errorf("%w; see pixel_bot_logs.json", fishing.ErrPointerMissed)
 				}
 				return errors.New("the ESP32 could not put the pointer on the target; see pixel_bot_logs.json")
@@ -185,14 +188,14 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			return nil
 		}
 		click := func() error {
-			if err := keyboard.ClickRight(); err != nil {
+			if err := board.ClickRight(); err != nil {
 				logger.Error("ESP32 right click failed", "error", err)
 				return errors.New("the ESP32 could not click; see pixel_bot_logs.json")
 			}
 			return nil
 		}
 		press := func(vk byte) bool {
-			if err := keyboard.Press(vk, 0); err != nil {
+			if err := board.Press(vk, 0); err != nil {
 				logger.Error("ESP32 key press failed", "error", err)
 				return false
 			}
@@ -202,7 +205,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			if !inFront() {
 				return errors.New("selected game window lost focus")
 			}
-			return keyboard.Press(vk, hold)
+			return board.Press(vk, hold)
 		}
 		guard := &action.Guard{
 			Logger: logger, InFront: inFront, Area: c.gameArea, CursorPos: action.CursorPos,
@@ -213,14 +216,14 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		callbacks.PressKey, callbacks.MoveCursor, callbacks.ClickRight = guard.PressKey, guard.MoveCursor, guard.ClickRight
 		callbacks.CursorPos = action.CursorPos
 		callbacks.DragHardwareCamera = func(dx int) (bool, bool) {
-			if !keyboard.CanDragCamera() || action.LeftMouseDown() {
+			if !board.CanDragCamera() || action.LeftMouseDown() {
 				return false, false
 			}
 			return guard.DragCamera(dx, func(dx int, allowed func() bool) bool {
 				if !allowed() || action.LeftMouseDown() {
 					return false
 				}
-				if err := keyboard.DragCamera(dx); err != nil {
+				if err := board.DragCamera(dx); err != nil {
 					logger.Error("ESP32 camera drag failed", "error", err)
 					return false
 				}

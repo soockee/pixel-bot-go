@@ -17,24 +17,24 @@ type PingReport struct {
 // Ping sends PING n times and times each PONG. It sends no input. A missed
 // answer is dropped from the read buffer, so a late PONG is not taken for the
 // next one.
-func (k *Keyboard) Ping(n int) (PingReport, error) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
+func (b *Board) Ping(n int) (PingReport, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	r := PingReport{Sent: n}
-	if k.port == nil {
+	if b.port == nil {
 		return r, errors.New("ESP32 port is closed")
 	}
 	var trips []time.Duration
 	for range n {
 		start := time.Now()
-		reply, err := k.exchange("PING")
+		reply, err := b.exchange("PING")
 		switch {
 		case err == nil && (reply == "PONG connected" || reply == "PONG waiting"):
 			trips = append(trips, time.Since(start))
 			r.Connected = reply == "PONG connected"
 		default:
-			_ = k.port.ResetInputBuffer()
-			k.reader.Reset(timeoutReader{k.port})
+			_ = b.port.ResetInputBuffer()
+			b.reader.Reset(timeoutReader{b.port})
 		}
 	}
 	r.Answered = len(trips)
@@ -54,10 +54,10 @@ var nudgeWait = time.Second
 // its Bluetooth reports reach Windows, and returns how long the first took to
 // show in pos. It tries the other direction when the pointer sits at a screen
 // edge. Call PreparePointer first.
-func (k *Keyboard) Nudge(pos func() (x, y int, ok bool)) (time.Duration, error) {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	if k.port == nil || !k.pointer {
+func (b *Board) Nudge(pos func() (x, y int, ok bool)) (time.Duration, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.port == nil || !b.pointer {
 		return 0, errors.New("ESP32 pointer support is unavailable")
 	}
 	x, y, ok := pos()
@@ -66,12 +66,12 @@ func (k *Keyboard) Nudge(pos func() (x, y int, ok bool)) (time.Duration, error) 
 	}
 	for _, step := range []int{1, -1} {
 		start := time.Now()
-		if err := k.sendAction(fmt.Sprintf("MOVE %d 0", step), "pointer move"); err != nil {
+		if err := b.sendAction(fmt.Sprintf("MOVE %d 0", step), "pointer move"); err != nil {
 			return 0, err
 		}
 		if moved(x, y, pos, nudgeWait) {
 			lag := time.Since(start)
-			if err := k.sendAction(fmt.Sprintf("MOVE %d 0", -step), "pointer move"); err != nil {
+			if err := b.sendAction(fmt.Sprintf("MOVE %d 0", -step), "pointer move"); err != nil {
 				return lag, err
 			}
 			moved(x+step, y, pos, nudgeWait) // let the way back land before the next test

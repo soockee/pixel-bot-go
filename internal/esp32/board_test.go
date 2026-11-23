@@ -58,7 +58,7 @@ func TestMoveToReachesTargetDespiteAcceleration(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			port := &mousePort{gain: gain, x: 900, y: 100}
-			k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port}), pointer: true}
+			k := &Board{port: port, reader: bufio.NewReader(timeoutReader{port}), pointer: true}
 			pos := func() (int, int, bool) { return port.x, port.y, true }
 			if err := k.MoveTo(image.Pt(120, 640), pos); err != nil {
 				t.Fatalf("%v after %d moves, pointer at %d,%d", err, port.moves, port.x, port.y)
@@ -107,7 +107,7 @@ func (p *latePort) pos() (int, int, bool) {
 func TestMoveToLeavesNoReportOnItsWay(t *testing.T) {
 	for _, d := range []image.Point{{40, 10}, {-5, 0}, {1, -1}} {
 		port := &latePort{mousePort: mousePort{x: 500, y: 500}, lag: 80 * time.Millisecond}
-		k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port}), pointer: true}
+		k := &Board{port: port, reader: bufio.NewReader(timeoutReader{port}), pointer: true}
 		target := image.Pt(500, 500).Add(d)
 		if err := k.MoveTo(target, port.pos); err != nil {
 			t.Fatal(err)
@@ -121,7 +121,7 @@ func TestMoveToLeavesNoReportOnItsWay(t *testing.T) {
 
 func TestPressButtonSendsTheSideButton(t *testing.T) {
 	port := &testPort{reply: strings.NewReader("OK\r\nOK\r\n")}
-	k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port})}
+	k := &Board{port: port, reader: bufio.NewReader(timeoutReader{port})}
 	if err := k.PressButton(vkMouse4, 0); err == nil {
 		t.Fatal("pressed a side button on firmware that did not offer BUTTONS")
 	}
@@ -139,7 +139,7 @@ func TestPressButtonSendsTheSideButton(t *testing.T) {
 
 func TestTapClosesAfterMissingAcknowledgment(t *testing.T) {
 	port := &testPort{reply: strings.NewReader("OK\r\n")}
-	k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port})}
+	k := &Board{port: port, reader: bufio.NewReader(timeoutReader{port})}
 	if err := k.Tap(4); err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func (p *lostReplyPort) Close() error                       { return nil }
 
 func TestMoveToGetsPastOneLostReply(t *testing.T) {
 	port := &lostReplyPort{mousePort: mousePort{gain: func(int) float64 { return 1 }, x: 500, y: 500}}
-	k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port}), pointer: true}
+	k := &Board{port: port, reader: bufio.NewReader(timeoutReader{port}), pointer: true}
 	pos := func() (int, int, bool) { return port.x, port.y, true }
 	if err := k.MoveTo(image.Pt(700, 450), pos); err != nil {
 		t.Fatalf("a lost OK stopped the move: %v", err)
@@ -197,7 +197,7 @@ func TestMoveToGetsPastOneLostReply(t *testing.T) {
 func TestTapGetsPastALostReply(t *testing.T) {
 	port := &lostReplyPort{}
 	var log strings.Builder
-	k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port}), Logger: slog.New(slog.NewTextHandler(&log, nil))}
+	k := &Board{port: port, reader: bufio.NewReader(timeoutReader{port}), Logger: slog.New(slog.NewTextHandler(&log, nil))}
 	if err := k.Tap(0x3E); err != nil || k.port == nil {
 		t.Fatalf("a lost OK: err %v, port open %v; want nil and an open port", err, k.port != nil)
 	}
@@ -228,7 +228,7 @@ func (p *droppedLinkPort) Write(b []byte) (int, error) {
 
 func TestTapWaitsForTheBluetoothLink(t *testing.T) {
 	port := &droppedLinkPort{}
-	k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port})}
+	k := &Board{port: port, reader: bufio.NewReader(timeoutReader{port})}
 	if err := k.Tap(0x3E); err != nil || k.port == nil || port.hellos != 2 {
 		t.Fatalf("err %v, port open %v, %d HELLOs; want nil, open, 2", err, k.port != nil, port.hellos)
 	}

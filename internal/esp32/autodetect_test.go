@@ -15,10 +15,10 @@ type board struct {
 	port    *scriptedPort
 }
 
-// autoKeyboard lists the given ports and opens each as its board, noting the order.
-func autoKeyboard(order []string, boards map[string]*board, listErr error) (*Keyboard, *[]string) {
+// autoBoard lists the given ports and opens each as its board, noting the order.
+func autoBoard(order []string, boards map[string]*board, listErr error) (*Board, *[]string) {
 	tried := new([]string)
-	k := &Keyboard{
+	k := &Board{
 		list: func() ([]string, error) { return order, listErr },
 		open: func(name string, _ *serial.Mode) (serial.Port, error) {
 			*tried = append(*tried, name)
@@ -48,7 +48,7 @@ func TestOpenAutoUsesTheBoardThatAnswers(t *testing.T) {
 		"COM7": {reply: "GOFISH 1 READY\n"},
 		"COM9": {reply: "GOFISH 1 READY\n"},
 	}
-	k, tried := autoKeyboard([]string{"COM3", "COM5", "COM7", "COM9"}, boards, nil)
+	k, tried := autoBoard([]string{"COM3", "COM5", "COM7", "COM9"}, boards, nil)
 	if err := k.Open(AutoPort); err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestOpenAutoStopsAtABoardThatIsNotPaired(t *testing.T) {
 		"COM4": {reply: "GOFISH 1 WAITING\n"},
 		"COM8": {reply: "GOFISH 1 READY\n"},
 	}
-	k, tried := autoKeyboard([]string{"COM4", "COM8"}, boards, nil)
+	k, tried := autoBoard([]string{"COM4", "COM8"}, boards, nil)
 	err := k.Open(AutoPort)
 	if err == nil || !strings.Contains(err.Error(), "Bluetooth settings") {
 		t.Fatalf("Open returned %v, want the pairing error", err)
@@ -98,7 +98,7 @@ func TestOpenAutoFindsNothing(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			k, _ := autoKeyboard(tc.order, map[string]*board{"COM5": {reply: "hello?\n"}}, tc.listErr)
+			k, _ := autoBoard(tc.order, map[string]*board{"COM5": {reply: "hello?\n"}}, tc.listErr)
 			err := k.Open(AutoPort)
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("Open returned %v, want error containing %q", err, tc.want)
@@ -112,7 +112,7 @@ func TestOpenAutoFindsNothing(t *testing.T) {
 
 func TestOpenNamedPortSkipsDetection(t *testing.T) {
 	boards := map[string]*board{"COM3": {reply: "GOFISH 1 READY\n"}}
-	k, _ := autoKeyboard(nil, boards, errors.New("must not list"))
+	k, _ := autoBoard(nil, boards, errors.New("must not list"))
 	if err := k.Open("COM3"); err != nil {
 		t.Fatal(err)
 	}
