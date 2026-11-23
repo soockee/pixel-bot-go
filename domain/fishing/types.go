@@ -55,9 +55,9 @@ type ActionCallbacks struct {
 	CanAct func() bool
 	// DragHardwareCamera sends a drag through the ESP32 when supported.
 	DragHardwareCamera func(dx int) (attempted, moved bool)
-	// OpenKeyboard validates and opens the external keyboard for one run.
-	OpenKeyboard func(config.Config) (closeKeyboard func(), err error)
-	TapKeyboard  func(vk byte, hold time.Duration) error
+	// OpenBoard validates and opens the external keyboard for one run.
+	OpenBoard   func(config.Config) (closeBoard func(), err error)
+	TapKeyboard func(vk byte, hold time.Duration) error
 
 	// ObserveCast and ObserveReel run when a cast or reel is scheduled.
 	// Each can return a callback to observe its eventual dispatch.

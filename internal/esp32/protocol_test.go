@@ -49,8 +49,8 @@ func (p *scriptedPort) Close() error                       { p.closed = true; re
 func (p *scriptedPort) SetReadTimeout(time.Duration) error { return nil }
 func (p *scriptedPort) ResetInputBuffer() error            { return nil }
 
-func openWith(port *scriptedPort, openErr error) *Keyboard {
-	return &Keyboard{open: func(string, *serial.Mode) (serial.Port, error) {
+func openWith(port *scriptedPort, openErr error) *Board {
+	return &Board{open: func(string, *serial.Mode) (serial.Port, error) {
 		if openErr != nil {
 			return nil, openErr
 		}
@@ -145,7 +145,7 @@ func TestTapErrorsCloseThePort(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			port := &scriptedPort{reply: strings.NewReader(tc.reply)}
-			k := &Keyboard{port: port, reader: bufioReader(port)}
+			k := &Board{port: port, reader: bufioReader(port)}
 			err := k.Tap(0x04)
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Fatalf("Tap returned %v, want error containing %q", err, tc.wantErr)
@@ -159,7 +159,7 @@ func TestTapErrorsCloseThePort(t *testing.T) {
 
 func TestTapRejectsNonKeyboardUsage(t *testing.T) {
 	port := &scriptedPort{reply: strings.NewReader("OK\n")}
-	k := &Keyboard{port: port, reader: bufioReader(port)}
+	k := &Board{port: port, reader: bufioReader(port)}
 	for _, usage := range []byte{0x00, 0x03, 0x66, 0xff} {
 		if err := k.Tap(usage); err == nil {
 			t.Errorf("Tap(%#x) accepted a usage outside the keyboard range", usage)
@@ -195,8 +195,8 @@ func TestOpenReportsBootNoiseThatNeverEnds(t *testing.T) {
 	}
 }
 
-func TestTapOnClosedKeyboard(t *testing.T) {
-	var k Keyboard
+func TestTapOnClosedBoard(t *testing.T) {
+	var k Board
 	if err := k.Tap(0x04); err == nil {
 		t.Fatal("Tap on a closed keyboard succeeded")
 	}

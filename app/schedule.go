@@ -223,22 +223,27 @@ func (a *app) tapScheduledKey(vk byte, wantWorld bool) (bool, error) {
 	c := a.container
 	// Open the serial port before rechecking the screen. A handshake can outlast
 	// the frame that caused this attempt, and a focus change cancels dispatch.
-	var keyboard esp32.Keyboard
+	var board *esp32.Board
 	if !c.Config.DryRun {
 		if c.Config.ESP32Port == "" {
 			return false, errors.New("select or connect the ESP32 board in Settings")
 		}
 		port, err := esp32.PortName(c.Config.ESP32Port)
-		if err == nil {
-			err = keyboard.Open(port)
+		if err != nil {
+			return false, err
 		}
-		if err == nil {
-			err = keyboard.PrepareButtons()
+		var release func()
+		board, release, err = c.board.open(port)
+		if errors.Is(err, errBoardBusy) {
+			return false, nil // the stopped run is still letting go; try on the next check
 		}
 		if err != nil {
 			return false, err
 		}
-		defer keyboard.Close()
+		defer release()
+		if err := board.PrepareButtons(); err != nil {
+			return false, err
+		}
 	}
 	if !a.scheduleScreen(wantWorld) || !c.gameFocused() || a.scheduleStop.Load() {
 		return false, nil
@@ -247,7 +252,7 @@ func (a *app) tapScheduledKey(vk byte, wantWorld bool) (bool, error) {
 	case c.Config.DryRun:
 		a.logger.Info("dry-run scheduled key", "vk", vk)
 	default:
-		if err := keyboard.Press(vk, 0); err != nil {
+		if err := board.Press(vk, 0); err != nil {
 			return false, err
 		}
 	}

@@ -28,7 +28,7 @@ func (p *pingPort) ResetInputBuffer() error { p.replies.Reset(); return nil }
 func TestPingCountsAnswers(t *testing.T) {
 	for _, drop := range []map[int]bool{nil, {3: true}} {
 		port := &pingPort{drop: drop}
-		k := &Keyboard{port: port, reader: bufio.NewReader(timeoutReader{port})}
+		k := &Board{port: port, reader: bufio.NewReader(timeoutReader{port})}
 		r, err := k.Ping(10)
 		if err != nil {
 			t.Fatal(err)
@@ -73,7 +73,7 @@ func TestNudgeReachesWindowsAndComesBack(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			k := &Keyboard{port: tt.port, reader: bufio.NewReader(timeoutReader{tt.port}), pointer: true}
+			k := &Board{port: tt.port, reader: bufio.NewReader(timeoutReader{tt.port}), pointer: true}
 			start := tt.port.x
 			_, err := k.Nudge(func() (int, int, bool) { return tt.port.x, tt.port.y, true })
 			if (err != nil) != tt.wantErr {

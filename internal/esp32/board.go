@@ -52,8 +52,8 @@ func SupportsKey(vk byte) bool {
 		vk == vkMouse4 || vk == vkMouse5
 }
 
-// Keyboard owns one port for the duration of a fishing run.
-type Keyboard struct {
+// Board is the paired ESP32. It owns one serial port while open.
+type Board struct {
 	mu      sync.Mutex
 	port    serial.Port
 	reader  *bufio.Reader
@@ -88,10 +88,10 @@ const replyWait = time.Second
 var errNotPaired = errors.New("connect Go Fish ESP32 Probe in Windows Bluetooth settings")
 
 // Name returns the port in use, or "" while closed.
-func (k *Keyboard) Name() string {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	return k.name
+func (b *Board) Name() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.name
 }
 
 // usbPorts lists the USB serial ports. The board is one, which leaves out the
@@ -114,16 +114,16 @@ func usbPorts() ([]string, error) {
 // Open checks the firmware and Bluetooth connection without sending any input.
 // With AutoPort it asks each USB serial port for the Go Fish firmware, which
 // sends one line of text to the ports it tries, and uses the first that answers.
-func (k *Keyboard) Open(name string) error {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	if k.port != nil {
+func (b *Board) Open(name string) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.port != nil {
 		return errors.New("ESP32 port is already open")
 	}
 	if name != AutoPort {
-		return k.openPort(name)
+		return b.openPort(name)
 	}
-	list := k.list
+	list := b.list
 	if list == nil {
 		list = usbPorts
 	}
@@ -136,7 +136,7 @@ func (k *Keyboard) Open(name string) error {
 	}
 	var tried []string
 	for _, candidate := range names {
-		err := k.openPort(candidate)
+		err := b.openPort(candidate)
 		// A board that answers but is not paired is the right board; stop there.
 		if err == nil || errors.Is(err, errNotPaired) {
 			return err
@@ -146,8 +146,8 @@ func (k *Keyboard) Open(name string) error {
 	return fmt.Errorf("no Go Fish ESP32 found (%s); flash its firmware and close other programs that use it", strings.Join(tried, "; "))
 }
 
-func (k *Keyboard) openPort(name string) error {
-	open := k.open
+func (b *Board) openPort(name string) error {
+	open := b.open
 	if open == nil {
 		open = serial.Open
 	}
@@ -157,33 +157,33 @@ func (k *Keyboard) openPort(name string) error {
 	if err != nil {
 		return fmt.Errorf("open ESP32 on %s: %w", name, err)
 	}
-	k.port = port
-	k.reader = bufio.NewReaderSize(timeoutReader{port}, 64)
-	if err := k.handshake(); err != nil {
-		k.closePort()
+	b.port = port
+	b.reader = bufio.NewReaderSize(timeoutReader{port}, 64)
+	if err := b.handshake(); err != nil {
+		b.closePort()
 		return fmt.Errorf("ESP32 on %s: %w", name, err)
 	}
-	k.name = name
+	b.name = name
 	return nil
 }
 
-func (k *Keyboard) handshake() error {
-	if err := k.port.SetReadTimeout(300 * time.Millisecond); err != nil {
+func (b *Board) handshake() error {
+	if err := b.port.SetReadTimeout(300 * time.Millisecond); err != nil {
 		return err
 	}
 	start := time.Now()
 	ours := false // the Go Fish firmware has answered
 	noise := ""   // the last text that was not a Go Fish answer
 	for {
-		if err := k.port.ResetInputBuffer(); err != nil {
+		if err := b.port.ResetInputBuffer(); err != nil {
 			return err
 		}
-		k.reader.Reset(timeoutReader{k.port}) // drop boot noise left half read
-		reply, err := k.exchange("HELLO")
+		b.reader.Reset(timeoutReader{b.port}) // drop boot noise left half read
+		reply, err := b.exchange("HELLO")
 		waited := time.Since(start)
 		switch {
 		case err == nil && reply == "GOFISH 1 READY":
-			return k.port.SetReadTimeout(replyWait)
+			return b.port.SetReadTimeout(replyWait)
 		case err == nil && reply == "GOFISH 1 WAITING":
 			ours = true
 		case !ours && waited >= bootWait:
@@ -208,24 +208,24 @@ func (k *Keyboard) handshake() error {
 
 // PrepareTimedTaps checks for optional hold support without sending input.
 // Call it before live actions so a focus check is not followed by negotiation.
-func (k *Keyboard) PrepareTimedTaps() error {
-	return k.prepareCapability("TAPMS", &k.timed)
+func (b *Board) PrepareTimedTaps() error {
+	return b.prepareCapability("TAPMS", &b.timed)
 }
 
 // PrepareCamera probes for mouse support without moving the pointer.
-func (k *Keyboard) PrepareCamera() error {
-	return k.prepareCapability("MOUSE", &k.camera)
+func (b *Board) PrepareCamera() error {
+	return b.prepareCapability("MOUSE", &b.camera)
 }
 
-func (k *Keyboard) prepareCapability(command string, supported *bool) error {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	if k.port == nil {
+func (b *Board) prepareCapability(command string, supported *bool) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.port == nil {
 		return errors.New("ESP32 port is closed")
 	}
-	reply, err := k.exchange(command)
+	reply, err := b.exchange(command)
 	if err != nil {
-		k.closePort()
+		b.closePort()
 		return fmt.Errorf("ESP32 %s capability: %w", command, err)
 	}
 	switch reply {
@@ -234,27 +234,27 @@ func (k *Keyboard) prepareCapability(command string, supported *bool) error {
 	case "ERR command":
 		*supported = false // older firmware
 	default:
-		k.closePort()
+		b.closePort()
 		return fmt.Errorf("ESP32 %s capability: unexpected response %q", command, reply)
 	}
 	return nil
 }
 
 // PrepareButtons probes for the mouse side buttons without sending input.
-func (k *Keyboard) PrepareButtons() error {
-	return k.prepareCapability("BUTTONS", &k.buttons)
+func (b *Board) PrepareButtons() error {
+	return b.prepareCapability("BUTTONS", &b.buttons)
 }
 
 // CanPressButtons reports whether the open port supports mouse side buttons.
-func (k *Keyboard) CanPressButtons() bool {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	return k.buttons
+func (b *Board) CanPressButtons() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buttons
 }
 
 // PressButton holds Mouse 4 or Mouse 5 for hold, 40 ms when it is zero, with
 // the same failure contract as Tap.
-func (k *Keyboard) PressButton(vk byte, hold time.Duration) error {
+func (b *Board) PressButton(vk byte, hold time.Duration) error {
 	if vk != vkMouse4 && vk != vkMouse5 {
 		return errors.New("ESP32 presses only Mouse 4 and Mouse 5")
 	}
@@ -264,39 +264,39 @@ func (k *Keyboard) PressButton(vk byte, hold time.Duration) error {
 	if hold < 10*time.Millisecond || hold > 500*time.Millisecond {
 		return errors.New("ESP32 hold must be between 10 and 500 ms")
 	}
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	if k.port == nil || !k.buttons {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.port == nil || !b.buttons {
 		return errors.New("flash the current ESP32 firmware to press Mouse 4 and Mouse 5")
 	}
-	if err := k.port.SetReadTimeout(replyWait + hold); err != nil {
-		k.closePort()
+	if err := b.port.SetReadTimeout(replyWait + hold); err != nil {
+		b.closePort()
 		return fmt.Errorf("ESP32 button timeout: %w", err)
 	}
-	return k.sendAction(fmt.Sprintf("BUTTON %d %d", vk-vkMouse4+4, hold.Milliseconds()), "button press")
+	return b.sendAction(fmt.Sprintf("BUTTON %d %d", vk-vkMouse4+4, hold.Milliseconds()), "button press")
 }
 
 // PreparePointer probes for pointer moves and right clicks without sending input.
-func (k *Keyboard) PreparePointer() error {
-	return k.prepareCapability("POINTER", &k.pointer)
+func (b *Board) PreparePointer() error {
+	return b.prepareCapability("POINTER", &b.pointer)
 }
 
 // CanPoint reports whether the open port advertised pointer support.
-func (k *Keyboard) CanPoint() bool {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	return k.pointer
+func (b *Board) CanPoint() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.pointer
 }
 
 // ClickRight presses and releases the right mouse button, with the same
 // failure contract as Tap.
-func (k *Keyboard) ClickRight() error {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	if k.port == nil || !k.pointer {
+func (b *Board) ClickRight() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.port == nil || !b.pointer {
 		return errors.New("ESP32 pointer support is unavailable")
 	}
-	return k.sendAction("CLICK", "right click")
+	return b.sendAction("CLICK", "right click")
 }
 
 // maxMoveSteps bounds MoveTo; a path within the game window needs about ten.
@@ -306,10 +306,10 @@ const maxMoveSteps = 40
 // scales each report by its pointer speed and acceleration, so every step reads
 // the real position from pos and divides the rest of the way by the gain the
 // previous step showed.
-func (k *Keyboard) MoveTo(target image.Point, pos func() (x, y int, ok bool)) error {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	if k.port == nil || !k.pointer {
+func (b *Board) MoveTo(target image.Point, pos func() (x, y int, ok bool)) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.port == nil || !b.pointer {
 		return errors.New("ESP32 pointer support is unavailable")
 	}
 	gain := [2]float64{1, 1}
@@ -328,14 +328,14 @@ func (k *Keyboard) MoveTo(target image.Point, pos func() (x, y int, ok bool)) er
 		for i := range step {
 			step[i] = reportStep(rest[i], gain[i])
 		}
-		reply, err := k.exchange(fmt.Sprintf("MOVE %d %d", step[0], step[1]))
+		reply, err := b.exchange(fmt.Sprintf("MOVE %d %d", step[0], step[1]))
 		// Getting past a failed step once is safe: the next step reads where
 		// the pointer really is, so a report that did go out is not sent twice.
-		if !resynced && k.recovered("pointer move", reply, err) {
+		if !resynced && b.recovered("pointer move", reply, err) {
 			resynced = true
 			continue
 		}
-		if err := k.result("pointer move", reply, err); err != nil {
+		if err := b.result("pointer move", reply, err); err != nil {
 			return err
 		}
 		sent := time.Now()
@@ -396,76 +396,76 @@ func settle(x, y int, pos func() (int, int, bool)) (int, int) {
 }
 
 // CanDragCamera reports whether the open port advertised mouse support.
-func (k *Keyboard) CanDragCamera() bool {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	return k.camera
+func (b *Board) CanDragCamera() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.camera
 }
 
 // DragCamera requests one bounded horizontal drag. The firmware owns the
 // press and release. An unacknowledged gesture is never retried.
-func (k *Keyboard) DragCamera(dx int) error {
+func (b *Board) DragCamera(dx int) error {
 	if dx < -24 || dx > 24 || dx == 0 {
 		return errors.New("ESP32 camera drag must be between 1 and 24 counts")
 	}
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	if k.port == nil || !k.camera {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.port == nil || !b.camera {
 		return errors.New("ESP32 mouse support is unavailable")
 	}
-	return k.sendAction(fmt.Sprintf("DRAG %d", dx), "camera drag")
+	return b.sendAction(fmt.Sprintf("DRAG %d", dx), "camera drag")
 }
 
 // Tap waits for acknowledgment of a bounded press and release. A failed
 // transaction closes the port because the press might already have happened.
-func (k *Keyboard) Tap(usage byte) error {
-	return k.TapFor(usage, 0)
+func (b *Board) Tap(usage byte) error {
+	return b.TapFor(usage, 0)
 }
 
 // TapFor requests a 10–500 ms hold on current firmware. Zero and legacy
 // firmware use the board's default hold. Call PrepareTimedTaps before the
 // run to enable the optional command.
-func (k *Keyboard) TapFor(usage byte, hold time.Duration) error {
+func (b *Board) TapFor(usage byte, hold time.Duration) error {
 	if usage < 0x04 || usage > 0x65 {
 		return errors.New("ESP32 requires a keyboard key")
 	}
 	if hold != 0 && (hold < 10*time.Millisecond || hold > 500*time.Millisecond) {
 		return errors.New("ESP32 hold must be between 10 and 500 ms")
 	}
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	if k.port == nil {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.port == nil {
 		return errors.New("ESP32 port is closed")
 	}
 	command := fmt.Sprintf("TAP %02X", usage)
 	custom := hold != 0 && hold != 40*time.Millisecond
 
-	if k.timed && custom {
+	if b.timed && custom {
 		command = fmt.Sprintf("%s %d", command, hold.Milliseconds())
 	}
-	if k.timed {
-		if err := k.port.SetReadTimeout(replyWait + hold); err != nil {
-			k.closePort()
+	if b.timed {
+		if err := b.port.SetReadTimeout(replyWait + hold); err != nil {
+			b.closePort()
 			return fmt.Errorf("ESP32 tap timeout: %w", err)
 		}
 	}
-	return k.sendAction(command, "tap")
+	return b.sendAction(command, "tap")
 }
 
 // sendAction runs with the port locked. A lost OK or a Bluetooth drop does not
 // halt the run once the board answers HELLO again: the action went out or was
 // dropped, and a cast or reel that never happened costs only that cast.
-func (k *Keyboard) sendAction(command, action string) error {
-	reply, err := k.exchange(command)
-	if k.recovered(action, reply, err) {
+func (b *Board) sendAction(command, action string) error {
+	reply, err := b.exchange(command)
+	if b.recovered(action, reply, err) {
 		return nil
 	}
-	return k.result(action, reply, err)
+	return b.result(action, reply, err)
 }
 
 // recovered reports whether the board is ready again after its OK was lost or
 // its Bluetooth link dropped. handshake waits up to pairWait for the link.
-func (k *Keyboard) recovered(action, reply string, err error) bool {
+func (b *Board) recovered(action, reply string, err error) bool {
 	cause := ""
 	switch {
 	case errors.Is(err, os.ErrDeadlineExceeded):
@@ -475,21 +475,21 @@ func (k *Keyboard) recovered(action, reply string, err error) bool {
 	default:
 		return false
 	}
-	if k.handshake() != nil {
+	if b.handshake() != nil {
 		return false
 	}
-	if k.Logger != nil {
-		k.Logger.Warn("ESP32 recovered", "action", action, "cause", cause)
+	if b.Logger != nil {
+		b.Logger.Warn("ESP32 recovered", "action", action, "cause", cause)
 	}
 	return true
 }
 
 // result closes the port unless the board acknowledged the action.
-func (k *Keyboard) result(action, reply string, err error) error {
+func (b *Board) result(action, reply string, err error) error {
 	if err == nil && reply == "OK" {
 		return nil
 	}
-	k.closePort()
+	b.closePort()
 	if err != nil {
 		return fmt.Errorf("ESP32 %s acknowledgment: %w", action, err)
 	}
@@ -500,30 +500,30 @@ func (k *Keyboard) result(action, reply string, err error) error {
 }
 
 // Close releases the port. The firmware owns the release of any pending tap.
-func (k *Keyboard) Close() {
-	k.mu.Lock()
-	defer k.mu.Unlock()
-	k.closePort()
+func (b *Board) Close() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.closePort()
 }
 
-func (k *Keyboard) closePort() {
-	if k.port != nil {
-		_ = k.port.Close()
-		k.port, k.reader, k.name = nil, nil, ""
-		k.timed, k.camera, k.pointer, k.buttons = false, false, false, false
+func (b *Board) closePort() {
+	if b.port != nil {
+		_ = b.port.Close()
+		b.port, b.reader, b.name = nil, nil, ""
+		b.timed, b.camera, b.pointer, b.buttons = false, false, false, false
 	}
 }
 
-func (k *Keyboard) exchange(command string) (string, error) {
+func (b *Board) exchange(command string) (string, error) {
 	data := command + "\n"
-	n, err := io.WriteString(k.port, data)
+	n, err := io.WriteString(b.port, data)
 	if err != nil {
 		return "", err
 	}
 	if n != len(data) {
 		return "", io.ErrShortWrite
 	}
-	reply, err := k.reader.ReadSlice('\n')
+	reply, err := b.reader.ReadSlice('\n')
 	return strings.TrimRight(string(reply), "\r\n"), err
 }
 

@@ -216,7 +216,7 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 						return 0, false
 					}
 				}
-				actions.OpenKeyboard = func(run config.Config) (func(), error) {
+				actions.OpenBoard = func(run config.Config) (func(), error) {
 					if run.ESP32Port != "COM3" {
 						t.Errorf("opened port %q", run.ESP32Port)
 					}
@@ -422,7 +422,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 						}
 						return 0, false
 					},
-					OpenKeyboard: func(config.Config) (func(), error) {
+					OpenBoard: func(config.Config) (func(), error) {
 						return func() {}, nil
 					},
 					PressKey:   func(byte) bool { t.Error("used Windows keyboard input"); return false },
