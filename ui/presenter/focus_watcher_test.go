@@ -1,6 +1,7 @@
 package presenter
 
 import (
+	"image"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,6 +13,15 @@ type mockFocusFSM struct {
 	state    atomic.Int32
 	acquired atomic.Int32
 	lost     atomic.Int32
+	settled  atomic.Int32
+	byMouse  atomic.Bool
+}
+
+func (m *mockFocusFSM) PausedByMouse() bool { return m.byMouse.Load() }
+func (m *mockFocusFSM) EventMouseSettled() {
+	m.settled.Add(1)
+	m.byMouse.Store(false)
+	m.set(fishing.StateSearching)
 }
 
 func (m *mockFocusFSM) set(s fishing.FishingState)    { m.state.Store(int32(s)) }
@@ -26,7 +36,7 @@ func (m *mockFocusFSM) EventFocusLost() {
 }
 
 func newFastWatcher(fsm FocusFSM, focused *atomic.Bool) *FocusWatcher {
-	w := NewFocusWatcher(fsm, focused.Load)
+	w := NewFocusWatcher(fsm, focused.Load, func() (image.Point, bool) { return image.Point{}, true })
 	w.interval = time.Millisecond
 	return w
 }
@@ -94,5 +104,32 @@ func TestFocusWatcherStopsOnHalt(t *testing.T) {
 
 	if fsm.lost.Load() != 0 {
 		t.Error("watcher kept polling after halt")
+	}
+}
+
+// A pause the mouse started ends only once the mouse has rested in the game:
+// focus alone does not end it, and a move starts the wait again.
+func TestFocusWatcherWaitsForTheMouseToRest(t *testing.T) {
+	fsm := &mockFocusFSM{}
+	fsm.set(fishing.StateWaitingFocus)
+	fsm.byMouse.Store(true)
+	var focused atomic.Bool
+	focused.Store(true)
+	var x atomic.Int32
+	w := NewFocusWatcher(fsm, focused.Load, func() (image.Point, bool) { return image.Pt(int(x.Load()), 0), true })
+	w.interval, w.rest = time.Millisecond, 30*time.Millisecond
+	w.OnState(fishing.StateHalt, fishing.StateWaitingFocus)
+	defer w.OnState(fishing.StateSearching, fishing.StateHalt)
+
+	for range 5 { // keeps moving: no resume
+		x.Add(10)
+		time.Sleep(10 * time.Millisecond)
+	}
+	if fsm.settled.Load() != 0 || fsm.acquired.Load() != 0 {
+		t.Fatal("resumed while the mouse was moving")
+	}
+	waitFor(t, "mouse settled", func() bool { return fsm.settled.Load() == 1 })
+	if fsm.acquired.Load() != 0 {
+		t.Error("focus alone ended a pause the mouse started")
 	}
 }

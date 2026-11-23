@@ -50,8 +50,8 @@ type Input interface {
 	// ClickRight clicks the bobber, or says why it could not.
 	ClickRight() error
 	// DragCamera turns the camera by dx. attempted is false when no drag fits,
-	// so the caller walks instead.
-	DragCamera(dx int) (attempted, moved bool)
+	// so the caller walks instead; otherwise err says why it did not turn.
+	DragCamera(dx int) (attempted bool, err error)
 }
 
 // Deps are what the FSM needs from outside: the Input, the Pointer and the
@@ -96,6 +96,11 @@ type CursorStep struct {
 // was not in front. The run pauses on it and continues once the game is back.
 var ErrNotInFront = errors.New("the game was not in front")
 
+// ErrMouseMoved is the Input's error for input it dropped because the person
+// moved the mouse. The run pauses on it and continues once the mouse has
+// rested in the game (EventMouseSettled).
+var ErrMouseMoved = errors.New("the mouse was moved")
+
 // ErrPointerMissed is an Input.MoveTo error for a pointer that still works but
 // did not land on the point. The FSM gives up that cast instead of halting.
 var ErrPointerMissed = errors.New("the pointer did not land on the bobber")
@@ -120,9 +125,9 @@ func (NopObserver) ReelTiming(ReelTimingEvent) {}
 // Pointer plans the pointer paths that the FSM loop moves along with
 // Input.MoveTo.
 type Pointer interface {
-	// Plan is the path to target. False means the app cannot safely take
-	// control of the pointer.
-	Plan(target image.Point, settle bool) ([]CursorStep, bool)
+	// Plan is the path to target, or why the app cannot safely take control
+	// of the pointer: ErrNotInFront and ErrMouseMoved pause the run.
+	Plan(target image.Point, settle bool) ([]CursorStep, error)
 	// Reset forgets where the last path left the pointer, so a move by the
 	// person after it is no takeover.
 	Reset()

@@ -13,11 +13,10 @@ import (
 // anything that could land in the wrong place. Its methods run on the FSM
 // goroutine, so its fields need no locking.
 type Guard struct {
-	Logger     *slog.Logger
-	InFront    func() bool                // the selected window has focus
-	Area       func() *image.Rectangle    // capture area in screen coordinates
-	CursorPos  func() (x, y int, ok bool) // where the pointer is now
-	OnTakeover func()                     // the user moved the pointer
+	Logger    *slog.Logger
+	InFront   func() bool                // the selected window has focus
+	Area      func() *image.Rectangle    // capture area in screen coordinates
+	CursorPos func() (x, y int, ok bool) // where the pointer is now
 	// The Board's input, sent when allowed.
 	Press   func(vk byte, hold time.Duration) error
 	Move    func(x, y int) error
@@ -41,7 +40,7 @@ func (g *Guard) Tap(vk byte, hold time.Duration) error {
 // MoveTo moves the pointer to a waypoint, or says why it did not.
 func (g *Guard) MoveTo(p image.Point) error {
 	if g.userMoved() {
-		return errors.New("the mouse was moved")
+		return fishing.ErrMouseMoved
 	}
 	g.hasTarget = false
 	if !g.InFront() {
@@ -64,53 +63,63 @@ func (g *Guard) ResetCursor() { g.hasTarget = false }
 
 // BeginCursor claims the pointer at its current position before scheduling the
 // first waypoint, so a move by the user during that wait also takes over.
-func (g *Guard) BeginCursor() (image.Point, image.Rectangle, bool) {
+func (g *Guard) BeginCursor() (image.Point, image.Rectangle, error) {
+	if !g.InFront() {
+		return image.Point{}, image.Rectangle{}, fishing.ErrNotInFront
+	}
 	area := g.Area()
-	if area == nil || !g.InFront() {
-		return image.Point{}, image.Rectangle{}, false
+	if area == nil {
+		return image.Point{}, image.Rectangle{}, errors.New("the game window is not known")
 	}
 	x, y, ok := g.CursorPos()
 	p := image.Pt(x, y)
-	if g.cursorTaken(p, ok) || !ok || !p.In(*area) {
-		return image.Point{}, image.Rectangle{}, false
+	if g.cursorTaken(p, ok) {
+		return image.Point{}, image.Rectangle{}, fishing.ErrMouseMoved
+	}
+	if !ok || !p.In(*area) {
+		return image.Point{}, image.Rectangle{}, errors.New("the pointer is outside the game window")
 	}
 	g.target, g.hasTarget = p, true
-	return p, *area, true
+	return p, *area, nil
 }
 
 // DragCamera keeps the drag inside the game and checks for user takeover
 // before moving. The game may relocate the pointer on release. attempted is
-// false when no drag fits, so the caller can walk instead.
-func (g *Guard) DragCamera(dx int) (attempted, moved bool) {
+// false when no drag fits, so the caller can walk instead; otherwise err says
+// why the drag did not happen.
+func (g *Guard) DragCamera(dx int) (attempted bool, err error) {
 	if !g.CanDrag() {
-		return false, false
+		return false, nil
 	}
 	if !g.InFront() {
-		return true, false
+		return true, fishing.ErrNotInFront
 	}
 	area := g.Area()
 	x, y, ok := g.CursorPos()
 	start := image.Pt(x, y)
 	if g.cursorTaken(start, ok) {
-		return true, false
+		return true, fishing.ErrMouseMoved
 	}
 	if area == nil || !ok {
-		return false, false
+		return false, nil
 	}
 	inner := area.Inset(8)
 	if !start.Add(image.Pt(3*dx, 0)).In(inner) || !start.In(inner) {
-		return false, false
+		return false, nil
 	}
 	g.target, g.hasTarget = start, true
 	defer g.ResetCursor()
-	if !g.InFront() || g.userMoved() || !g.CanDrag() {
-		return true, false
+	switch {
+	case !g.InFront():
+		return true, fishing.ErrNotInFront
+	case g.userMoved() || !g.CanDrag(): // a held left button is the person using the mouse
+		return true, fishing.ErrMouseMoved
 	}
 	if err := g.Drag(dx); err != nil {
 		g.Logger.Error("ESP32 camera drag failed", "error", err)
-		return true, false
+		return true, err
 	}
-	return true, true
+	return true, nil
 }
 
 // ClickRight clicks if the pointer is still where MoveTo left it, or
@@ -138,13 +147,13 @@ func (g *Guard) canClick() error {
 		return errors.New("the bobber was outside the game window")
 	}
 	if g.userMoved() {
-		return errors.New("the mouse was moved")
+		return fishing.ErrMouseMoved
 	}
 	return nil
 }
 
 // userMoved reports whether the pointer left the last target, which means the
-// user has taken over. It runs OnTakeover when that happens.
+// user has taken over.
 func (g *Guard) userMoved() bool {
 	if !g.hasTarget {
 		return false
@@ -167,6 +176,5 @@ func (g *Guard) cursorTaken(p image.Point, ok bool) bool {
 	}
 	g.Logger.Warn("input dropped: the user moved the cursor", "want_x", g.target.X, "want_y", g.target.Y, "x", p.X, "y", p.Y, "known", ok)
 	g.hasTarget = false
-	g.OnTakeover()
 	return true
 }

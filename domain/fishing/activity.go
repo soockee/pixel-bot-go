@@ -17,10 +17,11 @@ func (f *FishingFSM) idleMove() {
 		if roll(2) == 0 {
 			dx = -dx
 		}
-		if attempted, moved := f.deps.Input.DragCamera(dx); attempted {
-			if moved {
+		if attempted, err := f.deps.Input.DragCamera(dx); attempted {
+			if err == nil {
 				f.logger.Info("between-catch camera nudge", "dx", dx)
 			}
+			f.pauseFor(err) // a failed nudge costs nothing, unless the person took over
 			return
 		}
 	}
@@ -34,7 +35,10 @@ func (f *FishingFSM) idleMove() {
 		if !f.deps.InFront() {
 			return
 		}
-		_ = f.deps.Input.MoveTo(p) // a wander step that does not land is skipped
+		// A wander step that does not land is skipped, unless the person took over.
+		if f.pauseFor(f.deps.Input.MoveTo(p)) {
+			return
+		}
 		time.Sleep(wanderStep)
 	}
 	f.logger.Info("between-catch cursor wander", "from", start)

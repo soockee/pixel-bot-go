@@ -163,8 +163,8 @@ func anywhereDryRun() action.DryRun {
 // straightPointer goes straight to each target in one step.
 type straightPointer struct{}
 
-func (straightPointer) Plan(target image.Point, _ bool) ([]fishing.CursorStep, bool) {
-	return []fishing.CursorStep{{Point: target}}, true
+func (straightPointer) Plan(target image.Point, _ bool) ([]fishing.CursorStep, error) {
+	return []fishing.CursorStep{{Point: target}}, nil
 }
 func (straightPointer) Reset() {}
 func (straightPointer) Approach(center image.Point, _ image.Rectangle) (image.Point, bool) {

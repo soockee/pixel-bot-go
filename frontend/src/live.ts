@@ -2,7 +2,7 @@
 // the run is going against the limits that stop it.
 import { framesUrl, Service, type State } from "./api";
 import { $, clock, h } from "./dom";
-import { caption as captionFor, catches, cycle } from "./cycle";
+import { caption as captionFor, catches, cycle, stepOf } from "./cycle";
 
 export function setupLive(): (state: State) => void {
   const img = $<HTMLImageElement>("capture-img");
@@ -142,7 +142,7 @@ export function setupLive(): (state: State) => void {
     const step = captionFor(fsm);
     caption.hidden = !step;
     captionText.textContent = step;
-    for (const li of steps) li.classList.toggle("current", li.dataset.state === fsm);
+    for (const li of steps) li.classList.toggle("current", li.dataset.state === stepOf(fsm));
 
     $("watch-panel").hidden = !s.debug;
     if (s.debug) {

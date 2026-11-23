@@ -18,14 +18,14 @@ func TestReelWaitsForCursorAndStopCancelsRemainingSteps(t *testing.T) {
 			log := &actionLog{}
 			deps := recordingDeps(log)
 			deps.Pointer = &testPointer{
-				plan: func(target image.Point, settle bool) ([]CursorStep, bool) {
+				plan: func(target image.Point, settle bool) ([]CursorStep, error) {
 					if settle {
-						return []CursorStep{{After: time.Second, Point: target}}, true
+						return []CursorStep{{After: time.Second, Point: target}}, nil
 					}
 					return []CursorStep{
 						{After: 200 * time.Millisecond, Point: target.Sub(image.Pt(5, 0))},
 						{After: 600 * time.Millisecond, Point: target},
-					}, true
+					}, nil
 				},
 				reset: func() {},
 			}
@@ -63,8 +63,8 @@ func TestFocusLossForgetsThePointer(t *testing.T) {
 		resets := 0
 		deps := recordingDeps(&actionLog{})
 		deps.Pointer = &testPointer{
-			plan: func(target image.Point, _ bool) ([]CursorStep, bool) {
-				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, true
+			plan: func(target image.Point, _ bool) ([]CursorStep, error) {
+				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, nil
 			},
 			reset: func() { resets++ },
 		}
@@ -85,8 +85,8 @@ func TestRefusedCursorStepHaltsBeforeReel(t *testing.T) {
 		log := &actionLog{}
 		deps := recordingDeps(log)
 		deps.Pointer = &testPointer{
-			plan: func(target image.Point, _ bool) ([]CursorStep, bool) {
-				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, true
+			plan: func(target image.Point, _ bool) ([]CursorStep, error) {
+				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, nil
 			},
 			reset: func() {},
 		}
@@ -106,8 +106,8 @@ func TestMissedPointerGivesUpTheCast(t *testing.T) {
 		log := &actionLog{}
 		deps := recordingDeps(log)
 		deps.Pointer = &testPointer{
-			plan: func(target image.Point, _ bool) ([]CursorStep, bool) {
-				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, true
+			plan: func(target image.Point, _ bool) ([]CursorStep, error) {
+				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, nil
 			},
 			reset: func() {},
 		}
@@ -171,13 +171,13 @@ func TestPairedCursorReplay(t *testing.T) {
 				if profile == "fitted" {
 					planner := model.Planner(42)
 					deps.Pointer = &testPointer{
-						plan: func(target image.Point, settle bool) ([]CursorStep, bool) {
+						plan: func(target image.Point, settle bool) ([]CursorStep, error) {
 							path := planner(position, target, bounds, settle)
 							steps := make([]CursorStep, len(path))
 							for i, s := range path {
 								steps[i] = CursorStep{After: s.After, Point: s.Point}
 							}
-							return steps, len(steps) > 0
+							return steps, nil
 						},
 						reset: func() {},
 					}
