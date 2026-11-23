@@ -21,7 +21,7 @@ func TestSimulatedReelTiming(t *testing.T) {
 					return ReelTiming{Hold: 120 * time.Millisecond, Cooldown: 2 * time.Second}
 				}
 				var events []ReelTimingEvent
-				actions.ObserveReelTiming = func(e ReelTimingEvent) { events = append(events, e) }
+				actions.Observer = reelTimings(func(e ReelTimingEvent) { events = append(events, e) })
 				fsm := NewFSM(nil, testConfig(), actions)
 				defer fsm.Close()
 				var valid atomic.Bool
@@ -117,11 +117,11 @@ func TestPairedTimingReplay(t *testing.T) {
 						AfterDetection: time.Duration(model.Calibration.DelayUS(detector, s)) * time.Microsecond,
 					}
 				}
-				actions.ObserveReelTiming = func(e ReelTimingEvent) {
+				actions.Observer = reelTimings(func(e ReelTimingEvent) {
 					if e.Kind == "reel_released" {
 						releases = append(releases, time.Now())
 					}
-				}
+				})
 				engine, fsm, frames, _ := newSceneEngine(t, actions)
 				engine.cfg.CooldownSeconds = 3
 				defer fsm.Close()

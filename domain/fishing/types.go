@@ -71,10 +71,8 @@ type ActionCallbacks struct {
 	// OpenBoard validates and opens the Board for one run.
 	OpenBoard func(config.Config) (closeBoard func(), err error)
 
-	// ObserveCast and ObserveReel run when a cast or reel is scheduled.
-	// Each can return a callback to observe its eventual dispatch.
-	ObserveCast func() func()
-	ObserveReel func() func()
+	// Observer is required: NopObserver for a run without a trace.
+	Observer Observer
 
 	// Roll is required: a pseudorandom draw in [0, n), for every pause, idle
 	// move, reposition and deliberate miss the cycle varies.
@@ -86,8 +84,7 @@ type ActionCallbacks struct {
 
 	// PlanReel schedules a timed hold and cooldown. A zero cooldown keeps the
 	// configured value. A reel without the Board simulates the hold.
-	PlanReel          func(biteDetector string) ReelTiming
-	ObserveReelTiming func(ReelTimingEvent)
+	PlanReel func(biteDetector string) ReelTiming
 }
 
 // CursorStep places the pointer at Point, After time has elapsed in a plan.
@@ -103,6 +100,23 @@ var ErrNotInFront = errors.New("the game was not in front")
 // ErrPointerMissed is an Input.MoveTo error for a pointer that still works but
 // did not land on the point. The FSM gives up that cast instead of halting.
 var ErrPointerMissed = errors.New("the pointer did not land on the bobber")
+
+// Observer watches the cycle for a dry run's trace.
+type Observer interface {
+	// Cast and Reel run when a cast or reel is planned, and return what to
+	// run once it goes out.
+	Cast() (dispatched func())
+	Reel() (dispatched func())
+	// ReelTiming sees each simulated hold planned, released or canceled.
+	ReelTiming(ReelTimingEvent)
+}
+
+// NopObserver watches nothing.
+type NopObserver struct{}
+
+func (NopObserver) Cast() func()               { return func() {} }
+func (NopObserver) Reel() func()               { return func() {} }
+func (NopObserver) ReelTiming(ReelTimingEvent) {}
 
 // Pointer plans the pointer paths that the FSM loop moves along with
 // Input.MoveTo.

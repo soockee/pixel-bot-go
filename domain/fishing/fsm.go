@@ -523,17 +523,12 @@ func (f *FishingFSM) pressCast() bool {
 		f.halt()
 		return false
 	}
-	var dispatched func()
-	if f.actions.ObserveCast != nil {
-		dispatched = f.actions.ObserveCast()
-	}
+	dispatched := f.actions.Observer.Cast()
 	if err := f.actions.Input.Tap(vk, 0); err != nil {
 		f.inputFailed("could not cast: ", err)
 		return false
 	}
-	if dispatched != nil {
-		dispatched()
-	}
+	dispatched()
 	f.stats.casts.Add(1)
 	f.logger.Info("cast action executed", "key", f.cfg.CastKey)
 	return true
@@ -587,9 +582,7 @@ func (f *FishingFSM) startReel() {
 			aim = *f.missAim
 		}
 	}
-	if f.actions.ObserveReel != nil {
-		f.reelDone = f.actions.ObserveReel()
-	}
+	f.reelDone = f.actions.Observer.Reel()
 	f.reelDelay = reelClickDelay
 	if f.actions.PlanReel != nil {
 		f.reelTiming = f.actions.PlanReel(detect.SplashSoundName)
@@ -761,12 +754,10 @@ func (f *FishingFSM) resumeSearch() {
 }
 
 func (f *FishingFSM) observeReelTiming(kind, reason string) {
-	if f.actions.ObserveReelTiming != nil {
-		f.actions.ObserveReelTiming(ReelTimingEvent{
-			Kind: kind, Reason: reason, Detector: detect.SplashSoundName,
-			DetectorAt: f.detectorAt, Timing: f.reelTiming, Delay: f.reelDelay,
-		})
-	}
+	f.actions.Observer.ReelTiming(ReelTimingEvent{
+		Kind: kind, Reason: reason, Detector: detect.SplashSoundName,
+		DetectorAt: f.detectorAt, Timing: f.reelTiming, Delay: f.reelDelay,
+	})
 }
 
 func (f *FishingFSM) cancelReel(reason string) {

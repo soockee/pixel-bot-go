@@ -206,6 +206,7 @@ func TestFakeGameReplayFeedsDryRunAttemptsToScorer(t *testing.T) {
 			Roll:          rand.IntN,
 			InFront:       func() bool { return true },
 			Pointer:       straightPointer{},
+			Observer:      fishing.NopObserver{},
 		})
 		defer fsm.Close()
 		bite := detect.NewSplashSoundDetector(nil)

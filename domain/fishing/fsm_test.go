@@ -106,6 +106,13 @@ func (p *testPointer) Pos() (image.Point, bool) { return image.Point{}, false }
 // pointerOf is the testPointer of actions made by recordingActions.
 func pointerOf(actions ActionCallbacks) *testPointer { return actions.Pointer.(*testPointer) }
 
+// reelTimings is an Observer that only collects reel timing events.
+type reelTimings func(ReelTimingEvent)
+
+func (reelTimings) Cast() func()                   { return func() {} }
+func (reelTimings) Reel() func()                   { return func() {} }
+func (o reelTimings) ReelTiming(e ReelTimingEvent) { o(e) }
+
 // inputOf is the testInput of actions made by recordingActions.
 func inputOf(actions ActionCallbacks) *testInput { return actions.Input.(*testInput) }
 
@@ -122,6 +129,7 @@ func recordingActions(log *actionLog) ActionCallbacks {
 		SimulateHolds: true, // testConfig has no Board
 		InFront:       func() bool { return true },
 		Pointer:       &testPointer{},
+		Observer:      NopObserver{},
 		Roll:          rand.New(rand.NewPCG(1, 2)).IntN,
 	}
 }

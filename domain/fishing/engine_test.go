@@ -401,10 +401,11 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				var firstMove time.Time
 				input := &testInput{}
 				actions := ActionCallbacks{
-					Pointer: &testPointer{},
-					Roll:    rand.IntN,
-					InFront: func() bool { return true },
-					Input:   input,
+					Pointer:  &testPointer{},
+					Observer: NopObserver{},
+					Roll:     rand.IntN,
+					InFront:  func() bool { return true },
+					Input:    input,
 					OpenBoard: func(config.Config) (func(), error) {
 						return func() {}, nil
 					},

@@ -81,10 +81,11 @@ func TestFocusRaceAtRepositionPauses(t *testing.T) {
 		logger: testLogger,
 		state:  StateCooldown,
 		actions: ActionCallbacks{
-			InFront: func() bool { return true },
-			Pointer: &testPointer{},
-			Roll:    func(int) int { return 0 },
-			Input:   &testInput{tap: func(byte, time.Duration) error { return ErrNotInFront }},
+			InFront:  func() bool { return true },
+			Pointer:  &testPointer{},
+			Observer: NopObserver{},
+			Roll:     func(int) int { return 0 },
+			Input:    &testInput{tap: func(byte, time.Duration) error { return ErrNotInFront }},
 		},
 	}
 	f.startReposition()
