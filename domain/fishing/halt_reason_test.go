@@ -79,8 +79,9 @@ func TestNewRunForgetsTheLastReason(t *testing.T) {
 func TestUnknownCastKeySaysWhy(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		actions := recordingActions(&actionLog{})
-		actions.ParseVK = func(string) (byte, bool) { return 0, false }
-		m := NewFSM(nil, testConfig(), actions)
+		cfg := testConfig()
+		cfg.CastKey = "Ctrl" // no key Go Fish can press
+		m := NewFSM(nil, cfg, actions)
 		defer m.Close()
 		m.EventAwaitFocus()
 		m.EventFocusAcquired()

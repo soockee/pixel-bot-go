@@ -65,7 +65,6 @@ type ActionCallbacks struct {
 	SimulateHolds bool
 	// CursorPos reads the pointer, where a between-catch wander starts.
 	CursorPos func() (x, y int, ok bool)
-	ParseVK   func(key string) (byte, bool)
 	// CanAct checks focus just before dispatching an optional action.
 	CanAct func() bool
 	// OpenBoard validates and opens the Board for one run.

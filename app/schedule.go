@@ -5,7 +5,7 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/soocke/pixel-bot-go/domain/action"
+	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/internal/esp32"
 )
@@ -62,18 +62,10 @@ func (a *app) prepareSchedule() (*playSchedule, error) {
 	if err := cfg.CheckSchedule(); err != nil {
 		return nil, err
 	}
-	key, ok := action.ParseVK(cfg.LogoutKey)
-	if !ok {
-		return nil, errors.New("set the Logout key under Settings, Scheduled breaks")
+	if err := cfg.CheckRunKeys(); err != nil { // breaks and reposition both need Logout
+		return nil, err
 	}
-	for _, other := range []string{cfg.CastKey, cfg.InteractKey} {
-		if vk, ok := action.ParseVK(other); ok && key == vk {
-			return nil, errors.New("the Logout key must differ from the other Go Fish keys")
-		}
-	}
-	if !esp32.SupportsKey(key) {
-		return nil, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Logout")
-	}
+	key, _ := config.KeyCode(cfg.LogoutKey)
 	return &playSchedule{logout: key, screen: a.scheduleScreen, tap: a.tapScheduledKey}, nil
 }
 

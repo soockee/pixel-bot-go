@@ -85,7 +85,6 @@ func recordingActions(log *actionLog) ActionCallbacks {
 			move:  func(image.Point) error { log.add("move"); return nil },
 			click: func() error { log.add("click"); return nil },
 		},
-		ParseVK:       func(string) (byte, bool) { return 0, true },
 		SimulateHolds: true, // testConfig has no Board
 		Roll:          rand.New(rand.NewPCG(1, 2)).IntN,
 	}
@@ -396,12 +395,6 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 				log := &actionLog{}
 				actions := recordingActions(log)
 				actions.Roll = func(int) int { return 0 } // reposition after 45 reels, settle 550 ms
-				actions.ParseVK = func(key string) (byte, bool) {
-					if len(key) == 1 && strings.Contains("WASD", key) {
-						return key[0], true
-					}
-					return 'F', true
-				}
 				inputOf(actions).tap = func(vk byte, _ time.Duration) error {
 					if strings.ContainsRune("WASD", rune(vk)) {
 						log.add("reposition")
@@ -499,7 +492,6 @@ func TestAutomaticRepositionUsesOnlyESP32WhenSelected(t *testing.T) {
 		logger:              testLogger,
 		repositionDirection: 4,
 		actions: ActionCallbacks{
-			ParseVK: func(key string) (byte, bool) { return key[0], true },
 			Input: &testInput{tap: func(vk byte, _ time.Duration) error {
 				taps = append(taps, vk)
 				return nil

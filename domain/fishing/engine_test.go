@@ -125,9 +125,6 @@ func TestInteractKeyReelRequiresAFreshMarkerAndReleasesOnFocusLoss(t *testing.T)
 			synctest.Test(t, func(t *testing.T) {
 				log := &actionLog{}
 				actions := recordingActions(log)
-				actions.ParseVK = func(key string) (byte, bool) {
-					return 'F', key == "F"
-				}
 				inputOf(actions).tap = func(vk byte, _ time.Duration) error {
 					if vk != 'F' {
 						t.Errorf("Interact vk = %d, want F", vk)
@@ -207,16 +204,6 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 				log := &actionLog{}
 				actions := recordingActions(log)
 				actions.SimulateHolds = false // the Board times its holds
-				actions.ParseVK = func(key string) (byte, bool) {
-					switch key {
-					case "F9":
-						return 0x78, true
-					case "F":
-						return 'F', true
-					default:
-						return 0, false
-					}
-				}
 				actions.OpenBoard = func(run config.Config) (func(), error) {
 					if run.ESP32Port != "COM3" {
 						t.Errorf("opened port %q", run.ESP32Port)
@@ -416,16 +403,6 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				actions := ActionCallbacks{
 					Roll:  rand.IntN,
 					Input: input,
-					ParseVK: func(key string) (byte, bool) {
-						switch key {
-						case "F9":
-							return 0x78, true
-						}
-						if len(key) == 1 {
-							return key[0], true
-						}
-						return 0, false
-					},
 					OpenBoard: func(config.Config) (func(), error) {
 						return func() {}, nil
 					},

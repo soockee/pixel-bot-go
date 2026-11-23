@@ -278,7 +278,7 @@ func (a *app) toggleCapture() {
 			c.View.SetStatus("Cannot start: " + problem)
 			return
 		}
-		if err := fishing.CheckActivityKeys(*c.Config, action.ParseVK); err != nil {
+		if err := c.Config.CheckRunKeys(); err != nil {
 			c.View.SetStatus("Cannot start: " + err.Error())
 			return
 		}

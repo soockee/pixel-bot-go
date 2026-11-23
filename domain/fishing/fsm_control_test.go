@@ -177,8 +177,9 @@ func TestUnknownCastKeyHaltsWithoutPressing(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}
 		actions := recordingActions(log)
-		actions.ParseVK = func(string) (byte, bool) { return 0, false }
-		m := NewFSM(nil, testConfig(), actions)
+		cfg := testConfig()
+		cfg.CastKey = "Ctrl" // no key Go Fish can press
+		m := NewFSM(nil, cfg, actions)
 		defer m.Close()
 		startMonitoring(t, m)
 

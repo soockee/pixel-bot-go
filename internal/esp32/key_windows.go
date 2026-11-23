@@ -37,7 +37,7 @@ var scanUsage = [...]byte{
 // ForegroundUsage resolves a virtual key through the active window's layout.
 func ForegroundUsage(vk byte) (byte, bool) {
 	// Enter is used for scheduled login; the side buttons have no key position.
-	if !SupportsKey(vk) && vk != 0x0d || vk == vkMouse4 || vk == vkMouse5 {
+	if !supportsKey(vk) && vk != 0x0d || vk == vkMouse4 || vk == vkMouse5 {
 		return 0, false
 	}
 	window := windows.GetForegroundWindow()
