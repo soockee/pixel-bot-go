@@ -4,39 +4,40 @@ import (
 	"errors"
 	"image"
 	"log/slog"
+	"time"
 )
 
-// Guard wraps real input and drops anything that could land in the wrong place.
-// Its methods run on the FSM goroutine, so its fields need no locking.
+// Guard is the live fishing.Input: it sends input to the Board and drops
+// anything that could land in the wrong place. Its methods run on the FSM
+// goroutine, so its fields need no locking.
 type Guard struct {
 	Logger     *slog.Logger
 	InFront    func() bool                // the selected window has focus
 	Area       func() *image.Rectangle    // capture area in screen coordinates
 	CursorPos  func() (x, y int, ok bool) // where the pointer is now
 	OnTakeover func()                     // the user moved the pointer
-	Press      func(vk byte) bool         // input that is sent when allowed
-	Move       func(x, y int) error       //
-	Click      func() error               //
-	target     image.Point                // where the last Move left the pointer
-	hasTarget  bool
+	// The Board's input, sent when allowed.
+	Press   func(vk byte, hold time.Duration) error
+	Move    func(x, y int) error
+	Click   func() error
+	CanDrag func() bool // the Board can drag and the left button is free
+	Drag    func(dx int) error
+
+	target    image.Point // where the last Move left the pointer
+	hasTarget bool
 }
 
-// PressKey sends the key if it can reach the game.
-func (g *Guard) PressKey(vk byte) bool {
+// Tap sends the key if it can reach the game.
+func (g *Guard) Tap(vk byte, hold time.Duration) error {
 	if !g.InFront() {
 		g.Logger.Warn("input dropped: selected window is not in front", "action", "press_key")
-		return false
+		return errors.New("selected game window lost focus")
 	}
-	return g.Press(vk)
+	return g.Press(vk, hold)
 }
 
-// MoveCursor moves the pointer to a point inside the capture area.
-func (g *Guard) MoveCursor(x, y int) {
-	_ = g.TryMoveCursor(image.Pt(x, y))
-}
-
-// TryMoveCursor moves the pointer to a waypoint, or says why it did not.
-func (g *Guard) TryMoveCursor(p image.Point) error {
+// MoveTo moves the pointer to a waypoint, or says why it did not.
+func (g *Guard) MoveTo(p image.Point) error {
 	if g.userMoved() {
 		return errors.New("the mouse was moved")
 	}
@@ -76,8 +77,12 @@ func (g *Guard) BeginCursor() (image.Point, image.Rectangle, bool) {
 }
 
 // DragCamera keeps the drag inside the game and checks for user takeover
-// before moving. The game may relocate the pointer on release.
-func (g *Guard) DragCamera(dx int, drag func(int, func() bool) bool) (attempted, moved bool) {
+// before moving. The game may relocate the pointer on release. attempted is
+// false when no drag fits, so the caller can walk instead.
+func (g *Guard) DragCamera(dx int) (attempted, moved bool) {
+	if !g.CanDrag() {
+		return false, false
+	}
 	if !g.InFront() {
 		return true, false
 	}
@@ -96,10 +101,17 @@ func (g *Guard) DragCamera(dx int, drag func(int, func() bool) bool) (attempted,
 	}
 	g.target, g.hasTarget = start, true
 	defer g.ResetCursor()
-	return true, drag(dx, func() bool { return g.InFront() && !g.userMoved() })
+	if !g.InFront() || g.userMoved() || !g.CanDrag() {
+		return true, false
+	}
+	if err := g.Drag(dx); err != nil {
+		g.Logger.Error("ESP32 camera drag failed", "error", err)
+		return true, false
+	}
+	return true, true
 }
 
-// ClickRight clicks if the pointer is still where MoveCursor left it, or
+// ClickRight clicks if the pointer is still where MoveTo left it, or
 // says why it did not.
 func (g *Guard) ClickRight() error {
 	if err := g.canClick(); err != nil {

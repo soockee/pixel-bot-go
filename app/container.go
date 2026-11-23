@@ -71,14 +71,6 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	dryRun := cfg.DryRun
 	if dryRun {
 		logger.Warn("dry-run enabled: input actions are logged, not injected")
-		callbacks.PressKey, callbacks.MoveCursor, callbacks.ClickRight = action.DryRun(logger)
-		callbacks.HoldInteract = func(vk byte) func() {
-			if !inFront() {
-				return nil
-			}
-			callbacks.PressKey(vk)
-			return func() {}
-		}
 		if trace.Model != nil || trace.Output != nil {
 			c.trace = newLiveTrace(trace.Model, trace.Output, trace.Start)
 			callbacks.ObserveCast, callbacks.ObserveReel = c.trace.cast, c.trace.bite
@@ -95,7 +87,9 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		if plan == nil {
 			plan = cursormotion.DefaultPath
 		}
-		callbacks.Cursor = c.dryCursor(plan, inFront, callbacks.MoveCursor)
+		cursor, moved := c.dryCursor(plan, inFront)
+		callbacks.Cursor = cursor
+		callbacks.Input = action.DryRun{Logger: logger, InFront: inFront, Area: c.gameArea, Moved: moved}
 		callbacks.Approach = cursormotion.ApproachPoint
 	} else {
 		callbacks.ReelRoll = rand.IntN
@@ -194,42 +188,16 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			}
 			return nil
 		}
-		press := func(vk byte) bool {
-			if err := board.Press(vk, 0); err != nil {
-				logger.Error("ESP32 key press failed", "error", err)
-				return false
-			}
-			return true
-		}
-		callbacks.TapKeyboard = func(vk byte, hold time.Duration) error {
-			if !inFront() {
-				return errors.New("selected game window lost focus")
-			}
-			return board.Press(vk, hold)
-		}
 		guard := &action.Guard{
 			Logger: logger, InFront: inFront, Area: c.gameArea, CursorPos: action.CursorPos,
 			// The guard runs on the FSM goroutine, which must not wait on its own queue.
 			OnTakeover: func() { go c.FSM.EventHaltBecause("the mouse was moved") },
-			Press:      press, Move: move, Click: click,
+			Press:      board.Press, Move: move, Click: click,
+			CanDrag: func() bool { return board.CanDragCamera() && !action.LeftMouseDown() },
+			Drag:    board.DragCamera,
 		}
-		callbacks.PressKey, callbacks.MoveCursor, callbacks.ClickRight = guard.PressKey, guard.MoveCursor, guard.ClickRight
+		callbacks.Input = guard
 		callbacks.CursorPos = action.CursorPos
-		callbacks.DragHardwareCamera = func(dx int) (bool, bool) {
-			if !board.CanDragCamera() || action.LeftMouseDown() {
-				return false, false
-			}
-			return guard.DragCamera(dx, func(dx int, allowed func() bool) bool {
-				if !allowed() || action.LeftMouseDown() {
-					return false
-				}
-				if err := board.DragCamera(dx); err != nil {
-					logger.Error("ESP32 camera drag failed", "error", err)
-					return false
-				}
-				return true
-			})
-		}
 		plan := trace.Cursor
 		if plan == nil {
 			plan = cursormotion.DefaultPath
@@ -250,7 +218,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 				}
 				return cursorSteps(plan(start, target, area, settle))
 			},
-			Move: guard.TryMoveCursor, Reset: guard.ResetCursor,
+			Reset: guard.ResetCursor,
 		}
 	}
 	if !dryRun || trace.Timing != nil || trace.Output != nil {
@@ -308,9 +276,17 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	return c
 }
 
-func (c *AppContainer) dryCursor(plan cursormotion.Planner, inFront func() bool, move func(int, int)) *fishing.CursorCallbacks {
+// dryCursor plans a dry run's pointer path from where its last logged move
+// left the pointer; moved, for action.DryRun, keeps that point.
+func (c *AppContainer) dryCursor(plan cursormotion.Planner, inFront func() bool) (cursor *fishing.CursorCallbacks, moved func(image.Point, image.Rectangle)) {
 	var current image.Point
 	var positioned bool
+	moved = func(p image.Point, area image.Rectangle) {
+		current = p
+		if c.trace != nil && c.trace.output != nil {
+			c.trace.cursorWaypoint(p, area)
+		}
+	}
 	return &fishing.CursorCallbacks{
 		Plan: func(target image.Point, settle bool) ([]fishing.CursorStep, bool) {
 			area := c.gameArea()
@@ -323,20 +299,8 @@ func (c *AppContainer) dryCursor(plan cursormotion.Planner, inFront func() bool,
 			}
 			return cursorSteps(plan(current, target, *area, settle))
 		},
-		Move: func(p image.Point) error {
-			area := c.gameArea()
-			if !inFront() || area == nil || !p.In(*area) {
-				return errors.New("the game was not in front, or the pointer path left it")
-			}
-			move(p.X, p.Y)
-			current = p
-			if c.trace != nil && c.trace.output != nil {
-				c.trace.cursorWaypoint(p, *area)
-			}
-			return nil
-		},
 		Reset: func() { positioned = false },
-	}
+	}, moved
 }
 
 func cursorSteps(path []cursormotion.Step) ([]fishing.CursorStep, bool) {

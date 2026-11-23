@@ -42,22 +42,31 @@ func (s FishingState) String() string {
 	}
 }
 
+// Input is all input the cycle sends to the game. The live one goes to the
+// Board through action.Guard, a dry run's only to the log (docs/adr/0001).
+type Input interface {
+	// Tap presses vk for hold, or for the Board's default hold when it is zero.
+	Tap(vk byte, hold time.Duration) error
+	// MoveTo puts the pointer on p, or says why it did not get there.
+	MoveTo(p image.Point) error
+	// ClickRight clicks the bobber, or says why it could not.
+	ClickRight() error
+	// DragCamera turns the camera by dx. attempted is false when no drag fits,
+	// so the caller walks instead.
+	DragCamera(dx int) (attempted, moved bool)
+}
+
 // ActionCallbacks exposes OS actions used by the fishing logic.
 type ActionCallbacks struct {
-	PressKey   func(vk byte) bool
-	MoveCursor func(x, y int)
+	// Input is required: every key, click and pointer move goes through it.
+	Input Input
 	// CursorPos reads the pointer, where a between-catch wander starts.
 	CursorPos func() (x, y int, ok bool)
-	// ClickRight clicks the bobber, or says why it could not.
-	ClickRight func() error
-	ParseVK    func(key string) (byte, bool)
+	ParseVK   func(key string) (byte, bool)
 	// CanAct checks focus just before dispatching an optional action.
 	CanAct func() bool
-	// DragHardwareCamera sends a drag through the ESP32 when supported.
-	DragHardwareCamera func(dx int) (attempted, moved bool)
-	// OpenBoard validates and opens the external keyboard for one run.
-	OpenBoard   func(config.Config) (closeBoard func(), err error)
-	TapKeyboard func(vk byte, hold time.Duration) error
+	// OpenBoard validates and opens the Board for one run.
+	OpenBoard func(config.Config) (closeBoard func(), err error)
 
 	// ObserveCast and ObserveReel run when a cast or reel is scheduled.
 	// Each can return a callback to observe its eventual dispatch.
@@ -72,9 +81,8 @@ type ActionCallbacks struct {
 	Approach func(center image.Point, box image.Rectangle) (image.Point, bool)
 
 	// PlanReel schedules a timed hold and cooldown. A zero cooldown keeps the
-	// configured value. A right-click reel without the board simulates the hold.
+	// configured value. A reel without the Board simulates the hold.
 	PlanReel          func(biteDetector string) ReelTiming
-	HoldInteract      func(vk byte) func() // returns a mandatory release, nil if press failed
 	ObserveReelTiming func(ReelTimingEvent)
 	CanSimulateReel   func() bool
 	Cursor            *CursorCallbacks
@@ -90,11 +98,11 @@ type CursorStep struct {
 // did not land on the point. The FSM gives up that cast instead of halting.
 var ErrPointerMissed = errors.New("the pointer did not land on the bobber")
 
-// CursorCallbacks plans and executes a path on the FSM loop. False from Plan
-// or Move means the app cannot safely take control of the pointer.
+// CursorCallbacks plans a path that the FSM loop moves along with
+// Input.MoveTo. False from Plan means the app cannot safely take control of
+// the pointer.
 type CursorCallbacks struct {
 	Plan  func(target image.Point, settle bool) ([]CursorStep, bool)
-	Move  func(image.Point) error // nil, or why the pointer did not get there
 	Reset func()
 }
 

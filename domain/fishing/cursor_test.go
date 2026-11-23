@@ -27,15 +27,15 @@ func TestReelWaitsForCursorAndStopCancelsRemainingSteps(t *testing.T) {
 						{After: 600 * time.Millisecond, Point: target},
 					}, true
 				},
-				Move: func(p image.Point) error {
-					if p == image.Pt(10, 10) {
-						log.add("target")
-					} else {
-						log.add("waypoint")
-					}
-					return nil
-				},
 				Reset: func() {},
+			}
+			inputOf(actions).move = func(p image.Point) error {
+				if p == image.Pt(10, 10) {
+					log.add("target")
+				} else {
+					log.add("waypoint")
+				}
+				return nil
 			}
 			fsm := NewFSM(nil, testConfig(), actions)
 			defer fsm.Close()
@@ -66,7 +66,6 @@ func TestFocusLossForgetsThePointer(t *testing.T) {
 			Plan: func(target image.Point, _ bool) ([]CursorStep, bool) {
 				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, true
 			},
-			Move:  func(image.Point) error { return nil },
 			Reset: func() { resets++ },
 		}
 		fsm := NewFSM(nil, testConfig(), actions)
@@ -89,9 +88,9 @@ func TestRefusedCursorStepHaltsBeforeReel(t *testing.T) {
 			Plan: func(target image.Point, _ bool) ([]CursorStep, bool) {
 				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, true
 			},
-			Move:  func(image.Point) error { return errors.New("blocked") },
 			Reset: func() {},
 		}
+		inputOf(actions).move = func(image.Point) error { return errors.New("blocked") }
 		fsm := NewFSM(nil, testConfig(), actions)
 		defer fsm.Close()
 		startMonitoring(t, fsm)
@@ -110,9 +109,9 @@ func TestMissedPointerGivesUpTheCast(t *testing.T) {
 			Plan: func(target image.Point, _ bool) ([]CursorStep, bool) {
 				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, true
 			},
-			Move:  func(image.Point) error { return ErrPointerMissed },
 			Reset: func() {},
 		}
+		inputOf(actions).move = func(image.Point) error { return ErrPointerMissed }
 		cfg := testConfig()
 		cfg.MaxFailedCasts = 2
 		fsm := NewFSM(nil, cfg, actions)
@@ -153,7 +152,7 @@ func TestPairedCursorReplay(t *testing.T) {
 				var fsm *FishingFSM
 				var presses, cues []time.Time
 				var moves int
-				actions.ClickRight = func() error {
+				inputOf(actions).click = func() error {
 					x, y, ok := fsm.TargetCoordinates()
 					if !ok || position != image.Pt(x, y) {
 						t.Errorf("reel attempted at %v, target is (%d,%d)", position, x, y)
@@ -161,9 +160,13 @@ func TestPairedCursorReplay(t *testing.T) {
 					presses = append(presses, time.Now())
 					return nil
 				}
-				actions.MoveCursor = func(x, y int) {
-					position = image.Pt(x, y)
+				inputOf(actions).move = func(p image.Point) error {
+					position = p
 					moves++
+					if actions.Cursor != nil && !p.In(bounds) {
+						return errors.New("outside")
+					}
+					return nil
 				}
 				if profile == "fitted" {
 					planner := model.Planner(42)
@@ -175,13 +178,6 @@ func TestPairedCursorReplay(t *testing.T) {
 								steps[i] = CursorStep{After: s.After, Point: s.Point}
 							}
 							return steps, len(steps) > 0
-						},
-						Move: func(p image.Point) error {
-							actions.MoveCursor(p.X, p.Y)
-							if !p.In(bounds) {
-								return errors.New("outside")
-							}
-							return nil
 						},
 						Reset: func() {},
 					}
