@@ -2,6 +2,7 @@ package fishing
 
 import (
 	"errors"
+	"image"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -24,6 +25,13 @@ func TestFocusRaceAtInputPauses(t *testing.T) {
 			m.EventFocusAcquired()
 			wantState(t, m, StateSearching)
 			m.ForceCast()
+		}},
+		{"pointer", func(in *testInput, err error) {
+			in.move = func(image.Point) error { return err }
+		}, func(t *testing.T, m *FishingFSM) {
+			m.EventAwaitFocus()
+			m.EventFocusAcquired()
+			m.EventTargetAcquiredAt(10, 10) // the move onto the bobber is refused
 		}},
 		{"reel", func(in *testInput, err error) {
 			in.click = func() error { return err }
@@ -74,6 +82,7 @@ func TestFocusRaceAtRepositionPauses(t *testing.T) {
 		state:  StateCooldown,
 		actions: ActionCallbacks{
 			InFront: func() bool { return true },
+			Pointer: &testPointer{},
 			Roll:    func(int) int { return 0 },
 			Input:   &testInput{tap: func(byte, time.Duration) error { return ErrNotInFront }},
 		},

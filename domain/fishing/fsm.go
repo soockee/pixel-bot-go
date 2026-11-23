@@ -183,9 +183,7 @@ func (f *FishingFSM) handle(ev any) {
 			f.checkingReposition = false
 			f.repositionLogout.Store(false)
 			f.planReposition()
-			if f.actions.Cursor != nil {
-				f.actions.Cursor.Reset()
-			}
+			f.actions.Pointer.Reset()
 			limit := f.cfg.MaxSessionMinutes
 			if f.cfg.Schedule {
 				limit = max(limit, f.cfg.PlayMaxMinutes+1)
@@ -488,9 +486,7 @@ func (f *FishingFSM) transition(next FishingState) {
 	switch next {
 	case StateWaitingFocus:
 		// The person may use the mouse while the game is not in front; that is no takeover.
-		if f.actions.Cursor != nil {
-			f.actions.Cursor.Reset()
-		}
+		f.actions.Pointer.Reset()
 	case StateSearching:
 		f.arm(searchTimeout)
 	case StateCasting:
@@ -549,10 +545,7 @@ func (f *FishingFSM) startMonitoring() {
 		return
 	}
 	if f.cfg.ReelMethod != config.ReelInteractKey {
-		aim, move := image.Pt(f.coordX, f.coordY), true
-		if f.actions.Approach != nil {
-			aim, move = f.actions.Approach(aim, f.targetBox)
-		}
+		aim, move := f.actions.Pointer.Approach(image.Pt(f.coordX, f.coordY), f.targetBox)
 		if move && !f.beginCursor(aim, true) {
 			return
 		}
@@ -633,11 +626,7 @@ func (f *FishingFSM) startReel() {
 }
 
 func (f *FishingFSM) beginCursor(target image.Point, settle bool) bool {
-	if f.actions.Cursor == nil {
-		_ = f.actions.Input.MoveTo(target)
-		return true
-	}
-	steps, ok := f.actions.Cursor.Plan(target, settle)
+	steps, ok := f.actions.Pointer.Plan(target, settle)
 	if !ok || len(steps) == 0 || steps[len(steps)-1].Point != target {
 		if !f.actions.InFront() {
 			f.transition(StateWaitingFocus)

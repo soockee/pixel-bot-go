@@ -72,6 +72,40 @@ func (i *testInput) DragCamera(dx int) (attempted, moved bool) {
 	return i.drag(dx)
 }
 
+// testPointer is the Pointer of FSM tests: each method calls its field, and
+// an unset field goes straight to the target, waits on the bobber itself and
+// does not know where the pointer is.
+type testPointer struct {
+	plan     func(target image.Point, settle bool) ([]CursorStep, bool)
+	reset    func()
+	approach func(center image.Point, box image.Rectangle) (image.Point, bool)
+}
+
+func (p *testPointer) Plan(target image.Point, settle bool) ([]CursorStep, bool) {
+	if p.plan == nil {
+		return []CursorStep{{Point: target}}, true
+	}
+	return p.plan(target, settle)
+}
+
+func (p *testPointer) Reset() {
+	if p.reset != nil {
+		p.reset()
+	}
+}
+
+func (p *testPointer) Approach(center image.Point, box image.Rectangle) (image.Point, bool) {
+	if p.approach == nil {
+		return center, true
+	}
+	return p.approach(center, box)
+}
+
+func (p *testPointer) Pos() (image.Point, bool) { return image.Point{}, false }
+
+// pointerOf is the testPointer of actions made by recordingActions.
+func pointerOf(actions ActionCallbacks) *testPointer { return actions.Pointer.(*testPointer) }
+
 // inputOf is the testInput of actions made by recordingActions.
 func inputOf(actions ActionCallbacks) *testInput { return actions.Input.(*testInput) }
 
@@ -87,6 +121,7 @@ func recordingActions(log *actionLog) ActionCallbacks {
 		},
 		SimulateHolds: true, // testConfig has no Board
 		InFront:       func() bool { return true },
+		Pointer:       &testPointer{},
 		Roll:          rand.New(rand.NewPCG(1, 2)).IntN,
 	}
 }
@@ -568,7 +603,7 @@ func TestApproachAndReelDelayAreIndependent(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			log := &actionLog{}
 			actions := recordingActions(log)
-			actions.Approach = func(_ image.Point, box image.Rectangle) (image.Point, bool) {
+			pointerOf(actions).approach = func(_ image.Point, box image.Rectangle) (image.Point, bool) {
 				return box.Min.Add(image.Pt(4, 4)), moveBeforeBite
 			}
 			inputOf(actions).move = func(p image.Point) error {

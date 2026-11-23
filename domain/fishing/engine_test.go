@@ -401,6 +401,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				var firstMove time.Time
 				input := &testInput{}
 				actions := ActionCallbacks{
+					Pointer: &testPointer{},
 					Roll:    rand.IntN,
 					InFront: func() bool { return true },
 					Input:   input,

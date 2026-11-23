@@ -205,6 +205,7 @@ func TestFakeGameReplayFeedsDryRunAttemptsToScorer(t *testing.T) {
 			SimulateHolds: true, // as the app's dry run
 			Roll:          rand.IntN,
 			InFront:       func() bool { return true },
+			Pointer:       straightPointer{},
 		})
 		defer fsm.Close()
 		bite := detect.NewSplashSoundDetector(nil)
@@ -349,3 +350,15 @@ func (i observedInput) ClickRight() error {
 	i.clicked()
 	return nil
 }
+
+// straightPointer goes straight to each target in one step.
+type straightPointer struct{}
+
+func (straightPointer) Plan(target image.Point, _ bool) ([]fishing.CursorStep, bool) {
+	return []fishing.CursorStep{{Point: target}}, true
+}
+func (straightPointer) Reset() {}
+func (straightPointer) Approach(center image.Point, _ image.Rectangle) (image.Point, bool) {
+	return center, true
+}
+func (straightPointer) Pos() (image.Point, bool) { return image.Point{}, false }

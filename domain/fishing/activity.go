@@ -24,11 +24,9 @@ func (f *FishingFSM) idleMove() {
 			return
 		}
 	}
-	start := image.Pt(f.coordX, f.coordY)
-	if f.actions.CursorPos != nil {
-		if x, y, ok := f.actions.CursorPos(); ok {
-			start = image.Pt(x, y)
-		}
+	start, ok := f.actions.Pointer.Pos()
+	if !ok {
+		start = image.Pt(f.coordX, f.coordY)
 	}
 	// shortcut: the path runs on the FSM loop, so a Stop waits for it (about
 	// half a second); schedule its points as timed steps if that is too slow.

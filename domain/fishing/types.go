@@ -63,8 +63,8 @@ type ActionCallbacks struct {
 	// SimulateHolds makes the FSM hold keys on its own clock, so a dry run's
 	// trace shows each press and release. Without it the Board times its holds.
 	SimulateHolds bool
-	// CursorPos reads the pointer, where a between-catch wander starts.
-	CursorPos func() (x, y int, ok bool)
+	// Pointer is required: it plans, aims and reads the pointer that Input moves.
+	Pointer Pointer
 	// InFront is required: whether the game has focus, checked before optional
 	// input and before a reel.
 	InFront func() bool
@@ -83,14 +83,11 @@ type ActionCallbacks struct {
 	// beside the bobber. A dry run leaves it off, so a miss in its trace is
 	// always a missed detection.
 	DeliberateMisses bool
-	// Approach selects a waiting position after the locator locks.
-	Approach func(center image.Point, box image.Rectangle) (image.Point, bool)
 
 	// PlanReel schedules a timed hold and cooldown. A zero cooldown keeps the
 	// configured value. A reel without the Board simulates the hold.
 	PlanReel          func(biteDetector string) ReelTiming
 	ObserveReelTiming func(ReelTimingEvent)
-	Cursor            *CursorCallbacks
 }
 
 // CursorStep places the pointer at Point, After time has elapsed in a plan.
@@ -103,16 +100,24 @@ type CursorStep struct {
 // was not in front. The run pauses on it and continues once the game is back.
 var ErrNotInFront = errors.New("the game was not in front")
 
-// ErrPointerMissed is a Cursor.Move error for a pointer that still works but
+// ErrPointerMissed is an Input.MoveTo error for a pointer that still works but
 // did not land on the point. The FSM gives up that cast instead of halting.
 var ErrPointerMissed = errors.New("the pointer did not land on the bobber")
 
-// CursorCallbacks plans a path that the FSM loop moves along with
-// Input.MoveTo. False from Plan means the app cannot safely take control of
-// the pointer.
-type CursorCallbacks struct {
-	Plan  func(target image.Point, settle bool) ([]CursorStep, bool)
-	Reset func()
+// Pointer plans the pointer paths that the FSM loop moves along with
+// Input.MoveTo.
+type Pointer interface {
+	// Plan is the path to target. False means the app cannot safely take
+	// control of the pointer.
+	Plan(target image.Point, settle bool) ([]CursorStep, bool)
+	// Reset forgets where the last path left the pointer, so a move by the
+	// person after it is no takeover.
+	Reset()
+	// Approach is where to wait while watching the bobber at center in box,
+	// and whether to move there at all.
+	Approach(center image.Point, box image.Rectangle) (image.Point, bool)
+	// Pos is where the pointer is now, where a between-catch wander starts.
+	Pos() (image.Point, bool)
 }
 
 // ReelTiming is the hold and the wait from release to the next cast.

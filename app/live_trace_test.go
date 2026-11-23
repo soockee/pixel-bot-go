@@ -32,7 +32,7 @@ func TestDryRunTraceAppearsInDebugState(t *testing.T) {
 		}
 		trace := newLiveTrace(model, nil, time.Now())
 		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
-			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN, InFront: func() bool { return true },
+			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN, InFront: func() bool { return true }, Pointer: straightPointer{},
 			ObserveCast: trace.cast, ObserveReel: trace.bite,
 		})
 		defer fsm.Close()
@@ -88,7 +88,7 @@ func TestDryRunExportsCorrelatedEventsWithoutDetectorModel(t *testing.T) {
 		}
 		trace := newLiveTrace(nil, output, start)
 		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
-			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN, InFront: func() bool { return true },
+			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN, InFront: func() bool { return true }, Pointer: straightPointer{},
 			ObserveCast: trace.cast, ObserveReel: trace.bite,
 			PlanReel:          func(string) fishing.ReelTiming { return fishing.ReelTiming{Hold: 60 * time.Millisecond} },
 			ObserveReelTiming: trace.reelTiming,
@@ -159,3 +159,15 @@ func anywhereDryRun() action.DryRun {
 		Moved:   func(image.Point, image.Rectangle) {},
 	}
 }
+
+// straightPointer goes straight to each target in one step.
+type straightPointer struct{}
+
+func (straightPointer) Plan(target image.Point, _ bool) ([]fishing.CursorStep, bool) {
+	return []fishing.CursorStep{{Point: target}}, true
+}
+func (straightPointer) Reset() {}
+func (straightPointer) Approach(center image.Point, _ image.Rectangle) (image.Point, bool) {
+	return center, true
+}
+func (straightPointer) Pos() (image.Point, bool) { return image.Point{}, false }

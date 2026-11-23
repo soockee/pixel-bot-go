@@ -85,11 +85,10 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		if plan == nil {
 			plan = cursormotion.DefaultPath
 		}
-		cursor, moved := c.dryCursor(plan, inFront)
-		callbacks.Cursor = cursor
-		callbacks.Input = action.DryRun{Logger: logger, InFront: inFront, Area: c.gameArea, Moved: moved}
+		pointer := &dryPointer{c: c, inFront: inFront, plan: plan}
+		callbacks.Pointer = pointer
+		callbacks.Input = action.DryRun{Logger: logger, InFront: inFront, Area: c.gameArea, Moved: pointer.Moved}
 		callbacks.SimulateHolds = true
-		callbacks.Approach = cursormotion.ApproachPoint
 	} else {
 		callbacks.DeliberateMisses = true
 		c.board.board.Logger = logger
@@ -191,29 +190,11 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			Drag:    board.DragCamera,
 		}
 		callbacks.Input = guard
-		callbacks.CursorPos = action.CursorPos
 		plan := trace.Cursor
 		if plan == nil {
 			plan = cursormotion.DefaultPath
 		}
-		callbacks.Approach = func(center image.Point, box image.Rectangle) (image.Point, bool) {
-			area := c.gameArea()
-			x, y, ok := action.CursorPos()
-			if area == nil || !ok || !image.Pt(x, y).In(*area) {
-				return center, false
-			}
-			return cursormotion.ApproachPoint(center, box.Intersect(*area))
-		}
-		callbacks.Cursor = &fishing.CursorCallbacks{
-			Plan: func(target image.Point, settle bool) ([]fishing.CursorStep, bool) {
-				start, area, ok := guard.BeginCursor()
-				if !ok {
-					return nil, false
-				}
-				return cursorSteps(plan(start, target, area, settle))
-			},
-			Reset: guard.ResetCursor,
-		}
+		callbacks.Pointer = livePointer{c: c, guard: guard, plan: plan}
 	}
 	if !dryRun || trace.Timing != nil || trace.Output != nil {
 		callbacks.PlanReel = func(detector string) fishing.ReelTiming {
@@ -269,41 +250,6 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		presenter.NewPreviewPresenter(c.Engine, c.View),
 	)
 	return c
-}
-
-// dryCursor plans a dry run's pointer path from where its last logged move
-// left the pointer; moved, for action.DryRun, keeps that point.
-func (c *AppContainer) dryCursor(plan cursormotion.Planner, inFront func() bool) (cursor *fishing.CursorCallbacks, moved func(image.Point, image.Rectangle)) {
-	var current image.Point
-	var positioned bool
-	moved = func(p image.Point, area image.Rectangle) {
-		current = p
-		if c.trace != nil && c.trace.output != nil {
-			c.trace.cursorWaypoint(p, area)
-		}
-	}
-	return &fishing.CursorCallbacks{
-		Plan: func(target image.Point, settle bool) ([]fishing.CursorStep, bool) {
-			area := c.gameArea()
-			if !inFront() || area == nil {
-				return nil, false
-			}
-			if !positioned || !current.In(*area) {
-				current = area.Min.Add(area.Size().Div(2))
-				positioned = true
-			}
-			return cursorSteps(plan(current, target, *area, settle))
-		},
-		Reset: func() { positioned = false },
-	}, moved
-}
-
-func cursorSteps(path []cursormotion.Step) ([]fishing.CursorStep, bool) {
-	steps := make([]fishing.CursorStep, len(path))
-	for i, step := range path {
-		steps[i] = fishing.CursorStep{After: step.After, Point: step.Point}
-	}
-	return steps, len(steps) > 0
 }
 
 // gameFrames captures screen pixels within the selected game window.

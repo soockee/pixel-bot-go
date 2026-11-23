@@ -29,6 +29,7 @@ func TestSimulatedReelTiming(t *testing.T) {
 				fsm.EventAwaitFocus()
 				fsm.EventFocusAcquired()
 				fsm.send(evtTargetAcquiredAt{x: 10, y: 10, valid: valid.Load})
+				synctest.Wait() // the pointer reaches the bobber before the bite
 				fsm.EventFishBite()
 				synctest.Wait()
 				wantState(t, fsm, StateReeling)
