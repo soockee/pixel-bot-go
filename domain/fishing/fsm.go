@@ -161,10 +161,9 @@ func (f *FishingFSM) handle(ev any) {
 			f.transition(StateSearching)
 		}
 	case evtFocusLost:
-		if f.checkingReposition && f.state != StateHalt {
-			f.why("game focus was lost while checking the new fishing position")
-			f.halt()
-		} else if f.state != StateHalt {
+		// A reposition check goes on once the game is back: its next cast still
+		// counts as the check of the new spot.
+		if f.state != StateHalt {
 			f.transition(StateWaitingFocus)
 		}
 	case evtAwaitFocus:
@@ -298,8 +297,7 @@ func (f *FishingFSM) wake() {
 				f.recast()
 				return
 			}
-			f.why(err.Error())
-			f.halt()
+			f.inputFailed("", err)
 			return
 		}
 	}
@@ -325,7 +323,7 @@ func (f *FishingFSM) deadlineReached() {
 			}
 			if f.cfg.IdleMoves && f.actions.Roll(12) == 0 {
 				f.idleTried = true
-				if f.actions.CanAct != nil && !f.actions.CanAct() {
+				if !f.actions.InFront() {
 					f.transition(StateWaitingFocus)
 					return
 				}
@@ -390,7 +388,11 @@ func (f *FishingFSM) startReposition() {
 		}
 	}
 	if !f.moveForReposition() {
-		if f.state != StateHalt {
+		switch {
+		case f.state == StateHalt || f.state == StateWaitingFocus:
+		case !f.actions.InFront():
+			f.transition(StateWaitingFocus)
+		default:
 			f.why("reposition input was blocked. Check the movement binding and game focus")
 			f.halt()
 		}
@@ -494,8 +496,6 @@ func (f *FishingFSM) transition(next FishingState) {
 	case StateCasting:
 		if f.pressCast() {
 			f.transition(StateSearching)
-		} else {
-			f.halt()
 		}
 	case StateMonitoring:
 		f.startMonitoring()
@@ -517,12 +517,14 @@ func (f *FishingFSM) transition(next FishingState) {
 	}
 }
 
-// pressCast reports false when the configured key is unusable, so the wrong
-// key is never pressed.
+// pressCast reports false, after it paused or stopped the run, when the cast
+// did not go out. An unusable key stops the run, so the wrong key is never
+// pressed.
 func (f *FishingFSM) pressCast() bool {
 	vk, ok := config.KeyCode(f.cfg.CastKey)
 	if !ok {
 		f.why(fmt.Sprintf("%q is not a Cast key Go Fish can press", f.cfg.CastKey))
+		f.halt()
 		return false
 	}
 	var dispatched func()
@@ -530,7 +532,7 @@ func (f *FishingFSM) pressCast() bool {
 		dispatched = f.actions.ObserveCast()
 	}
 	if err := f.actions.Input.Tap(vk, 0); err != nil {
-		f.why("could not cast: " + err.Error())
+		f.inputFailed("could not cast: ", err)
 		return false
 	}
 	if dispatched != nil {
@@ -637,6 +639,10 @@ func (f *FishingFSM) beginCursor(target image.Point, settle bool) bool {
 	}
 	steps, ok := f.actions.Cursor.Plan(target, settle)
 	if !ok || len(steps) == 0 || steps[len(steps)-1].Point != target {
+		if !f.actions.InFront() {
+			f.transition(StateWaitingFocus)
+			return false
+		}
 		f.why("could not aim at the bobber. Keep the pointer inside the focused game window")
 		f.halt()
 		return false
@@ -650,7 +656,7 @@ func (f *FishingFSM) finishReel() {
 		f.resumeSearch()
 		return
 	}
-	if f.actions.CanSimulateReel != nil && !f.actions.CanSimulateReel() {
+	if !f.actions.InFront() {
 		f.transition(StateWaitingFocus)
 		return
 	}
@@ -674,15 +680,13 @@ func (f *FishingFSM) finishReel() {
 				hold = 0
 			}
 			if err := f.actions.Input.Tap(vk, hold); err != nil {
-				f.why("could not reel: " + err.Error())
-				f.halt()
+				f.inputFailed("could not reel: ", err)
 				return
 			}
 		} else {
 			f.stats.reelAttempts.Add(1)
 			if err := f.actions.Input.ClickRight(); err != nil {
-				f.why("could not reel: " + err.Error())
-				f.halt()
+				f.inputFailed("could not reel: ", err)
 				return
 			}
 		}
@@ -721,6 +725,18 @@ func (f *FishingFSM) finishMiss(reason string) {
 	}
 	f.transition(StateCooldown)
 	f.idleTried = true
+}
+
+// inputFailed pauses the run when the Input dropped input because the game
+// was not in front, and stops it, with what and why, on any other failure.
+func (f *FishingFSM) inputFailed(what string, err error) {
+	if errors.Is(err, ErrNotInFront) {
+		f.logger.Info("paused: the game lost focus", "dropped", what+err.Error())
+		f.transition(StateWaitingFocus)
+		return
+	}
+	f.why(what + err.Error())
+	f.halt()
 }
 
 // pause is the wait after a catch before the next cast: the configured

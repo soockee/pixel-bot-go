@@ -32,7 +32,7 @@ func TestDryRunTraceAppearsInDebugState(t *testing.T) {
 		}
 		trace := newLiveTrace(model, nil, time.Now())
 		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
-			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN,
+			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN, InFront: func() bool { return true },
 			ObserveCast: trace.cast, ObserveReel: trace.bite,
 		})
 		defer fsm.Close()
@@ -88,7 +88,7 @@ func TestDryRunExportsCorrelatedEventsWithoutDetectorModel(t *testing.T) {
 		}
 		trace := newLiveTrace(nil, output, start)
 		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
-			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN,
+			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN, InFront: func() bool { return true },
 			ObserveCast: trace.cast, ObserveReel: trace.bite,
 			PlanReel:          func(string) fishing.ReelTiming { return fishing.ReelTiming{Hold: 60 * time.Millisecond} },
 			ObserveReelTiming: trace.reelTiming,

@@ -204,6 +204,7 @@ func TestFakeGameReplayFeedsDryRunAttemptsToScorer(t *testing.T) {
 			},
 			SimulateHolds: true, // as the app's dry run
 			Roll:          rand.IntN,
+			InFront:       func() bool { return true },
 		})
 		defer fsm.Close()
 		bite := detect.NewSplashSoundDetector(nil)

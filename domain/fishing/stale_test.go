@@ -84,7 +84,7 @@ func TestMarkerIsStale(t *testing.T) {
 // The default pause after a catch is quick and varies; a configured pause is
 // kept exactly.
 func TestPauseAfterACatch(t *testing.T) {
-	f := &FishingFSM{cfg: *testConfig(), actions: ActionCallbacks{Roll: rand.IntN}}
+	f := &FishingFSM{cfg: *testConfig(), actions: ActionCallbacks{Roll: rand.IntN, InFront: func() bool { return true }}}
 	f.cfg.CooldownSeconds = 0
 	seen := map[time.Duration]bool{}
 	for range 100 {

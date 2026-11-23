@@ -33,7 +33,7 @@ func (f *FishingFSM) idleMove() {
 	// shortcut: the path runs on the FSM loop, so a Stop waits for it (about
 	// half a second); schedule its points as timed steps if that is too slow.
 	for _, p := range wanderPath(start, roll) {
-		if f.actions.CanAct != nil && !f.actions.CanAct() {
+		if !f.actions.InFront() {
 			return
 		}
 		_ = f.actions.Input.MoveTo(p) // a wander step that does not land is skipped
@@ -75,13 +75,12 @@ func (f *FishingFSM) activity(key, name string) bool {
 	if !ok {
 		return false
 	}
-	if f.actions.CanAct != nil && !f.actions.CanAct() {
+	if !f.actions.InFront() {
 		f.transition(StateWaitingFocus)
 		return false
 	}
 	if err := f.actions.Input.Tap(vk, 0); err != nil {
-		f.why("could not reposition: " + err.Error())
-		f.halt()
+		f.inputFailed("could not reposition: ", err)
 		return false
 	}
 	if f.actions.SimulateHolds {

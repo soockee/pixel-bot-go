@@ -68,7 +68,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	c.Recordings = desktop.NewRecordings(func() string { return cfg.RecordDir })
 	inFront := c.gameFocused
 
-	callbacks := fishing.ActionCallbacks{CanAct: inFront, Roll: rand.IntN}
+	callbacks := fishing.ActionCallbacks{InFront: inFront, Roll: rand.IntN}
 	dryRun := cfg.DryRun
 	if dryRun {
 		logger.Warn("dry-run enabled: input actions are logged, not injected")
@@ -76,11 +76,8 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			c.trace = newLiveTrace(trace.Model, trace.Output, trace.Start)
 			callbacks.ObserveCast, callbacks.ObserveReel = c.trace.cast, c.trace.bite
 		}
-		if trace.Output != nil || trace.Timing != nil {
-			callbacks.CanSimulateReel = inFront
-			if trace.Output != nil {
-				callbacks.ObserveReelTiming = c.trace.reelTiming
-			}
+		if trace.Output != nil {
+			callbacks.ObserveReelTiming = c.trace.reelTiming
 		}
 		// A dry run plans the pointer like a live run, with the recorded
 		// profile or the default path, so the fake game shows real movement.

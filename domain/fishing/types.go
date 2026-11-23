@@ -65,8 +65,9 @@ type ActionCallbacks struct {
 	SimulateHolds bool
 	// CursorPos reads the pointer, where a between-catch wander starts.
 	CursorPos func() (x, y int, ok bool)
-	// CanAct checks focus just before dispatching an optional action.
-	CanAct func() bool
+	// InFront is required: whether the game has focus, checked before optional
+	// input and before a reel.
+	InFront func() bool
 	// OpenBoard validates and opens the Board for one run.
 	OpenBoard func(config.Config) (closeBoard func(), err error)
 
@@ -89,7 +90,6 @@ type ActionCallbacks struct {
 	// configured value. A reel without the Board simulates the hold.
 	PlanReel          func(biteDetector string) ReelTiming
 	ObserveReelTiming func(ReelTimingEvent)
-	CanSimulateReel   func() bool
 	Cursor            *CursorCallbacks
 }
 
@@ -98,6 +98,10 @@ type CursorStep struct {
 	After time.Duration
 	Point image.Point
 }
+
+// ErrNotInFront is the Input's error for input it dropped because the game
+// was not in front. The run pauses on it and continues once the game is back.
+var ErrNotInFront = errors.New("the game was not in front")
 
 // ErrPointerMissed is a Cursor.Move error for a pointer that still works but
 // did not land on the point. The FSM gives up that cast instead of halting.

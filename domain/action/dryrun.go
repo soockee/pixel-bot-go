@@ -5,6 +5,8 @@ import (
 	"image"
 	"log/slog"
 	"time"
+
+	"github.com/soocke/pixel-bot-go/domain/fishing"
 )
 
 // DryRun is the fishing.Input of a dry run: it logs each input as a
@@ -17,12 +19,10 @@ type DryRun struct {
 	Moved   func(p image.Point, area image.Rectangle)
 }
 
-var errNotInFront = errors.New("selected game window lost focus")
-
 // Tap logs the key.
 func (d DryRun) Tap(vk byte, hold time.Duration) error {
 	if !d.InFront() {
-		return errNotInFront
+		return fishing.ErrNotInFront
 	}
 	d.Logger.Info("dry-run action", "action", "press_key", "vk", vk, "hold_ms", hold.Milliseconds())
 	return nil
@@ -30,9 +30,12 @@ func (d DryRun) Tap(vk byte, hold time.Duration) error {
 
 // MoveTo logs a move to a point inside the capture area and reports it to Moved.
 func (d DryRun) MoveTo(p image.Point) error {
+	if !d.InFront() {
+		return fishing.ErrNotInFront
+	}
 	area := d.Area()
-	if !d.InFront() || area == nil || !p.In(*area) {
-		return errors.New("the game was not in front, or the pointer path left it")
+	if area == nil || !p.In(*area) {
+		return errors.New("the pointer path left the game window")
 	}
 	d.Logger.Info("dry-run action", "action", "move_cursor", "x", p.X, "y", p.Y)
 	d.Moved(p, *area)
@@ -42,7 +45,7 @@ func (d DryRun) MoveTo(p image.Point) error {
 // ClickRight logs the click.
 func (d DryRun) ClickRight() error {
 	if !d.InFront() {
-		return errNotInFront
+		return fishing.ErrNotInFront
 	}
 	d.Logger.Info("dry-run action", "action", "click_right")
 	return nil

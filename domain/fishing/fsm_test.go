@@ -86,6 +86,7 @@ func recordingActions(log *actionLog) ActionCallbacks {
 			click: func() error { log.add("click"); return nil },
 		},
 		SimulateHolds: true, // testConfig has no Board
+		InFront:       func() bool { return true },
 		Roll:          rand.New(rand.NewPCG(1, 2)).IntN,
 	}
 }
@@ -427,9 +428,16 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 				if outcome == "focus lost" {
 					m.EventFocusLost()
 					time.Sleep(time.Second)
-					wantState(t, m, StateHalt)
+					wantState(t, m, StateWaitingFocus) // paused, not stopped
 					if !slices.Equal(log.snapshot(), before) {
 						t.Fatal("sent input after focus loss")
+					}
+					m.EventFocusAcquired()
+					wantState(t, m, StateSearching)
+					m.EventTargetAcquiredAt(10, 10)
+					wantState(t, m, StateMonitoring)
+					if m.TakeRepositionLogout() {
+						t.Fatal("the check after the pause asked to log out")
 					}
 					return
 				}
@@ -492,6 +500,7 @@ func TestAutomaticRepositionUsesOnlyESP32WhenSelected(t *testing.T) {
 		logger:              testLogger,
 		repositionDirection: 4,
 		actions: ActionCallbacks{
+			InFront: func() bool { return true },
 			Input: &testInput{tap: func(vk byte, _ time.Duration) error {
 				taps = append(taps, vk)
 				return nil
@@ -518,6 +527,7 @@ func TestAutomaticRepositionDragsThroughESP32(t *testing.T) {
 		},
 		logger: testLogger,
 		actions: ActionCallbacks{
+			InFront: func() bool { return true },
 			Input: &testInput{drag: func(dx int) (bool, bool) {
 				drags = append(drags, dx)
 				return true, true
