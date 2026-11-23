@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 	"testing"
+	"time"
 )
 
 type guardFixture struct {
@@ -26,22 +27,24 @@ func newGuardFixture() *guardFixture {
 		Area:       func() *image.Rectangle { return f.area },
 		CursorPos:  func() (int, int, bool) { return f.cursor.X, f.cursor.Y, true },
 		OnTakeover: func() { f.takeovers++ },
-		Press:      func(byte) bool { f.sent = append(f.sent, "press"); return true },
+		Press:      func(byte, time.Duration) error { f.sent = append(f.sent, "press"); return nil },
 		Move: func(x, y int) error {
 			f.cursor = image.Pt(x, y)
 			f.sent = append(f.sent, "move")
 			return nil
 		},
-		Click: func() error { f.sent = append(f.sent, "click"); return nil },
+		Click:   func() error { f.sent = append(f.sent, "click"); return nil },
+		CanDrag: func() bool { return true },
+		Drag:    func(int) error { f.sent = append(f.sent, "drag"); return nil },
 	}
 	return f
 }
 
 func TestGuardAllowsNormalCycle(t *testing.T) {
 	f := newGuardFixture()
-	f.PressKey(1)
-	f.MoveCursor(150, 150)
-	f.MoveCursor(150, 150)
+	f.Tap(1, 0)
+	f.MoveTo(image.Pt(150, 150))
+	f.MoveTo(image.Pt(150, 150))
 	f.ClickRight()
 	if want := []string{"press", "move", "move", "click"}; !slices.Equal(f.sent, want) {
 		t.Errorf("sent = %v, want %v", f.sent, want)
@@ -53,11 +56,11 @@ func TestGuardAllowsNormalCycle(t *testing.T) {
 
 func TestGuardDropsInputWhenWindowIsNotInFront(t *testing.T) {
 	f := newGuardFixture()
-	f.MoveCursor(150, 150)
+	f.MoveTo(image.Pt(150, 150))
 	f.sent = nil
 	f.inFront = false
-	f.PressKey(1)
-	f.MoveCursor(150, 150)
+	f.Tap(1, 0)
+	f.MoveTo(image.Pt(150, 150))
 	f.ClickRight()
 	if len(f.sent) != 0 {
 		t.Errorf("sent = %v, want nothing", f.sent)
@@ -66,10 +69,10 @@ func TestGuardDropsInputWhenWindowIsNotInFront(t *testing.T) {
 
 func TestGuardKeepsMovesInsideTheArea(t *testing.T) {
 	f := newGuardFixture()
-	f.MoveCursor(50, 150)
+	f.MoveTo(image.Pt(50, 150))
 	f.ClickRight()
 	f.area = nil
-	f.MoveCursor(150, 150)
+	f.MoveTo(image.Pt(150, 150))
 	if len(f.sent) != 0 {
 		t.Errorf("sent = %v, want nothing", f.sent)
 	}
@@ -82,7 +85,7 @@ func TestGuardDetectsTakeoverBeforeFirstWaypoint(t *testing.T) {
 		t.Fatal("expected a plan to start inside the window")
 	}
 	f.cursor.X += 20 // a hand on the mouse
-	if f.TryMoveCursor(image.Pt(160, 150)) == nil || f.takeovers != 1 || len(f.sent) != 0 {
+	if f.MoveTo(image.Pt(160, 150)) == nil || f.takeovers != 1 || len(f.sent) != 0 {
 		t.Fatalf("takeover did not stop the waypoint: sent=%v takeovers=%d", f.sent, f.takeovers)
 	}
 }
@@ -93,12 +96,12 @@ func TestGuardHandsOverWhenTheUserMovesTheCursor(t *testing.T) {
 		act  func(*guardFixture)
 	}{
 		{"before the click", func(f *guardFixture) { f.ClickRight() }},
-		{"before the next move", func(f *guardFixture) { f.MoveCursor(150, 150) }},
+		{"before the next move", func(f *guardFixture) { f.MoveTo(image.Pt(150, 150)) }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newGuardFixture()
-			f.MoveCursor(150, 150)
+			f.MoveTo(image.Pt(150, 150))
 			f.sent = nil
 			f.cursor = image.Pt(170, 150) // a hand on the mouse
 			tt.act(f)
@@ -116,7 +119,7 @@ func TestGuardHandsOverWhenTheUserMovesTheCursor(t *testing.T) {
 // still the app's: the run goes on and the click goes out.
 func TestGuardToleratesASmallDrift(t *testing.T) {
 	f := newGuardFixture()
-	f.MoveCursor(150, 150)
+	f.MoveTo(image.Pt(150, 150))
 	f.cursor = image.Pt(152, 149)
 	if f.ClickRight() != nil || f.takeovers != 0 {
 		t.Fatalf("a 2 px drift stopped the click: takeovers=%d", f.takeovers)
@@ -130,22 +133,21 @@ func TestGuardToleratesASmallDrift(t *testing.T) {
 func TestCameraDragRequiresRoomAndFocus(t *testing.T) {
 	f := newGuardFixture()
 	f.cursor = image.Pt(90, 150)
-	called := false
-	drag := func(_ int, allowed func() bool) bool {
-		called = true
-		return allowed()
-	}
-	if attempted, moved := f.DragCamera(12, drag); attempted || moved || called {
+	if attempted, moved := f.DragCamera(12); attempted || moved || len(f.sent) != 0 {
 		t.Fatal("drag was attempted with the pointer outside the game")
 	}
 	f.cursor = image.Pt(150, 150)
-	if attempted, moved := f.DragCamera(12, drag); !attempted || !moved || !called {
+	if attempted, moved := f.DragCamera(12); !attempted || !moved || len(f.sent) != 1 {
 		t.Fatal("drag did not run inside the focused game")
 	}
 	f.inFront = false
-	called = false
-	if attempted, moved := f.DragCamera(12, drag); !attempted || moved || called {
+	if attempted, moved := f.DragCamera(12); !attempted || moved || len(f.sent) != 1 {
 		t.Fatal("lost focus should block the drag and its fallback")
+	}
+	f.inFront = true
+	f.CanDrag = func() bool { return false }
+	if attempted, _ := f.DragCamera(12); attempted {
+		t.Fatal("a Board that cannot drag should leave the move to the keys")
 	}
 }
 
@@ -165,7 +167,7 @@ func TestGuardClickSaysWhy(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			f := newGuardFixture()
-			f.MoveCursor(150, 150)
+			f.MoveTo(image.Pt(150, 150))
 			tt.set(f)
 			if err := f.ClickRight(); err == nil || err.Error() != tt.want {
 				t.Errorf("err = %v, want %q", err, tt.want)

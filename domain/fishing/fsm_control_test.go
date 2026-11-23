@@ -191,7 +191,7 @@ func TestUnknownCastKeyHaltsWithoutPressing(t *testing.T) {
 
 func TestLoopPanicHaltsAndKeepsSendersFree(t *testing.T) {
 	actions := recordingActions(&actionLog{})
-	actions.ClickRight = func() error { panic("input failed") }
+	inputOf(actions).click = func() error { panic("input failed") }
 	m := NewFSM(nil, testConfig(), actions)
 	halted := make(chan struct{}, 1)
 	m.AddListener(func(_, next FishingState) {

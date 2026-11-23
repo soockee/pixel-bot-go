@@ -128,12 +128,12 @@ func TestInteractKeyReelRequiresAFreshMarkerAndReleasesOnFocusLoss(t *testing.T)
 				actions.ParseVK = func(key string) (byte, bool) {
 					return 'F', key == "F"
 				}
-				actions.HoldInteract = func(vk byte) func() {
+				inputOf(actions).tap = func(vk byte, _ time.Duration) error {
 					if vk != 'F' {
 						t.Errorf("Interact vk = %d, want F", vk)
 					}
-					log.add("interact down")
-					return func() { log.add("interact up") }
+					log.add("interact")
+					return nil
 				}
 				engine, fsm, frames, _ := newSceneEngine(t, actions)
 				engine.cfg.ReelMethod, engine.cfg.InteractKey = config.ReelInteractKey, "F"
@@ -159,17 +159,17 @@ func TestInteractKeyReelRequiresAFreshMarkerAndReleasesOnFocusLoss(t *testing.T)
 					wantActions(t, log)
 					return
 				}
-				wantActions(t, log, "interact down")
+				wantActions(t, log, "interact")
 				if test.loseFocus {
 					fsm.EventFocusLost()
 					wantState(t, fsm, StateWaitingFocus)
-					wantActions(t, log, "interact down", "interact up")
+					wantActions(t, log, "interact")
 					return
 				}
 				frames.set(fakegame.PhaseEmpty) // reeling can immediately remove the marker
 				time.Sleep(interactHold)
 				wantState(t, fsm, StateCooldown)
-				wantActions(t, log, "interact down", "interact up")
+				wantActions(t, log, "interact")
 			})
 		})
 	}
@@ -223,7 +223,7 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 					log.add("open")
 					return func() { log.add("close") }, nil
 				}
-				actions.TapKeyboard = func(vk byte, _ time.Duration) error {
+				inputOf(actions).tap = func(vk byte, _ time.Duration) error {
 					switch vk {
 					case 0x78:
 						log.add("cast")
@@ -411,7 +411,9 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				var steps []byte
 				var heading, trialCasts, reels int
 				var firstMove time.Time
+				input := &testInput{}
 				actions := ActionCallbacks{
+					Input: input,
 					ParseVK: func(key string) (byte, bool) {
 						switch key {
 						case "F9":
@@ -425,39 +427,37 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 					OpenBoard: func(config.Config) (func(), error) {
 						return func() {}, nil
 					},
-					PressKey:   func(byte) bool { t.Error("used Windows keyboard input"); return false },
-					MoveCursor: func(int, int) { t.Error("used Windows cursor input") },
-					DragHardwareCamera: func(dx int) (bool, bool) {
+				}
+				input.drag = func(dx int) (bool, bool) {
+					if firstMove.IsZero() {
+						firstMove = time.Now()
+					}
+					drags = append(drags, dx)
+					heading += dx
+					return true, true
+				}
+				input.tap = func(vk byte, _ time.Duration) error {
+					switch vk {
+					case 'F':
+						reels++
+						frames.set(fakegame.PhaseEmpty)
+					case 0x78:
+						if reels != 0 {
+							trialCasts++
+						}
+						if reels == 0 || !tc.blocked && len(drags) != 0 && heading == 0 {
+							// Simulate the cast animation before the new marker appears.
+							time.AfterFunc(200*time.Millisecond, func() { frames.set(fakegame.PhaseBobber) })
+						}
+					case 'W', 'A', 'S', 'D':
 						if firstMove.IsZero() {
 							firstMove = time.Now()
 						}
-						drags = append(drags, dx)
-						heading += dx
-						return true, true
-					},
-					TapKeyboard: func(vk byte, _ time.Duration) error {
-						switch vk {
-						case 'F':
-							reels++
-							frames.set(fakegame.PhaseEmpty)
-						case 0x78:
-							if reels != 0 {
-								trialCasts++
-							}
-							if reels == 0 || !tc.blocked && len(drags) != 0 && heading == 0 {
-								// Simulate the cast animation before the new marker appears.
-								time.AfterFunc(200*time.Millisecond, func() { frames.set(fakegame.PhaseBobber) })
-							}
-						case 'W', 'A', 'S', 'D':
-							if firstMove.IsZero() {
-								firstMove = time.Now()
-							}
-							steps = append(steps, vk)
-						default:
-							t.Errorf("unexpected ESP32 key: %x", vk)
-						}
-						return nil
-					},
+						steps = append(steps, vk)
+					default:
+						t.Errorf("unexpected ESP32 key: %x", vk)
+					}
+					return nil
 				}
 				engine, fsm, scene, _ := newSceneEngine(t, actions)
 				frames = scene

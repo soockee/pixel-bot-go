@@ -171,7 +171,13 @@ func TestFakeGameReplayFeedsDryRunAttemptsToScorer(t *testing.T) {
 	var result shadowResult
 	synctest.Test(t, func(t *testing.T) {
 		var logged bytes.Buffer
-		press, move, click := action.DryRun(slog.New(slog.NewJSONHandler(&logged, nil)))
+		screen := image.Rect(-1<<20, -1<<20, 1<<20, 1<<20)
+		dry := action.DryRun{
+			Logger:  slog.New(slog.NewJSONHandler(&logged, nil)),
+			InFront: func() bool { return true },
+			Area:    func() *image.Rectangle { return &screen },
+			Moved:   func(image.Point, image.Rectangle) {},
+		}
 		start := time.Now()
 		castID, reeled := 0, false
 		emit := func(kind string, attempt int, outcome string) {
@@ -185,22 +191,17 @@ func TestFakeGameReplayFeedsDryRunAttemptsToScorer(t *testing.T) {
 			observer.Observe(r)
 		}
 		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
-			PressKey: func(vk byte) bool {
-				press(vk)
-				emit(replayCast, 0, replayDispatched)
-				return true
+			Input: observedInput{DryRun: dry,
+				tapped: func() { emit(replayCast, 0, replayDispatched) },
+				clicked: func() {
+					emit(actionAttempt, 1, "")
+					// A dry-run callback is observable. A real server reply is not.
+					emit(actionReply, 1, replayDispatched)
+					emit(actionClose, 1, replayDispatched)
+					reeled = true
+				},
 			},
-			MoveCursor: move,
-			ParseVK:    func(string) (byte, bool) { return 0x72, true },
-			ClickRight: func() error {
-				click()
-				emit(actionAttempt, 1, "")
-				// A dry-run callback is observable. A real server reply is not.
-				emit(actionReply, 1, replayDispatched)
-				emit(actionClose, 1, replayDispatched)
-				reeled = true
-				return nil
-			},
+			ParseVK: func(string) (byte, bool) { return 0x72, true },
 		})
 		defer fsm.Close()
 		bite := detect.NewSplashSoundDetector(nil)
@@ -322,4 +323,26 @@ func saveReplayEvidence(out string, model *shadowModel, result shadowResult, tra
 		}
 	}
 	return writeChecksums(out, []string{"dry-run-trace.jsonl", "dry-run-alerts.jsonl", "dry-run-summary.json", "shadow-model.json"})
+}
+
+// observedInput is a dry run that reports each key and click it logs.
+type observedInput struct {
+	action.DryRun
+	tapped, clicked func()
+}
+
+func (i observedInput) Tap(vk byte, hold time.Duration) error {
+	if err := i.DryRun.Tap(vk, hold); err != nil {
+		return err
+	}
+	i.tapped()
+	return nil
+}
+
+func (i observedInput) ClickRight() error {
+	if err := i.DryRun.ClickRight(); err != nil {
+		return err
+	}
+	i.clicked()
+	return nil
 }

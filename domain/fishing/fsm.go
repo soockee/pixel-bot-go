@@ -48,7 +48,6 @@ type FishingFSM struct {
 	reelDone            func()
 	reelTiming          ReelTiming
 	reelPressed         bool
-	releaseInput        func()
 	detectorAt          time.Time
 	reelDelay           time.Duration
 	idleTried           bool
@@ -295,7 +294,7 @@ func (f *FishingFSM) wake() {
 		point := f.cursorSteps[n-1].Point
 		f.cursorSteps = f.cursorSteps[n:]
 		// Skip elapsed intermediate points instead of sending a burst.
-		if err := f.actions.Cursor.Move(point); err != nil {
+		if err := f.actions.Input.MoveTo(point); err != nil {
 			if errors.Is(err, ErrPointerMissed) && !f.countFailedCast() {
 				f.logger.Warn("cast given up", "reason", err.Error())
 				f.recast()
@@ -538,12 +537,7 @@ func (f *FishingFSM) pressCast() bool {
 	if f.actions.ObserveCast != nil {
 		dispatched = f.actions.ObserveCast()
 	}
-	if f.hardwareKeyboard() {
-		if !f.tapKeyboard(vk, 0) {
-			return false
-		}
-	} else if !f.actions.PressKey(vk) {
-		f.why("cast input was blocked")
+	if !f.tap(vk, 0) {
 		return false
 	}
 	if dispatched != nil {
@@ -631,7 +625,7 @@ func (f *FishingFSM) startReel() {
 	if elapsed := f.reelTiming.AfterDetection; elapsed > 0 {
 		f.reelDelay = max(0, elapsed-time.Since(f.detectorAt))
 	}
-	if f.hardwareKeyboard() && f.cfg.ReelMethod != config.ReelInteractKey {
+	if f.onBoard() && f.cfg.ReelMethod != config.ReelInteractKey {
 		f.reelTiming.Hold = 0 // the ESP32 right click owns its press and release
 	}
 	if n := len(f.cursorSteps); n > 0 {
@@ -645,7 +639,7 @@ func (f *FishingFSM) startReel() {
 
 func (f *FishingFSM) beginCursor(target image.Point, settle bool) bool {
 	if f.actions.Cursor == nil {
-		f.actions.MoveCursor(target.X, target.Y)
+		_ = f.actions.Input.MoveTo(target)
 		return true
 	}
 	steps, ok := f.actions.Cursor.Plan(target, settle)
@@ -668,7 +662,6 @@ func (f *FishingFSM) finishReel() {
 		return
 	}
 	if !f.reelPressed {
-		needsRelease := false
 		if f.cfg.ReelMethod == config.ReelInteractKey {
 			vk, ok := f.interactVK(f.cfg)
 			if !ok {
@@ -682,40 +675,32 @@ func (f *FishingFSM) finishReel() {
 				return
 			}
 			f.stats.reelAttempts.Add(1)
-			if f.hardwareKeyboard() {
-				if !f.tapKeyboard(vk, f.reelTiming.Hold) {
-					f.halt()
-					return
-				}
-			} else {
-				needsRelease = true
-				if f.actions.HoldInteract != nil {
-					f.releaseInput = f.actions.HoldInteract(vk)
-				}
+			// The Board times its own hold; a dry run holds on the FSM clock below.
+			hold := time.Duration(0)
+			if f.onBoard() {
+				hold = f.reelTiming.Hold
+			}
+			if !f.tap(vk, hold) {
+				f.halt()
+				return
 			}
 		} else {
 			f.stats.reelAttempts.Add(1)
-			if err := f.actions.ClickRight(); err != nil {
+			if err := f.actions.Input.ClickRight(); err != nil {
 				f.why("could not reel: " + err.Error())
 				f.halt()
 				return
 			}
 		}
-		if needsRelease && f.releaseInput == nil {
-			f.why("the reel press was blocked; the game was not in front")
-			f.halt()
-			return
-		}
 		if f.reelDone != nil {
 			f.reelDone()
 		}
-		if f.reelTiming.Hold > 0 && !f.hardwareKeyboard() {
+		if f.reelTiming.Hold > 0 && !f.onBoard() {
 			f.reelPressed = true
 			f.arm(f.reelTiming.Hold)
 			return
 		}
 	} else {
-		f.releaseReel()
 		f.observeReelTiming("reel_released", "")
 		f.reelPressed = false
 	}
@@ -744,17 +729,20 @@ func (f *FishingFSM) finishMiss(reason string) {
 	f.idleTried = true
 }
 
-func (f *FishingFSM) hardwareKeyboard() bool {
+// onBoard reports whether this run sends its input to the Board, which times
+// its own holds, rather than to a dry run's log.
+func (f *FishingFSM) onBoard() bool {
 	return f.cfg.ESP32Port != "" && !f.cfg.DryRun
 }
 
-func (f *FishingFSM) tapKeyboard(vk byte, hold time.Duration) bool {
-	if f.actions.TapKeyboard == nil {
-		f.why("the ESP32 keyboard is not available")
-		return false
-	}
-	if err := f.actions.TapKeyboard(vk, hold); err != nil {
-		f.why("the ESP32 keyboard failed: " + err.Error())
+// tap presses vk, or records why it could not.
+func (f *FishingFSM) tap(vk byte, hold time.Duration) bool {
+	if err := f.actions.Input.Tap(vk, hold); err != nil {
+		if f.onBoard() {
+			f.why("the ESP32 keyboard failed: " + err.Error())
+		} else {
+			f.why("input was blocked: " + err.Error())
+		}
 		return false
 	}
 	return true
@@ -802,19 +790,11 @@ func (f *FishingFSM) observeReelTiming(kind, reason string) {
 }
 
 func (f *FishingFSM) cancelReel(reason string) {
-	f.releaseReel()
 	if f.reelTiming.Hold > 0 {
 		f.observeReelTiming("reel_canceled", reason)
 	}
 	f.reelTiming = ReelTiming{}
 	f.reelPressed = false
-}
-
-func (f *FishingFSM) releaseReel() {
-	if release := f.releaseInput; release != nil {
-		f.releaseInput = nil
-		release()
-	}
 }
 
 // send queues an event, or drops it once the FSM has shut down.

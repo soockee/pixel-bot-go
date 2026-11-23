@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"image"
 	"io"
 	"log/slog"
 	"net/http"
@@ -29,9 +30,8 @@ func TestDryRunTraceAppearsInDebugState(t *testing.T) {
 			SequenceThreshold: traceobserver.Threshold{Cutoff: .1},
 		}
 		trace := newLiveTrace(model, nil, time.Now())
-		press, move, click := action.DryRun(slog.New(slog.NewTextHandler(io.Discard, nil)))
 		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
-			PressKey: press, MoveCursor: move, ClickRight: click, ParseVK: func(string) (byte, bool) { return 0x72, true },
+			Input: anywhereDryRun(), ParseVK: func(string) (byte, bool) { return 0x72, true },
 			ObserveCast: trace.cast, ObserveReel: trace.bite,
 		})
 		defer fsm.Close()
@@ -86,9 +86,8 @@ func TestDryRunExportsCorrelatedEventsWithoutDetectorModel(t *testing.T) {
 			t.Fatal(err)
 		}
 		trace := newLiveTrace(nil, output, start)
-		press, move, click := action.DryRun(slog.New(slog.NewTextHandler(io.Discard, nil)))
 		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
-			PressKey: press, MoveCursor: move, ClickRight: click, ParseVK: func(string) (byte, bool) { return 0x72, true },
+			Input: anywhereDryRun(), ParseVK: func(string) (byte, bool) { return 0x72, true },
 			ObserveCast: trace.cast, ObserveReel: trace.bite,
 			PlanReel:          func(string) fishing.ReelTiming { return fishing.ReelTiming{Hold: 60 * time.Millisecond} },
 			ObserveReelTiming: trace.reelTiming,
@@ -145,5 +144,17 @@ func TestDryRunExportsCorrelatedEventsWithoutDetectorModel(t *testing.T) {
 	if rows[4].ElapsedUS-rows[2].ElapsedUS != 300_000 || rows[4].Outcome != traceobserver.OutcomeDryRunDispatched ||
 		rows[5].ElapsedUS-rows[4].ElapsedUS != 60_000 {
 		t.Fatalf("unexpected reel dispatch or release: %+v", rows[4:6])
+	}
+}
+
+// anywhereDryRun is a dry run whose game is always in front and covers the
+// whole screen.
+func anywhereDryRun() action.DryRun {
+	screen := image.Rect(-1<<20, -1<<20, 1<<20, 1<<20)
+	return action.DryRun{
+		Logger:  slog.New(slog.NewTextHandler(io.Discard, nil)),
+		InFront: func() bool { return true },
+		Area:    func() *image.Rectangle { return &screen },
+		Moved:   func(image.Point, image.Rectangle) {},
 	}
 }

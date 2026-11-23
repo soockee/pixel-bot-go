@@ -124,9 +124,6 @@ func (e *Engine) Start() error {
 	}
 	var closeBoard func()
 	if !cfg.DryRun && e.fsm.actions.OpenBoard != nil {
-		if e.fsm.actions.TapKeyboard == nil {
-			return errors.New("ESP32 keyboard backend unavailable")
-		}
 		closeBoard, err = e.fsm.actions.OpenBoard(cfg)
 		if err != nil {
 			return err

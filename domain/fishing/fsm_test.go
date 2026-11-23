@@ -34,12 +34,54 @@ func testConfig() *config.Config {
 	return cfg
 }
 
+// testInput is the Input of FSM tests: each method calls its field, and an
+// unset field succeeds without doing anything.
+type testInput struct {
+	tap   func(vk byte, hold time.Duration) error
+	move  func(p image.Point) error
+	click func() error
+	drag  func(dx int) (attempted, moved bool)
+}
+
+func (i *testInput) Tap(vk byte, hold time.Duration) error {
+	if i.tap == nil {
+		return nil
+	}
+	return i.tap(vk, hold)
+}
+
+func (i *testInput) MoveTo(p image.Point) error {
+	if i.move == nil {
+		return nil
+	}
+	return i.move(p)
+}
+
+func (i *testInput) ClickRight() error {
+	if i.click == nil {
+		return nil
+	}
+	return i.click()
+}
+
+func (i *testInput) DragCamera(dx int) (attempted, moved bool) {
+	if i.drag == nil {
+		return false, false
+	}
+	return i.drag(dx)
+}
+
+// inputOf is the testInput of actions made by recordingActions.
+func inputOf(actions ActionCallbacks) *testInput { return actions.Input.(*testInput) }
+
 func recordingActions(log *actionLog) ActionCallbacks {
 	return ActionCallbacks{
-		PressKey:   func(byte) bool { log.add("press"); return true },
-		MoveCursor: func(x, y int) { log.add("move") },
-		ClickRight: func() error { log.add("click"); return nil },
-		ParseVK:    func(string) (byte, bool) { return 0, true },
+		Input: &testInput{
+			tap:   func(byte, time.Duration) error { log.add("press"); return nil },
+			move:  func(image.Point) error { log.add("move"); return nil },
+			click: func() error { log.add("click"); return nil },
+		},
+		ParseVK: func(string) (byte, bool) { return 0, true },
 	}
 }
 
@@ -297,8 +339,8 @@ func TestOffTargetReel(t *testing.T) {
 				actions.ReelRoll = func(int) int { return 1 }
 				aim := image.Pt(52, 100)
 				at := image.Point{}
-				actions.MoveCursor = func(x, y int) { at = image.Pt(x, y) }
-				actions.ClickRight = func() error {
+				inputOf(actions).move = func(p image.Point) error { at = p; return nil }
+				inputOf(actions).click = func() error {
 					if at != aim {
 						log.add("wrong click point")
 					}
@@ -351,13 +393,13 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 					}
 					return 'F', true
 				}
-				actions.PressKey = func(vk byte) bool {
+				inputOf(actions).tap = func(vk byte, _ time.Duration) error {
 					if strings.ContainsRune("WASD", rune(vk)) {
 						log.add("reposition")
 					} else {
 						log.add("cast")
 					}
-					return true
+					return nil
 				}
 				m := NewFSM(nil, cfg, actions)
 				defer m.Close()
@@ -389,7 +431,7 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 					}
 					return
 				}
-				time.Sleep(repositionSettle)
+				time.Sleep(interactHold + repositionSettle) // a dry run holds the key first
 				wantState(t, m, StateSearching)
 				wantActions(t, log, append(before, "cast")...)
 				if outcome == "no bobber" || outcome == "recovered after retry" {
@@ -400,7 +442,7 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 					for attempt := 1; attempt < limit; attempt++ {
 						time.Sleep(searchTimeout)
 						wantState(t, m, StateCooldown)
-						time.Sleep(repositionSettle)
+						time.Sleep(interactHold + repositionSettle)
 						wantState(t, m, StateSearching)
 						before = append(before, "cast", "reposition")
 						wantActions(t, log, append(before, "cast")...)
@@ -449,15 +491,10 @@ func TestAutomaticRepositionUsesOnlyESP32WhenSelected(t *testing.T) {
 		repositionDirection: 4,
 		actions: ActionCallbacks{
 			ParseVK: func(key string) (byte, bool) { return key[0], true },
-			TapKeyboard: func(vk byte, _ time.Duration) error {
+			Input: &testInput{tap: func(vk byte, _ time.Duration) error {
 				taps = append(taps, vk)
 				return nil
-			},
-			PressKey: func(byte) bool { t.Error("ESP32 mode sent a software key"); return false },
-			HoldInteract: func(byte) func() {
-				t.Fatal("ESP32 mode held a software key")
-				return nil
-			},
+			}},
 		},
 	}
 	for f.repositionAttempt = 0; f.repositionAttempt < 4; f.repositionAttempt++ {
@@ -480,10 +517,10 @@ func TestAutomaticRepositionDragsThroughESP32(t *testing.T) {
 		},
 		logger: testLogger,
 		actions: ActionCallbacks{
-			DragHardwareCamera: func(dx int) (bool, bool) {
+			Input: &testInput{drag: func(dx int) (bool, bool) {
 				drags = append(drags, dx)
 				return true, true
-			},
+			}},
 		},
 	}
 	for f.repositionAttempt = 0; f.repositionAttempt < 2; f.repositionAttempt++ {
@@ -499,7 +536,7 @@ func TestAutomaticRepositionDragsThroughESP32(t *testing.T) {
 func TestBlockedRightClickIsOnlyAnAttempt(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		actions := recordingActions(&actionLog{})
-		actions.ClickRight = func() error { return errors.New("the mouse was moved") }
+		inputOf(actions).click = func() error { return errors.New("the mouse was moved") }
 		m := NewFSM(nil, testConfig(), actions)
 		defer m.Close()
 		startMonitoring(t, m)
@@ -523,8 +560,9 @@ func TestApproachAndReelDelayAreIndependent(t *testing.T) {
 			actions.Approach = func(_ image.Point, box image.Rectangle) (image.Point, bool) {
 				return box.Min.Add(image.Pt(4, 4)), moveBeforeBite
 			}
-			actions.MoveCursor = func(x, y int) {
-				log.add(fmt.Sprintf("move to %d,%d", x, y))
+			inputOf(actions).move = func(p image.Point) error {
+				log.add(fmt.Sprintf("move to %d,%d", p.X, p.Y))
+				return nil
 			}
 			actions.PlanReel = func(string) ReelTiming {
 				return ReelTiming{AfterDetection: 220 * time.Millisecond}

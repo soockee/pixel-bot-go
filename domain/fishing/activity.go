@@ -62,16 +62,16 @@ func (f *FishingFSM) idleMove() {
 		if f.actions.CanAct != nil && !f.actions.CanAct() {
 			return
 		}
-		f.actions.MoveCursor(p.X, p.Y)
+		_ = f.actions.Input.MoveTo(p) // a wander step that does not land is skipped
 		time.Sleep(wanderStep)
 	}
 	f.logger.Info("between-catch cursor wander", "from", start)
 }
 
-// cameraDrag is the ESP32 camera drag, nil without the board.
+// cameraDrag is the Board's camera drag, nil in a dry run.
 func (f *FishingFSM) cameraDrag() func(int) (bool, bool) {
-	if f.hardwareKeyboard() {
-		return f.actions.DragHardwareCamera
+	if f.onBoard() {
+		return f.actions.Input.DragCamera
 	}
 	return nil
 }
@@ -113,20 +113,15 @@ func (f *FishingFSM) activity(key, name string) bool {
 		f.transition(StateWaitingFocus)
 		return false
 	}
-	if f.hardwareKeyboard() {
-		if !f.tapKeyboard(vk, 0) {
+	if err := f.actions.Input.Tap(vk, 0); err != nil {
+		if f.onBoard() {
+			f.why("the ESP32 keyboard failed: " + err.Error())
 			f.halt()
-			return false
 		}
-	} else if f.actions.HoldInteract != nil {
-		release := f.actions.HoldInteract(vk)
-		if release == nil {
-			return false
-		}
-		time.Sleep(interactHold)
-		release()
-	} else if !f.actions.PressKey(vk) {
 		return false
+	}
+	if !f.onBoard() {
+		time.Sleep(interactHold) // a dry run holds on the FSM clock, as the Board would
 	}
 	f.logger.Info(name, "key", key)
 	return true
