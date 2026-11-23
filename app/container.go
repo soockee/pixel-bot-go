@@ -18,7 +18,6 @@ import (
 	"github.com/soocke/pixel-bot-go/domain/detect"
 	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/internal/cursormotion"
-	"github.com/soocke/pixel-bot-go/internal/esp32"
 	"github.com/soocke/pixel-bot-go/internal/inputtiming"
 	"github.com/soocke/pixel-bot-go/internal/playtrace"
 	"github.com/soocke/pixel-bot-go/internal/recorder"
@@ -94,75 +93,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		c.board.board.Logger = logger
 		board := &c.board.board // usable only while a run holds it
 		openBoard = func(run config.Config) (func(), error) {
-			if run.ESP32Port == "" {
-				return nil, errors.New("select or connect the ESP32 board in Settings")
-			}
-			port, err := esp32.PortName(run.ESP32Port)
-			if err != nil {
-				return nil, err
-			}
-			// Engine.Start checked the keys (config.CheckRunKeys); the Board
-			// only needs to know whether its firmware presses Mouse 4 and 5.
-			keys := []string{run.CastKey}
-			if run.Schedule || run.Reposition {
-				keys = append(keys, run.LogoutKey)
-			}
-			if run.ReelMethod == config.ReelInteractKey {
-				keys = append(keys, run.InteractKey)
-			}
-			_, release, err := c.board.open(port)
-			if err != nil {
-				return nil, err
-			}
-			keepOpen := false
-			defer func() {
-				if !keepOpen {
-					release()
-				}
-			}()
-			if trace.Timing != nil {
-				if err := board.PrepareTimedTaps(); err != nil {
-					return nil, err
-				}
-			}
-			if run.Reposition || run.IdleMoves {
-				if err := board.PrepareCamera(); err != nil {
-					return nil, err
-				}
-			}
-			if run.ReelMethod != config.ReelInteractKey || run.IdleMoves {
-				if err := board.PreparePointer(); err != nil {
-					return nil, err
-				}
-			}
-			if err := board.PrepareButtons(); err != nil {
-				return nil, err
-			}
-			for _, key := range keys {
-				vk, _ := config.KeyCode(key)
-				if (vk == 0x05 || vk == 0x06) && !board.CanPressButtons() {
-					return nil, errors.New("flash the current ESP32 firmware to press Mouse 4 and Mouse 5")
-				}
-			}
-			if run.ReelMethod != config.ReelInteractKey {
-				if !board.CanPoint() {
-					return nil, errors.New("flash the current ESP32 firmware to reel with a right click")
-				}
-			}
-			if run.IdleMoves && !board.CanPoint() {
-				return nil, errors.New("flash the current ESP32 firmware to move the pointer")
-			}
-			// Only what this run asked the board: a capability it never asked reads false.
-			ready := []any{"port", board.Name(), "buttons", board.CanPressButtons()}
-			if run.Reposition || run.IdleMoves {
-				ready = append(ready, "camera", board.CanDragCamera())
-			}
-			if run.ReelMethod != config.ReelInteractKey || run.IdleMoves {
-				ready = append(ready, "pointer", board.CanPoint())
-			}
-			logger.Info("ESP32 keyboard ready", ready...)
-			keepOpen = true
-			return release, nil
+			return c.board.openRun(run, trace.Timing != nil, logger)
 		}
 		move := func(x, y int) error {
 			if err := board.MoveTo(image.Pt(x, y), action.CursorPos); err != nil {

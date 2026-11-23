@@ -7,7 +7,6 @@ import (
 
 	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/fishing"
-	"github.com/soocke/pixel-bot-go/internal/esp32"
 )
 
 const (
@@ -56,8 +55,10 @@ func (a *app) beginSchedule() error {
 func (a *app) prepareSchedule() (*playSchedule, error) {
 	c := a.container
 	cfg := *c.Config
-	if !cfg.DryRun && cfg.ESP32Port == "" {
-		return nil, errors.New("select or connect the ESP32 board in Settings")
+	if !cfg.DryRun {
+		if _, err := portOf(cfg); err != nil {
+			return nil, err
+		}
 	}
 	if err := cfg.CheckSchedule(); err != nil {
 		return nil, err
@@ -216,14 +217,12 @@ func (a *app) tapScheduledKey(vk byte, wantWorld bool) (bool, error) {
 	// Open the serial port before rechecking the screen. A handshake can outlast
 	// the frame that caused this attempt, and a focus change cancels dispatch.
 	if !c.Config.DryRun {
-		if c.Config.ESP32Port == "" {
-			return false, errors.New("select or connect the ESP32 board in Settings")
-		}
-		port, err := esp32.PortName(c.Config.ESP32Port)
+		port, err := portOf(*c.Config)
 		if err != nil {
 			return false, err
 		}
-		board, release, err := c.board.open(port)
+		// One key needs nothing from the Board but the side buttons, if it is one.
+		release, err := c.board.openFor(port, boardNeeds{sideButtons: vk == 0x05 || vk == 0x06})
 		if errors.Is(err, errBoardBusy) {
 			return false, nil // the stopped run is still letting go; try on the next check
 		}
@@ -231,9 +230,6 @@ func (a *app) tapScheduledKey(vk byte, wantWorld bool) (bool, error) {
 			return false, err
 		}
 		defer release()
-		if err := board.PrepareButtons(); err != nil {
-			return false, err
-		}
 	}
 	if !a.scheduleScreen(wantWorld) || !c.gameFocused() || a.scheduleStop.Load() {
 		return false, nil
