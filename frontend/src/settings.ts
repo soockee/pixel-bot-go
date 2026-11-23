@@ -49,7 +49,7 @@ const groups: { title: string; show?: "debug"; fields: Field[] }[] = [
   {
     title: "Between catches",
     fields: [
-      { key: "idleMoves", label: "Move the mouse", hint: "After every catch, drift the cursor, sometimes circle the game window, or nudge the camera", kind: "switch" },
+      { key: "idleMoves", label: "Move the mouse", hint: "While watching the bobber, now and then move the cursor round the game window and back", kind: "switch" },
       { key: "reposition", label: "Change spot", hint: "Every 15 to 25 catches, take a step with WASD or turn the camera, then check the next cast. Logs out if no spot works.", kind: "switch" },
     ],
   },

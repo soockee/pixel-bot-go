@@ -13,57 +13,6 @@ import (
 	"github.com/soocke/pixel-bot-go/config"
 )
 
-func TestWanderPathDriftsAShortSmoothWay(t *testing.T) {
-	rng := rand.New(rand.NewPCG(1, 2))
-	start, area := image.Pt(500, 400), image.Rect(0, 0, 1000, 800)
-	for range 200 {
-		path := wanderPath(start, area, rng.IntN)
-		if len(path) < 10 || len(path) > 22 {
-			t.Fatalf("%d points", len(path))
-		}
-		end := path[len(path)-1].Sub(start)
-		if d := end.X*end.X + end.Y*end.Y; d < 38*38 || d > 162*162 {
-			t.Fatalf("ends %v from the start", end)
-		}
-		wantSmoothInside(t, start, path, area, 45)
-		if !path[len(path)-1].In(idleBounds(area)) {
-			t.Fatalf("ends at %v, outside %v", path[len(path)-1], idleBounds(area))
-		}
-	}
-}
-
-func TestSwirlPathCirclesTheWindow(t *testing.T) {
-	rng := rand.New(rand.NewPCG(3, 4))
-	area := image.Rect(-1920, 100, -1920+1600, 100+900) // a window on a monitor left of the primary
-	for range 200 {
-		start := image.Pt(area.Min.X+rng.IntN(area.Dx()), area.Min.Y+rng.IntN(area.Dy()))
-		path := swirlPath(start, area, rng.IntN)
-		wantSmoothInside(t, start, path, area, 80)
-		span := image.Rectangle{Min: path[0], Max: path[0]}
-		for _, p := range path {
-			span = span.Union(image.Rectangle{Min: p, Max: p.Add(image.Pt(1, 1))})
-		}
-		if span.Dx() < area.Dx()/3 || span.Dy() < area.Dy()/3 {
-			t.Fatalf("swirl spans %v of a %v window", span.Size(), area.Size())
-		}
-	}
-}
-
-// wantSmoothInside fails when path leaves in or jumps more than step pixels.
-func wantSmoothInside(t *testing.T, start image.Point, path []image.Point, in image.Rectangle, step int) {
-	t.Helper()
-	prev := start
-	for _, p := range path {
-		if !p.In(in) {
-			t.Fatalf("%v is outside %v", p, in)
-		}
-		if d := p.Sub(prev); d.X*d.X+d.Y*d.Y > step*step {
-			t.Fatalf("jumps %v in one step", d)
-		}
-		prev = p
-	}
-}
-
 func TestInWorldReadsTheAddonBlocks(t *testing.T) {
 	img := image.NewRGBA(WorldSignalArea.Sub(WorldSignalArea.Min))
 	if InWorld(img) {
@@ -85,10 +34,11 @@ func TestInWorldReadsTheAddonBlocks(t *testing.T) {
 	}
 }
 
-// idleFSM is an FSM with IdleMoves and Reposition on, whose pointer rests in
-// a 1000x800 window. Its moves, and its taps other than the Cast key, are
-// recorded with the state they were made in.
-func idleFSM(roll func(int) int) (m *FishingFSM, moves func() []stateMove, steps func() []FishingState) {
+// glanceFSM is an FSM with IdleMoves and Reposition on, whose pointer starts
+// in the middle of a 1000x800 window. Its moves, and its taps other than the
+// Cast key, are recorded with the state they were made in, and a click fails
+// the test unless the pointer is on the bobber at (10,10).
+func glanceFSM(t *testing.T, roll func(int) int) (m *FishingFSM, moves func() []stateMove, steps func() []FishingState) {
 	var mu sync.Mutex
 	var made []stateMove
 	var tapped []FishingState
@@ -99,19 +49,26 @@ func idleFSM(roll func(int) int) (m *FishingFSM, moves func() []stateMove, steps
 	cfg := testConfig()
 	cfg.IdleMoves, cfg.Reposition = true, true
 	cast, _ := config.KeyCode(cfg.CastKey)
-	inputOf(deps).tap = func(vk byte, _ time.Duration) error {
+	in := inputOf(deps)
+	in.tap = func(vk byte, _ time.Duration) error {
 		if vk != cast {
 			mu.Lock()
-			tapped = append(tapped, m.state)
+			tapped = append(tapped, m.state) // input runs on the FSM loop, which owns state
 			mu.Unlock()
 		}
 		return nil
 	}
-	inputOf(deps).move = func(p image.Point) error {
+	in.move = func(p image.Point) error {
 		mu.Lock()
 		defer mu.Unlock()
-		made = append(made, stateMove{m.state, p}) // MoveTo runs on the FSM loop, which owns state
+		made = append(made, stateMove{m.state, p})
 		at = p
+		return nil
+	}
+	in.click = func() error {
+		if at != image.Pt(10, 10) {
+			t.Errorf("reeled with the pointer at %v, not on the bobber", at)
+		}
 		return nil
 	}
 	m = NewFSM(nil, cfg, deps)
@@ -124,10 +81,12 @@ type stateMove struct {
 	at    image.Point
 }
 
-// catchOne reels a bobber at (10,10) and waits for the next cast.
-func catchOne(t *testing.T, m *FishingFSM) {
+// catchAfter watches a bobber at (10,10) for watch, reels it and waits for the next cast.
+func catchAfter(t *testing.T, m *FishingFSM, watch time.Duration) {
 	t.Helper()
 	m.EventTargetAcquiredAt(10, 10)
+	wantState(t, m, StateMonitoring)
+	time.Sleep(watch)
 	wantState(t, m, StateMonitoring)
 	m.EventFishBite()
 	for range 400 {
@@ -139,15 +98,15 @@ func catchOne(t *testing.T, m *FishingFSM) {
 	t.Fatalf("state = %v after a catch, want searching", m.Current())
 }
 
-func TestBetweenCatchActivityRunsOnlyInCooldown(t *testing.T) {
+func TestGlancesRunOnlyWhileWatching(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		m, moves, steps := idleFSM(rand.New(rand.NewPCG(5, 6)).IntN)
+		m, moves, steps := glanceFSM(t, rand.New(rand.NewPCG(5, 6)).IntN)
 		defer m.Close()
 		m.EventAwaitFocus()
 		m.EventFocusAcquired()
 		wantState(t, m, StateSearching)
-		for range 30 {
-			catchOne(t, m)
+		for i := range 30 {
+			catchAfter(t, m, time.Duration(i%10)*time.Second) // bites at every point of a glance
 		}
 		repositions := steps()
 		if len(repositions) == 0 {
@@ -158,71 +117,51 @@ func TestBetweenCatchActivityRunsOnlyInCooldown(t *testing.T) {
 				t.Fatalf("a change of spot while %v", s)
 			}
 		}
-		idle, swirls := 0, 0
-		var span image.Rectangle // what the current cooldown's moves covered
-		wide := func() {
-			if span.Dx() >= 300 {
-				swirls++
-			}
-			span = image.Rectangle{}
-		}
+		glances := 0
 		for _, mv := range moves() {
-			switch mv.state {
-			case StateMonitoring, StateReeling:
-				if mv.at != image.Pt(10, 10) {
-					t.Fatalf("a move to %v while %v; only the bobber may be aimed at then", mv.at, mv.state)
-				}
-				wide()
-			case StateCooldown:
-				idle++
-				span = span.Union(image.Rectangle{Min: mv.at, Max: mv.at.Add(image.Pt(1, 1))})
-			default:
+			switch {
+			case mv.state != StateMonitoring && mv.state != StateReeling:
 				t.Fatalf("a move to %v while %v", mv.at, mv.state)
+			case mv.state == StateReeling && mv.at != image.Pt(10, 10):
+				t.Fatalf("a reel aimed at %v", mv.at)
+			case mv.at != image.Pt(10, 10):
+				glances++
+				if !mv.at.In(image.Rect(80, 80, 920, 720)) {
+					t.Fatalf("a glance to %v, near the window's edge", mv.at)
+				}
 			}
 		}
-		wide()
-		if idle < 30*10 || swirls == 0 {
-			t.Fatalf("%d idle moves and %d swirls in 30 catches, want a path every catch and a swirl", idle, swirls)
+		if glances < 20 {
+			t.Fatalf("%d glances in 30 catches", glances)
 		}
 	})
 }
 
-func TestTransitionsEndAnIdleSwirl(t *testing.T) {
+func TestTransitionsEndTheGlances(t *testing.T) {
 	for name, interrupt := range map[string]func(m *FishingFSM){
+		"bite":       (*FishingFSM).EventFishBite,
 		"cast":       (*FishingFSM).ForceCast,
 		"focus lost": (*FishingFSM).EventFocusLost,
 		"stop":       (*FishingFSM).EventHalt,
 	} {
 		t.Run(name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				// Every roll 0 makes the path a swirl.
-				m, moves, _ := idleFSM(func(int) int { return 0 })
+				// Every roll 0: the first glance goes to (80,80) 1.5 s in.
+				m, moves, _ := glanceFSM(t, func(int) int { return 0 })
 				defer m.Close()
 				startMonitoring(t, m)
-				m.EventFishBite()
-				time.Sleep(reelClickDelay + time.Second + 500*time.Millisecond)
-				wantState(t, m, StateCooldown)
-				before := len(moves())
-				if before < 15 {
-					t.Fatalf("%d moves half a second into the swirl", before)
+				time.Sleep(1600 * time.Millisecond)
+				if got := moves(); got[len(got)-1].at != image.Pt(80, 80) {
+					t.Fatalf("moves %v, want a glance to (80,80)", got)
 				}
 				interrupt(m)
-				synctest.Wait()
-				after := len(moves())
 				time.Sleep(10 * time.Second)
-				if got := len(moves()); got != after || after > before+1 {
-					t.Fatalf("moves %d before, %d at and %d after the %s; the swirl went on", before, after, got, name)
-				}
-				if name != "cast" {
-					return
-				}
-				catchOne(t, m) // the next cooldown starts a new path from the bobber
-				for _, mv := range moves()[after:] {
-					if mv.state == StateCooldown {
-						if d := mv.at.Sub(image.Pt(10, 10)); d.X*d.X+d.Y*d.Y > 80*80 {
-							t.Fatalf("the next cooldown went on with the old swirl at %v", mv.at)
-						}
-						break
+				for _, mv := range moves() {
+					if mv.state == StateMonitoring {
+						continue
+					}
+					if mv.state != StateReeling || mv.at != image.Pt(10, 10) {
+						t.Fatalf("a move to %v while %v after the %s", mv.at, mv.state, name)
 					}
 				}
 			})

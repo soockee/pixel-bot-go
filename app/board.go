@@ -48,9 +48,9 @@ func portOf(cfg config.Config) (string, error) {
 
 // boardNeeds are the Board features a use of it needs from the firmware.
 type boardNeeds struct {
-	camera      bool // camera drags, for Reposition and idle nudges
+	camera      bool // camera drags, for Reposition
 	rightClick  bool // pointer moves and right clicks, for the right-click reel
-	wander      bool // pointer moves, for idle wanders
+	wander      bool // pointer moves, for glances while watching
 	timedTaps   bool // holds other than 40 ms, for a timing profile
 	sideButtons bool // Mouse 4 or Mouse 5 is a bound key
 }
@@ -65,7 +65,7 @@ func needsFor(run config.Config, timedTaps bool) boardNeeds {
 		keys = append(keys, run.InteractKey)
 	}
 	return boardNeeds{
-		camera:      run.Reposition || run.IdleMoves,
+		camera:      run.Reposition,
 		rightClick:  run.ReelMethod != config.ReelInteractKey,
 		wander:      run.IdleMoves,
 		timedTaps:   timedTaps,

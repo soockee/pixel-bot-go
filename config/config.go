@@ -78,8 +78,8 @@ type Config struct {
 	WaterBuff string `json:"water_buff,omitempty"`
 	// ESP32Port selects the required serial BLE keyboard backend. AUTO finds the board.
 	ESP32Port string `json:"esp32_port,omitempty"`
-	// IdleMoves moves the pointer after every catch, a short wander or now and
-	// then a swirl round the game window, or nudges the camera a little.
+	// IdleMoves lets the pointer glance round the game window while the bobber
+	// is watched, and come back beside it.
 	IdleMoves bool `json:"idle_moves,omitempty"`
 	// Reposition steps the character with WASD, or turns the camera with a
 	// mouse drag, every 15 to 25 catches, before a verification cast.

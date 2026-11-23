@@ -49,8 +49,10 @@ type FishingFSM struct {
 	detectorAt          time.Time
 	reelDelay           time.Duration
 	idleTried           bool
-	idlePath            []image.Point // the rest of a between-catch pointer path, stepped on the cooldown's deadline
-	idleNudge           int           // the camera turn the last idle nudge left, which the next one turns back
+	watchIdle           bool          // the pointer glances round the window while the bobber is watched
+	restAim             image.Point   // where the pointer waits while the bobber is watched
+	away                bool          // a glance has the pointer away from restAim
+	glancesLeft         int           // points still to visit before the pointer goes back
 	outcomesShown       bool          // Bobber Marker showed its outcome blocks this run
 	awaitOutcome        bool          // the cooldown about to start follows a reel that should bring an outcome
 	castPause           time.Duration // the pause before the next cast while the cooldown waits for the outcome
@@ -250,7 +252,7 @@ func (f *FishingFSM) arm(d time.Duration) {
 func (f *FishingFSM) disarm() {
 	f.deadline = time.Time{}
 	f.cursorSteps = nil
-	f.idlePath = nil
+	f.watchIdle = false
 	f.stopTimer()
 }
 
@@ -312,6 +314,9 @@ func (f *FishingFSM) wake() {
 		f.deadlineReached()
 		return
 	}
+	if len(f.cursorSteps) == 0 && f.watchIdle && !f.glance() {
+		return
+	}
 	f.schedule()
 }
 
@@ -323,24 +328,9 @@ func (f *FishingFSM) deadlineReached() {
 		f.finishReel()
 	case StateCooldown:
 		f.castPause = 0 // the outcome did not come in time
-		if len(f.idlePath) > 0 {
-			f.idleStep()
+		if !f.idleTried && time.Now().Before(f.sessionEnd) && f.nextReposition != 0 && f.stats.reels.Load() >= f.nextReposition {
+			f.startReposition()
 			return
-		}
-		if !f.idleTried && time.Now().Before(f.sessionEnd) {
-			if f.nextReposition != 0 && f.stats.reels.Load() >= f.nextReposition {
-				f.startReposition()
-				return
-			}
-			if f.cfg.IdleMoves {
-				f.idleTried = true
-				if !f.deps.InFront() {
-					f.transition(StateWaitingFocus)
-					return
-				}
-				f.startIdle()
-				return
-			}
 		}
 		f.recast()
 	}
@@ -559,6 +549,9 @@ func (f *FishingFSM) startMonitoring() {
 		if move && !f.beginCursor(aim, true) {
 			return
 		}
+	}
+	if f.cfg.IdleMoves {
+		f.startGlances()
 	}
 	f.logger.Info("found blobber", "x", f.coordX, "y", f.coordY)
 	f.arm(time.Duration(f.cfg.MaxCastDurationSeconds) * time.Second)
