@@ -16,13 +16,13 @@ func TestSimulatedReelTiming(t *testing.T) {
 		t.Run("interrupt="+stop, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				log := &actionLog{}
-				actions := recordingActions(log)
-				actions.PlanReel = func(string) ReelTiming {
+				deps := recordingDeps(log)
+				deps.PlanReel = func(string) ReelTiming {
 					return ReelTiming{Hold: 120 * time.Millisecond, Cooldown: 2 * time.Second}
 				}
 				var events []ReelTimingEvent
-				actions.Observer = reelTimings(func(e ReelTimingEvent) { events = append(events, e) })
-				fsm := NewFSM(nil, testConfig(), actions)
+				deps.Observer = reelTimings(func(e ReelTimingEvent) { events = append(events, e) })
+				fsm := NewFSM(nil, testConfig(), deps)
 				defer fsm.Close()
 				var valid atomic.Bool
 				valid.Store(true)
@@ -69,11 +69,11 @@ func TestSimulatedReelTiming(t *testing.T) {
 func TestCalibratedDelayIncludesTimeAlreadySpentAfterDetection(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}
-		actions := recordingActions(log)
-		actions.PlanReel = func(string) ReelTiming {
+		deps := recordingDeps(log)
+		deps.PlanReel = func(string) ReelTiming {
 			return ReelTiming{Hold: 120 * time.Millisecond, AfterDetection: 400 * time.Millisecond}
 		}
-		fsm := NewFSM(nil, testConfig(), actions)
+		fsm := NewFSM(nil, testConfig(), deps)
 		defer fsm.Close()
 		startMonitoring(t, fsm)
 		fsm.send(evtFishBite{at: time.Now().Add(-150 * time.Millisecond)})
@@ -103,9 +103,9 @@ func TestPairedTimingReplay(t *testing.T) {
 				var cues, presses, releases []time.Time
 				var holds []time.Duration
 				sample := model.Sampler(42)
-				actions := recordingActions(&actionLog{})
-				inputOf(actions).click = func() error { presses = append(presses, time.Now()); return nil }
-				actions.PlanReel = func(detector string) ReelTiming {
+				deps := recordingDeps(&actionLog{})
+				inputOf(deps).click = func() error { presses = append(presses, time.Now()); return nil }
+				deps.PlanReel = func(detector string) ReelTiming {
 					s := inputtiming.Sample{HoldUS: inputtiming.FixedHoldUS}
 					if profile == "fitted" {
 						s = sample()
@@ -117,12 +117,12 @@ func TestPairedTimingReplay(t *testing.T) {
 						AfterDetection: time.Duration(model.Calibration.DelayUS(detector, s)) * time.Microsecond,
 					}
 				}
-				actions.Observer = reelTimings(func(e ReelTimingEvent) {
+				deps.Observer = reelTimings(func(e ReelTimingEvent) {
 					if e.Kind == "reel_released" {
 						releases = append(releases, time.Now())
 					}
 				})
-				engine, fsm, frames, _ := newSceneEngine(t, actions)
+				engine, fsm, frames, _ := newSceneEngine(t, deps)
 				engine.cfg.CooldownSeconds = 3
 				defer fsm.Close()
 				frames.set(fakegame.PhaseEmpty)

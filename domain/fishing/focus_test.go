@@ -50,9 +50,9 @@ func TestFocusRaceAtInputPauses(t *testing.T) {
 			}
 			t.Run(name, func(t *testing.T) {
 				synctest.Test(t, func(t *testing.T) {
-					actions := recordingActions(&actionLog{})
-					tt.refuse(inputOf(actions), err)
-					m := NewFSM(nil, testConfig(), actions)
+					deps := recordingDeps(&actionLog{})
+					tt.refuse(inputOf(deps), err)
+					m := NewFSM(nil, testConfig(), deps)
 					defer m.Close()
 					tt.reach(t, m)
 					if !focus {
@@ -80,7 +80,7 @@ func TestFocusRaceAtRepositionPauses(t *testing.T) {
 		cfg:    config.Config{Reposition: true},
 		logger: testLogger,
 		state:  StateCooldown,
-		actions: ActionCallbacks{
+		deps: Deps{
 			InFront:  func() bool { return true },
 			Pointer:  &testPointer{},
 			Observer: NopObserver{},

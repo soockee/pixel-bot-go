@@ -103,8 +103,8 @@ func (p *testPointer) Approach(center image.Point, box image.Rectangle) (image.P
 
 func (p *testPointer) Pos() (image.Point, bool) { return image.Point{}, false }
 
-// pointerOf is the testPointer of actions made by recordingActions.
-func pointerOf(actions ActionCallbacks) *testPointer { return actions.Pointer.(*testPointer) }
+// pointerOf is the testPointer of deps made by recordingDeps.
+func pointerOf(deps Deps) *testPointer { return deps.Pointer.(*testPointer) }
 
 // reelTimings is an Observer that only collects reel timing events.
 type reelTimings func(ReelTimingEvent)
@@ -113,14 +113,14 @@ func (reelTimings) Cast() func()                   { return func() {} }
 func (reelTimings) Reel() func()                   { return func() {} }
 func (o reelTimings) ReelTiming(e ReelTimingEvent) { o(e) }
 
-// inputOf is the testInput of actions made by recordingActions.
-func inputOf(actions ActionCallbacks) *testInput { return actions.Input.(*testInput) }
+// inputOf is the testInput of deps made by recordingDeps.
+func inputOf(deps Deps) *testInput { return deps.Input.(*testInput) }
 
 // settleAtRollZero is the wait after a reposition move when every Roll is 0.
 const settleAtRollZero = 550 * time.Millisecond
 
-func recordingActions(log *actionLog) ActionCallbacks {
-	return ActionCallbacks{
+func recordingDeps(log *actionLog) Deps {
+	return Deps{
 		Input: &testInput{
 			tap:   func(byte, time.Duration) error { log.add("press"); return nil },
 			move:  func(image.Point) error { log.add("move"); return nil },
@@ -136,7 +136,7 @@ func recordingActions(log *actionLog) ActionCallbacks {
 }
 
 func newRecordingFSM(log *actionLog) *FishingFSM {
-	return NewFSM(nil, testConfig(), recordingActions(log))
+	return NewFSM(nil, testConfig(), recordingDeps(log))
 }
 
 // fsmTest runs body on a fake clock, so timers fire instantly and in order.
@@ -162,7 +162,7 @@ func wantActions(t *testing.T, log *actionLog, want ...string) {
 	t.Helper()
 	synctest.Wait()
 	if got := log.snapshot(); !slices.Equal(got, want) {
-		t.Fatalf("actions = %v, want %v", got, want)
+		t.Fatalf("deps = %v, want %v", got, want)
 	}
 }
 
@@ -262,7 +262,7 @@ func TestMonitoringTimeoutCasts(t *testing.T) {
 		cfg := testConfig()
 		cfg.MaxCastDurationSeconds = 30
 		log := &actionLog{}
-		m := NewFSM(nil, cfg, recordingActions(log))
+		m := NewFSM(nil, cfg, recordingDeps(log))
 		defer m.Close()
 		startMonitoring(t, m)
 
@@ -328,17 +328,17 @@ func TestSampledReelMiss(t *testing.T) {
 			cfg := testConfig()
 			cfg.MaxFailedCasts = limit
 			log := &actionLog{}
-			actions := recordingActions(log)
+			deps := recordingDeps(log)
 			samples := 0
-			actions.DeliberateMisses = true
-			actions.Roll = func(_ int) int {
+			deps.DeliberateMisses = true
+			deps.Roll = func(_ int) int {
 				samples++
 				if samples == 1 {
 					return 0
 				}
 				return 2
 			}
-			m := NewFSM(nil, cfg, actions)
+			m := NewFSM(nil, cfg, deps)
 			defer m.Close()
 			startMonitoring(t, m)
 			m.EventFishBite()
@@ -386,20 +386,20 @@ func TestOffTargetReel(t *testing.T) {
 					cfg.ReelMethod = config.ReelInteractKey
 				}
 				log := &actionLog{}
-				actions := recordingActions(log)
-				actions.DeliberateMisses = true
-				actions.Roll = func(int) int { return 1 }
+				deps := recordingDeps(log)
+				deps.DeliberateMisses = true
+				deps.Roll = func(int) int { return 1 }
 				aim := image.Pt(52, 100)
 				at := image.Point{}
-				inputOf(actions).move = func(p image.Point) error { at = p; return nil }
-				inputOf(actions).click = func() error {
+				inputOf(deps).move = func(p image.Point) error { at = p; return nil }
+				inputOf(deps).click = func() error {
 					if at != aim {
 						log.add("wrong click point")
 					}
 					log.add("click")
 					return nil
 				}
-				m := NewFSM(nil, cfg, actions)
+				m := NewFSM(nil, cfg, deps)
 				defer m.Close()
 				m.EventAwaitFocus()
 				m.EventFocusAcquired()
@@ -438,9 +438,9 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 				cfg := testConfig()
 				cfg.Reposition = true
 				log := &actionLog{}
-				actions := recordingActions(log)
-				actions.Roll = func(int) int { return 0 } // reposition after 45 reels, settle 550 ms
-				inputOf(actions).tap = func(vk byte, _ time.Duration) error {
+				deps := recordingDeps(log)
+				deps.Roll = func(int) int { return 0 } // reposition after 45 reels, settle 550 ms
+				inputOf(deps).tap = func(vk byte, _ time.Duration) error {
 					if strings.ContainsRune("WASD", rune(vk)) {
 						log.add("reposition")
 					} else {
@@ -448,7 +448,7 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 					}
 					return nil
 				}
-				m := NewFSM(nil, cfg, actions)
+				m := NewFSM(nil, cfg, deps)
 				defer m.Close()
 				startMonitoring(t, m)
 				threshold := m.nextReposition
@@ -543,7 +543,7 @@ func TestAutomaticRepositionUsesOnlyESP32WhenSelected(t *testing.T) {
 		},
 		logger:              testLogger,
 		repositionDirection: 4,
-		actions: ActionCallbacks{
+		deps: Deps{
 			InFront: func() bool { return true },
 			Input: &testInput{tap: func(vk byte, _ time.Duration) error {
 				taps = append(taps, vk)
@@ -570,7 +570,7 @@ func TestAutomaticRepositionDragsThroughESP32(t *testing.T) {
 			ESP32Port:  "AUTO",
 		},
 		logger: testLogger,
-		actions: ActionCallbacks{
+		deps: Deps{
 			InFront: func() bool { return true },
 			Input: &testInput{drag: func(dx int) (bool, bool) {
 				drags = append(drags, dx)
@@ -590,9 +590,9 @@ func TestAutomaticRepositionDragsThroughESP32(t *testing.T) {
 
 func TestBlockedRightClickIsOnlyAnAttempt(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		actions := recordingActions(&actionLog{})
-		inputOf(actions).click = func() error { return errors.New("the mouse was moved") }
-		m := NewFSM(nil, testConfig(), actions)
+		deps := recordingDeps(&actionLog{})
+		inputOf(deps).click = func() error { return errors.New("the mouse was moved") }
+		m := NewFSM(nil, testConfig(), deps)
 		defer m.Close()
 		startMonitoring(t, m)
 		m.EventFishBite()
@@ -611,18 +611,18 @@ func TestApproachAndReelDelayAreIndependent(t *testing.T) {
 	for _, moveBeforeBite := range []bool{false, true} {
 		synctest.Test(t, func(t *testing.T) {
 			log := &actionLog{}
-			actions := recordingActions(log)
-			pointerOf(actions).approach = func(_ image.Point, box image.Rectangle) (image.Point, bool) {
+			deps := recordingDeps(log)
+			pointerOf(deps).approach = func(_ image.Point, box image.Rectangle) (image.Point, bool) {
 				return box.Min.Add(image.Pt(4, 4)), moveBeforeBite
 			}
-			inputOf(actions).move = func(p image.Point) error {
+			inputOf(deps).move = func(p image.Point) error {
 				log.add(fmt.Sprintf("move to %d,%d", p.X, p.Y))
 				return nil
 			}
-			actions.PlanReel = func(string) ReelTiming {
+			deps.PlanReel = func(string) ReelTiming {
 				return ReelTiming{AfterDetection: 220 * time.Millisecond}
 			}
-			fsm := NewFSM(nil, testConfig(), actions)
+			fsm := NewFSM(nil, testConfig(), deps)
 			defer fsm.Close()
 			fsm.EventAwaitFocus()
 			fsm.EventFocusAcquired()
@@ -649,9 +649,9 @@ func TestApproachAndReelDelayAreIndependent(t *testing.T) {
 func TestNoDeliberateMissWithoutTheSwitch(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}
-		actions := recordingActions(log)
-		actions.Roll = func(int) int { return 0 } // "forgot to reel" when misses are on
-		m := NewFSM(nil, testConfig(), actions)
+		deps := recordingDeps(log)
+		deps.Roll = func(int) int { return 0 } // "forgot to reel" when misses are on
+		m := NewFSM(nil, testConfig(), deps)
 		defer m.Close()
 		startMonitoring(t, m)
 		m.EventFishBite()

@@ -31,7 +31,7 @@ func TestDryRunTraceAppearsInDebugState(t *testing.T) {
 			SequenceThreshold: traceobserver.Threshold{Cutoff: .1},
 		}
 		trace := newLiveTrace(model, nil, time.Now())
-		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
+		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.Deps{
 			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN, InFront: func() bool { return true }, Pointer: straightPointer{},
 			Observer: trace,
 			PlanReel: func(string) fishing.ReelTiming { return fishing.ReelTiming{} },
@@ -88,7 +88,7 @@ func TestDryRunExportsCorrelatedEventsWithoutDetectorModel(t *testing.T) {
 			t.Fatal(err)
 		}
 		trace := newLiveTrace(nil, output, start)
-		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
+		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.Deps{
 			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN, InFront: func() bool { return true }, Pointer: straightPointer{},
 			Observer: trace,
 			PlanReel: func(string) fishing.ReelTiming { return fishing.ReelTiming{Hold: 60 * time.Millisecond} },

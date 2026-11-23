@@ -16,8 +16,8 @@ func TestReelWaitsForCursorAndStopCancelsRemainingSteps(t *testing.T) {
 	for _, stop := range []bool{false, true} {
 		synctest.Test(t, func(t *testing.T) {
 			log := &actionLog{}
-			actions := recordingActions(log)
-			actions.Pointer = &testPointer{
+			deps := recordingDeps(log)
+			deps.Pointer = &testPointer{
 				plan: func(target image.Point, settle bool) ([]CursorStep, bool) {
 					if settle {
 						return []CursorStep{{After: time.Second, Point: target}}, true
@@ -29,7 +29,7 @@ func TestReelWaitsForCursorAndStopCancelsRemainingSteps(t *testing.T) {
 				},
 				reset: func() {},
 			}
-			inputOf(actions).move = func(p image.Point) error {
+			inputOf(deps).move = func(p image.Point) error {
 				if p == image.Pt(10, 10) {
 					log.add("target")
 				} else {
@@ -37,7 +37,7 @@ func TestReelWaitsForCursorAndStopCancelsRemainingSteps(t *testing.T) {
 				}
 				return nil
 			}
-			fsm := NewFSM(nil, testConfig(), actions)
+			fsm := NewFSM(nil, testConfig(), deps)
 			defer fsm.Close()
 			startMonitoring(t, fsm)
 			fsm.EventFishBite()
@@ -61,14 +61,14 @@ func TestReelWaitsForCursorAndStopCancelsRemainingSteps(t *testing.T) {
 func TestFocusLossForgetsThePointer(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		resets := 0
-		actions := recordingActions(&actionLog{})
-		actions.Pointer = &testPointer{
+		deps := recordingDeps(&actionLog{})
+		deps.Pointer = &testPointer{
 			plan: func(target image.Point, _ bool) ([]CursorStep, bool) {
 				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, true
 			},
 			reset: func() { resets++ },
 		}
-		fsm := NewFSM(nil, testConfig(), actions)
+		fsm := NewFSM(nil, testConfig(), deps)
 		defer fsm.Close()
 		startMonitoring(t, fsm)
 		before := resets
@@ -83,15 +83,15 @@ func TestFocusLossForgetsThePointer(t *testing.T) {
 func TestRefusedCursorStepHaltsBeforeReel(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}
-		actions := recordingActions(log)
-		actions.Pointer = &testPointer{
+		deps := recordingDeps(log)
+		deps.Pointer = &testPointer{
 			plan: func(target image.Point, _ bool) ([]CursorStep, bool) {
 				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, true
 			},
 			reset: func() {},
 		}
-		inputOf(actions).move = func(image.Point) error { return errors.New("blocked") }
-		fsm := NewFSM(nil, testConfig(), actions)
+		inputOf(deps).move = func(image.Point) error { return errors.New("blocked") }
+		fsm := NewFSM(nil, testConfig(), deps)
 		defer fsm.Close()
 		startMonitoring(t, fsm)
 		fsm.EventFishBite()
@@ -104,17 +104,17 @@ func TestRefusedCursorStepHaltsBeforeReel(t *testing.T) {
 func TestMissedPointerGivesUpTheCast(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}
-		actions := recordingActions(log)
-		actions.Pointer = &testPointer{
+		deps := recordingDeps(log)
+		deps.Pointer = &testPointer{
 			plan: func(target image.Point, _ bool) ([]CursorStep, bool) {
 				return []CursorStep{{After: 100 * time.Millisecond, Point: target}}, true
 			},
 			reset: func() {},
 		}
-		inputOf(actions).move = func(image.Point) error { return ErrPointerMissed }
+		inputOf(deps).move = func(image.Point) error { return ErrPointerMissed }
 		cfg := testConfig()
 		cfg.MaxFailedCasts = 2
-		fsm := NewFSM(nil, cfg, actions)
+		fsm := NewFSM(nil, cfg, deps)
 		defer fsm.Close()
 		startMonitoring(t, fsm)
 		fsm.EventFishBite()
@@ -148,11 +148,11 @@ func TestPairedCursorReplay(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				bounds := image.Rect(-1000, 200, -520, 520)
 				position := image.Pt(-960, 230)
-				actions := recordingActions(&actionLog{})
+				deps := recordingDeps(&actionLog{})
 				var fsm *FishingFSM
 				var presses, cues []time.Time
 				var moves int
-				inputOf(actions).click = func() error {
+				inputOf(deps).click = func() error {
 					x, y, ok := fsm.TargetCoordinates()
 					if !ok || position != image.Pt(x, y) {
 						t.Errorf("reel attempted at %v, target is (%d,%d)", position, x, y)
@@ -160,7 +160,7 @@ func TestPairedCursorReplay(t *testing.T) {
 					presses = append(presses, time.Now())
 					return nil
 				}
-				inputOf(actions).move = func(p image.Point) error {
+				inputOf(deps).move = func(p image.Point) error {
 					position = p
 					moves++
 					if profile == "fitted" && !p.In(bounds) {
@@ -170,7 +170,7 @@ func TestPairedCursorReplay(t *testing.T) {
 				}
 				if profile == "fitted" {
 					planner := model.Planner(42)
-					actions.Pointer = &testPointer{
+					deps.Pointer = &testPointer{
 						plan: func(target image.Point, settle bool) ([]CursorStep, bool) {
 							path := planner(position, target, bounds, settle)
 							steps := make([]CursorStep, len(path))
@@ -182,7 +182,7 @@ func TestPairedCursorReplay(t *testing.T) {
 						reset: func() {},
 					}
 				}
-				engine, runFSM, frames, _ := newSceneEngine(t, actions)
+				engine, runFSM, frames, _ := newSceneEngine(t, deps)
 				fsm = runFSM
 				engine.cfg.CooldownSeconds = 3
 				defer fsm.Close()

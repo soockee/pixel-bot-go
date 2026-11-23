@@ -68,7 +68,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	c.Recordings = desktop.NewRecordings(func() string { return cfg.RecordDir })
 	inFront := c.gameFocused
 
-	callbacks := fishing.ActionCallbacks{InFront: inFront, Roll: rand.IntN, Observer: fishing.NopObserver{}}
+	deps := fishing.Deps{InFront: inFront, Roll: rand.IntN, Observer: fishing.NopObserver{}}
 	dryRun := cfg.DryRun
 	openBoard := fishing.BoardOpener(func(config.Config) (func(), error) {
 		return nil, errors.New("a dry run opens no Board")
@@ -77,7 +77,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		logger.Warn("dry-run enabled: input actions are logged, not injected")
 		if trace.Model != nil || trace.Output != nil {
 			c.trace = newLiveTrace(trace.Model, trace.Output, trace.Start)
-			callbacks.Observer = c.trace
+			deps.Observer = c.trace
 		}
 		// A dry run plans the pointer like a live run, with the recorded
 		// profile or the default path, so the fake game shows real movement.
@@ -86,11 +86,11 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			plan = cursormotion.DefaultPath
 		}
 		pointer := &dryPointer{c: c, inFront: inFront, plan: plan}
-		callbacks.Pointer = pointer
-		callbacks.Input = action.DryRun{Logger: logger, InFront: inFront, Area: c.gameArea, Moved: pointer.Moved}
-		callbacks.SimulateHolds = true
+		deps.Pointer = pointer
+		deps.Input = action.DryRun{Logger: logger, InFront: inFront, Area: c.gameArea, Moved: pointer.Moved}
+		deps.SimulateHolds = true
 	} else {
-		callbacks.DeliberateMisses = true
+		deps.DeliberateMisses = true
 		c.board.board.Logger = logger
 		board := &c.board.board // usable only while a run holds it
 		openBoard = func(run config.Config) (func(), error) {
@@ -189,17 +189,17 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			CanDrag: func() bool { return board.CanDragCamera() && !action.LeftMouseDown() },
 			Drag:    board.DragCamera,
 		}
-		callbacks.Input = guard
+		deps.Input = guard
 		plan := trace.Cursor
 		if plan == nil {
 			plan = cursormotion.DefaultPath
 		}
-		callbacks.Pointer = livePointer{c: c, guard: guard, plan: plan}
+		deps.Pointer = livePointer{c: c, guard: guard, plan: plan}
 	}
 	// A dry run without a trace keeps every default.
-	callbacks.PlanReel = func(string) fishing.ReelTiming { return fishing.ReelTiming{} }
+	deps.PlanReel = func(string) fishing.ReelTiming { return fishing.ReelTiming{} }
 	if !dryRun || trace.Timing != nil || trace.Output != nil {
-		callbacks.PlanReel = func(detector string) fishing.ReelTiming {
+		deps.PlanReel = func(detector string) fishing.ReelTiming {
 			var s inputtiming.Sample
 			if dryRun {
 				s.HoldUS = inputtiming.FixedHoldUS
@@ -219,8 +219,8 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			return timing
 		}
 	}
-	c.input = callbacks.Input
-	c.FSM = fishing.NewFSM(logger, cfg, callbacks)
+	c.input = deps.Input
+	c.FSM = fishing.NewFSM(logger, cfg, deps)
 
 	detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
 		return detect.NewMarkerLocator(), detect.NewSplashSoundDetector(logger), nil

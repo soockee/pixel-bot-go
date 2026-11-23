@@ -191,7 +191,7 @@ func TestFakeGameReplayFeedsDryRunAttemptsToScorer(t *testing.T) {
 			scorer.observe(r, nil)
 			observer.Observe(r)
 		}
-		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
+		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.Deps{
 			Input: observedInput{DryRun: dry,
 				tapped: func() { emit(replayCast, 0, replayDispatched) },
 				clicked: func() {

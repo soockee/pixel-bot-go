@@ -51,7 +51,7 @@ func TestEventsAfterCloseAreSafe(t *testing.T) {
 			t.Errorf("panic: %v", r)
 		}
 	}()
-	m := NewFSM(nil, testConfig(), recordingActions(&actionLog{}))
+	m := NewFSM(nil, testConfig(), recordingDeps(&actionLog{}))
 	m.Close()
 	m.Close()
 	m.EventFocusAcquired()
@@ -101,7 +101,7 @@ func TestFailedCastsHaltAfterLimit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		cfg := testConfig()
 		cfg.MaxFailedCasts = 2
-		m := NewFSM(nil, cfg, recordingActions(&actionLog{}))
+		m := NewFSM(nil, cfg, recordingDeps(&actionLog{}))
 		defer m.Close()
 		startMonitoring(t, m)
 
@@ -118,7 +118,7 @@ func TestReelResetsFailedCasts(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		cfg := testConfig()
 		cfg.MaxFailedCasts = 2
-		m := NewFSM(nil, cfg, recordingActions(&actionLog{}))
+		m := NewFSM(nil, cfg, recordingDeps(&actionLog{}))
 		defer m.Close()
 		startMonitoring(t, m)
 
@@ -140,7 +140,7 @@ func TestSessionLimitHaltsAtTheNextCast(t *testing.T) {
 		cfg.MaxSessionMinutes = 1
 		cfg.MaxFailedCasts = 1000
 		log := &actionLog{}
-		m := NewFSM(nil, cfg, recordingActions(log))
+		m := NewFSM(nil, cfg, recordingDeps(log))
 		defer m.Close()
 		m.EventAwaitFocus()
 		m.EventFocusAcquired()
@@ -160,7 +160,7 @@ func TestSessionLimitHaltsAtTheNextCast(t *testing.T) {
 func TestStartUsesTheCurrentConfig(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		cfg := testConfig()
-		m := NewFSM(nil, cfg, recordingActions(&actionLog{}))
+		m := NewFSM(nil, cfg, recordingDeps(&actionLog{}))
 		defer m.Close()
 		cfg.CooldownSeconds = 30 // changed in the panel before Start
 
@@ -176,10 +176,10 @@ func TestStartUsesTheCurrentConfig(t *testing.T) {
 func TestUnknownCastKeyHaltsWithoutPressing(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}
-		actions := recordingActions(log)
+		deps := recordingDeps(log)
 		cfg := testConfig()
 		cfg.CastKey = "Ctrl" // no key Go Fish can press
-		m := NewFSM(nil, cfg, actions)
+		m := NewFSM(nil, cfg, deps)
 		defer m.Close()
 		startMonitoring(t, m)
 
@@ -191,9 +191,9 @@ func TestUnknownCastKeyHaltsWithoutPressing(t *testing.T) {
 }
 
 func TestLoopPanicHaltsAndKeepsSendersFree(t *testing.T) {
-	actions := recordingActions(&actionLog{})
-	inputOf(actions).click = func() error { panic("input failed") }
-	m := NewFSM(nil, testConfig(), actions)
+	deps := recordingDeps(&actionLog{})
+	inputOf(deps).click = func() error { panic("input failed") }
+	m := NewFSM(nil, testConfig(), deps)
 	halted := make(chan struct{}, 1)
 	m.AddListener(func(_, next FishingState) {
 		if next == StateHalt {

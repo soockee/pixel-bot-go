@@ -54,8 +54,10 @@ type Input interface {
 	DragCamera(dx int) (attempted, moved bool)
 }
 
-// ActionCallbacks exposes OS actions used by the fishing logic.
-type ActionCallbacks struct {
+// Deps are what the FSM needs from outside: the Input, the Pointer and the
+// Observer, the focus check, the dice and the reel plan. Every field is
+// required or a plain switch, so the FSM checks none of them for nil.
+type Deps struct {
 	// Input is required: every key, click and pointer move goes through it.
 	Input Input
 	// SimulateHolds makes the FSM hold keys on its own clock, so a dry run's
