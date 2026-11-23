@@ -76,10 +76,13 @@ type ActionCallbacks struct {
 	ObserveCast func() func()
 	ObserveReel func() func()
 
-	// ReelRoll optionally supplies a pseudorandom draw in [0, n) for reel variation.
-	ReelRoll func(n int) int
-	// RepositionRoll varies live settle times and camera distances.
-	RepositionRoll func(n int) int
+	// Roll is required: a pseudorandom draw in [0, n), for every pause, idle
+	// move, reposition and deliberate miss the cycle varies.
+	Roll func(n int) int
+	// DeliberateMisses lets one bite in 20 go: one not reeled, one clicked
+	// beside the bobber. A dry run leaves it off, so a miss in its trace is
+	// always a missed detection.
+	DeliberateMisses bool
 	// Approach selects a waiting position after the locator locks.
 	Approach func(center image.Point, box image.Rectangle) (image.Point, bool)
 

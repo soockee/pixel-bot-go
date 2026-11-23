@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"image"
 	"log/slog"
-	"math/rand/v2"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -17,10 +16,9 @@ import (
 )
 
 const (
-	searchTimeout    = 5 * time.Second        // recast when no bobber appears
-	reelClickDelay   = 300 * time.Millisecond // gives the cursor time to settle on the bobber
-	interactHold     = 40 * time.Millisecond
-	repositionSettle = 750 * time.Millisecond
+	searchTimeout  = 5 * time.Second        // recast when no bobber appears
+	reelClickDelay = 300 * time.Millisecond // gives the cursor time to settle on the bobber
+	interactHold   = 40 * time.Millisecond
 )
 
 // FishingFSM manages fishing state, its deadline and input actions. All of them
@@ -325,14 +323,14 @@ func (f *FishingFSM) deadlineReached() {
 				f.startReposition()
 				return
 			}
-			if f.cfg.IdleMoves && rand.IntN(12) == 0 {
+			if f.cfg.IdleMoves && f.actions.Roll(12) == 0 {
 				f.idleTried = true
 				if f.actions.CanAct != nil && !f.actions.CanAct() {
 					f.transition(StateWaitingFocus)
 					return
 				}
 				f.idleMove()
-				f.arm(time.Duration(300+rand.IntN(601)) * time.Millisecond)
+				f.arm(time.Duration(300+f.actions.Roll(601)) * time.Millisecond)
 				return
 			}
 		}
@@ -375,7 +373,7 @@ func (f *FishingFSM) castFailed() {
 func (f *FishingFSM) planReposition() {
 	f.nextReposition = 0
 	if f.cfg.Reposition {
-		f.nextReposition = f.stats.reels.Load() + int32(45+rand.IntN(11))
+		f.nextReposition = f.stats.reels.Load() + int32(45+f.actions.Roll(11))
 	}
 }
 
@@ -383,14 +381,12 @@ func (f *FishingFSM) startReposition() {
 	f.idleTried = true
 	if !f.checkingReposition {
 		f.repositionAttempt = 0
-		f.repositionLimit = 4 + rand.IntN(3) // initial move plus three to five retries
-		f.repositionDirection = rand.IntN(12)
-		f.repositionDX = 12
-		if roll := f.actions.RepositionRoll; roll != nil {
-			f.repositionDX = 8 + roll(9)
-			if roll(2) == 0 {
-				f.repositionDX = -f.repositionDX
-			}
+		roll := f.actions.Roll
+		f.repositionLimit = 4 + roll(3) // initial move plus three to five retries
+		f.repositionDirection = roll(12)
+		f.repositionDX = 8 + roll(9)
+		if roll(2) == 0 {
+			f.repositionDX = -f.repositionDX
 		}
 	}
 	if !f.moveForReposition() {
@@ -402,11 +398,7 @@ func (f *FishingFSM) startReposition() {
 	}
 	f.repositionAttempt++
 	f.checkingReposition = true
-	settle := repositionSettle
-	if roll := f.actions.RepositionRoll; roll != nil {
-		settle = time.Duration(550+roll(251)+roll(251)) * time.Millisecond
-	}
-	f.arm(settle)
+	f.arm(time.Duration(550+f.actions.Roll(251)+f.actions.Roll(251)) * time.Millisecond)
 }
 
 func (f *FishingFSM) moveForReposition() bool {
@@ -584,10 +576,10 @@ func (f *FishingFSM) startReel() {
 	}
 	f.offTargetReel = false
 	aim := image.Pt(f.coordX, f.coordY)
-	if f.actions.ReelRoll != nil {
+	if f.actions.DeliberateMisses {
 		// One bite in reelMissOdds is not reeled, one is clicked beside the
 		// bobber: 5% deliberate misses, as a person makes.
-		switch f.actions.ReelRoll(reelMissOdds) {
+		switch f.actions.Roll(reelMissOdds) {
 		case 0:
 			f.finishMiss("forgot to reel")
 			return
@@ -739,7 +731,7 @@ func (f *FishingFSM) pause() time.Duration {
 	if f.cfg.CooldownSeconds > 0 {
 		return time.Duration(f.cfg.CooldownSeconds) * time.Second
 	}
-	return quickPauseMin + rand.N(quickPauseMax-quickPauseMin)
+	return quickPauseMin + time.Duration(f.actions.Roll(int((quickPauseMax-quickPauseMin)/time.Millisecond)))*time.Millisecond
 }
 
 const quickPauseMin, quickPauseMax = 400 * time.Millisecond, 1200 * time.Millisecond

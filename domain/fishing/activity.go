@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"image"
 	"math"
-	"math/rand/v2"
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
@@ -40,9 +39,10 @@ func CheckActivityKeys(cfg config.Config, parse func(string) (byte, bool)) error
 // idleMove plays one between-catch movement: now and then a small camera
 // nudge, or a cursor wander where no drag fits.
 func (f *FishingFSM) idleMove() {
-	if rand.IntN(3) == 0 {
-		dx := 4 + rand.IntN(7)
-		if rand.IntN(2) == 0 {
+	roll := f.actions.Roll
+	if roll(3) == 0 {
+		dx := 4 + roll(7)
+		if roll(2) == 0 {
 			dx = -dx
 		}
 		if attempted, moved := f.actions.Input.DragCamera(dx); attempted {
@@ -60,7 +60,7 @@ func (f *FishingFSM) idleMove() {
 	}
 	// shortcut: the path runs on the FSM loop, so a Stop waits for it (about
 	// half a second); schedule its points as timed steps if that is too slow.
-	for _, p := range wanderPath(start, rand.IntN) {
+	for _, p := range wanderPath(start, roll) {
 		if f.actions.CanAct != nil && !f.actions.CanAct() {
 			return
 		}

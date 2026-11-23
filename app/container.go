@@ -68,7 +68,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	c.Recordings = desktop.NewRecordings(func() string { return cfg.RecordDir })
 	inFront := c.gameFocused
 
-	callbacks := fishing.ActionCallbacks{ParseVK: action.ParseVK, CanAct: inFront}
+	callbacks := fishing.ActionCallbacks{ParseVK: action.ParseVK, CanAct: inFront, Roll: rand.IntN}
 	dryRun := cfg.DryRun
 	if dryRun {
 		logger.Warn("dry-run enabled: input actions are logged, not injected")
@@ -94,8 +94,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		callbacks.SimulateHolds = true
 		callbacks.Approach = cursormotion.ApproachPoint
 	} else {
-		callbacks.ReelRoll = rand.IntN
-		callbacks.RepositionRoll = rand.IntN
+		callbacks.DeliberateMisses = true
 		c.board.board.Logger = logger
 		board := &c.board.board // usable only while a run holds it
 		callbacks.OpenBoard = func(run config.Config) (func(), error) {
