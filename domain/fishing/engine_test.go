@@ -206,6 +206,7 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				log := &actionLog{}
 				actions := recordingActions(log)
+				actions.SimulateHolds = false // the Board times its holds
 				actions.ParseVK = func(key string) (byte, bool) {
 					switch key {
 					case "F9":

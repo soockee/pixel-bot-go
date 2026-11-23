@@ -91,6 +91,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		cursor, moved := c.dryCursor(plan, inFront)
 		callbacks.Cursor = cursor
 		callbacks.Input = action.DryRun{Logger: logger, InFront: inFront, Area: c.gameArea, Moved: moved}
+		callbacks.SimulateHolds = true
 		callbacks.Approach = cursormotion.ApproachPoint
 	} else {
 		callbacks.ReelRoll = rand.IntN

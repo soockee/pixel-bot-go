@@ -38,17 +38,19 @@ func CheckActivityKeys(cfg config.Config, parse func(string) (byte, bool)) error
 }
 
 // idleMove plays one between-catch movement: now and then a small camera
-// nudge where the input mode can drag, otherwise a cursor wander.
+// nudge, or a cursor wander where no drag fits.
 func (f *FishingFSM) idleMove() {
-	if drag := f.cameraDrag(); drag != nil && rand.IntN(3) == 0 {
+	if rand.IntN(3) == 0 {
 		dx := 4 + rand.IntN(7)
 		if rand.IntN(2) == 0 {
 			dx = -dx
 		}
-		if _, moved := drag(dx); moved {
-			f.logger.Info("between-catch camera nudge", "dx", dx)
+		if attempted, moved := f.actions.Input.DragCamera(dx); attempted {
+			if moved {
+				f.logger.Info("between-catch camera nudge", "dx", dx)
+			}
+			return
 		}
-		return
 	}
 	start := image.Pt(f.coordX, f.coordY)
 	if f.actions.CursorPos != nil {
@@ -66,14 +68,6 @@ func (f *FishingFSM) idleMove() {
 		time.Sleep(wanderStep)
 	}
 	f.logger.Info("between-catch cursor wander", "from", start)
-}
-
-// cameraDrag is the Board's camera drag, nil in a dry run.
-func (f *FishingFSM) cameraDrag() func(int) (bool, bool) {
-	if f.onBoard() {
-		return f.actions.Input.DragCamera
-	}
-	return nil
 }
 
 const wanderStep = 30 * time.Millisecond
@@ -114,14 +108,12 @@ func (f *FishingFSM) activity(key, name string) bool {
 		return false
 	}
 	if err := f.actions.Input.Tap(vk, 0); err != nil {
-		if f.onBoard() {
-			f.why("the ESP32 keyboard failed: " + err.Error())
-			f.halt()
-		}
+		f.why("could not reposition: " + err.Error())
+		f.halt()
 		return false
 	}
-	if !f.onBoard() {
-		time.Sleep(interactHold) // a dry run holds on the FSM clock, as the Board would
+	if f.actions.SimulateHolds {
+		time.Sleep(interactHold) // held on the FSM clock, as the Board would
 	}
 	f.logger.Info(name, "key", key)
 	return true

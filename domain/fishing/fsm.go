@@ -417,7 +417,7 @@ func (f *FishingFSM) moveForReposition() bool {
 	if f.repositionDirection < 4 {
 		cameraAttempt = f.repositionAttempt
 	}
-	if drag := f.cameraDrag(); drag != nil && cameraAttempt >= 0 && cameraAttempt < 2 {
+	if cameraAttempt >= 0 && cameraAttempt < 2 {
 		dx := f.repositionDX
 		if dx == 0 {
 			dx = 12
@@ -425,7 +425,7 @@ func (f *FishingFSM) moveForReposition() bool {
 		if cameraAttempt == 1 {
 			dx = -dx
 		}
-		if attempted, moved := drag(dx); attempted {
+		if attempted, moved := f.actions.Input.DragCamera(dx); attempted {
 			if moved {
 				f.logger.Info("reposition camera drag", "dx", dx)
 			}
@@ -537,7 +537,8 @@ func (f *FishingFSM) pressCast() bool {
 	if f.actions.ObserveCast != nil {
 		dispatched = f.actions.ObserveCast()
 	}
-	if !f.tap(vk, 0) {
+	if err := f.actions.Input.Tap(vk, 0); err != nil {
+		f.why("could not cast: " + err.Error())
 		return false
 	}
 	if dispatched != nil {
@@ -625,7 +626,7 @@ func (f *FishingFSM) startReel() {
 	if elapsed := f.reelTiming.AfterDetection; elapsed > 0 {
 		f.reelDelay = max(0, elapsed-time.Since(f.detectorAt))
 	}
-	if f.onBoard() && f.cfg.ReelMethod != config.ReelInteractKey {
+	if !f.actions.SimulateHolds && f.cfg.ReelMethod != config.ReelInteractKey {
 		f.reelTiming.Hold = 0 // the ESP32 right click owns its press and release
 	}
 	if n := len(f.cursorSteps); n > 0 {
@@ -675,12 +676,13 @@ func (f *FishingFSM) finishReel() {
 				return
 			}
 			f.stats.reelAttempts.Add(1)
-			// The Board times its own hold; a dry run holds on the FSM clock below.
-			hold := time.Duration(0)
-			if f.onBoard() {
-				hold = f.reelTiming.Hold
+			// The Board times its own hold, or the FSM holds it below.
+			hold := f.reelTiming.Hold
+			if f.actions.SimulateHolds {
+				hold = 0
 			}
-			if !f.tap(vk, hold) {
+			if err := f.actions.Input.Tap(vk, hold); err != nil {
+				f.why("could not reel: " + err.Error())
 				f.halt()
 				return
 			}
@@ -695,7 +697,7 @@ func (f *FishingFSM) finishReel() {
 		if f.reelDone != nil {
 			f.reelDone()
 		}
-		if f.reelTiming.Hold > 0 && !f.onBoard() {
+		if f.reelTiming.Hold > 0 && f.actions.SimulateHolds {
 			f.reelPressed = true
 			f.arm(f.reelTiming.Hold)
 			return
@@ -727,25 +729,6 @@ func (f *FishingFSM) finishMiss(reason string) {
 	}
 	f.transition(StateCooldown)
 	f.idleTried = true
-}
-
-// onBoard reports whether this run sends its input to the Board, which times
-// its own holds, rather than to a dry run's log.
-func (f *FishingFSM) onBoard() bool {
-	return f.cfg.ESP32Port != "" && !f.cfg.DryRun
-}
-
-// tap presses vk, or records why it could not.
-func (f *FishingFSM) tap(vk byte, hold time.Duration) bool {
-	if err := f.actions.Input.Tap(vk, hold); err != nil {
-		if f.onBoard() {
-			f.why("the ESP32 keyboard failed: " + err.Error())
-		} else {
-			f.why("input was blocked: " + err.Error())
-		}
-		return false
-	}
-	return true
 }
 
 // pause is the wait after a catch before the next cast: the configured

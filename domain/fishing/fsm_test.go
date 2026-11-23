@@ -81,7 +81,8 @@ func recordingActions(log *actionLog) ActionCallbacks {
 			move:  func(image.Point) error { log.add("move"); return nil },
 			click: func() error { log.add("click"); return nil },
 		},
-		ParseVK: func(string) (byte, bool) { return 0, true },
+		ParseVK:       func(string) (byte, bool) { return 0, true },
+		SimulateHolds: true, // testConfig has no Board
 	}
 }
 
