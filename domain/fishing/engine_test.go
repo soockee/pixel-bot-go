@@ -51,7 +51,7 @@ func startEngine(t *testing.T, engine *Engine) {
 	}
 }
 
-func newSceneEngine(t *testing.T, actions ActionCallbacks) (*Engine, *FishingFSM, *sceneFrames, image.Rectangle) {
+func newSceneEngine(t *testing.T, deps Deps) (*Engine, *FishingFSM, *sceneFrames, image.Rectangle) {
 	t.Helper()
 	tmpl, err := assets.FishingTargetImage()
 	if err != nil {
@@ -61,20 +61,23 @@ func newSceneEngine(t *testing.T, actions ActionCallbacks) (*Engine, *FishingFSM
 	cfg := testConfig()
 	frames := &sceneFrames{render: r.Render, origin: image.Pt(-1000, 200)}
 	frames.set(fakegame.PhaseBobber)
-	fsm := NewFSM(nil, cfg, actions)
+	fsm := NewFSM(nil, cfg, deps)
 	detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
 		return detect.NewMarkerLocator(), deaf{detect.NewSplashSoundDetector(nil)}, nil
 	}
-	engine := NewEngine(frames, noSound, fsm, detectors, cfg, testLogger)
+	engine := NewEngine(frames, noSound, fsm, detectors, noBoard, cfg, testLogger)
 	return engine, fsm, frames, r.BobberRect().Add(frames.origin)
 }
+
+// noBoard is a BoardOpener for tests: there is nothing to open or close.
+func noBoard(config.Config) (func(), error) { return func() {}, nil }
 
 // The whole pipeline without Tk: rendered frames, real matcher, real detector,
 // real FSM, recorded input.
 func TestEngineReelsWhenTheSceneSplashes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}
-		engine, fsm, frames, bobber := newSceneEngine(t, recordingActions(log))
+		engine, fsm, frames, bobber := newSceneEngine(t, recordingDeps(log))
 		defer fsm.Close()
 		startEngine(t, engine)
 		defer engine.Stop()
@@ -124,15 +127,15 @@ func TestInteractKeyReelRequiresAFreshMarkerAndReleasesOnFocusLoss(t *testing.T)
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				log := &actionLog{}
-				actions := recordingActions(log)
-				inputOf(actions).tap = func(vk byte, _ time.Duration) error {
+				deps := recordingDeps(log)
+				inputOf(deps).tap = func(vk byte, _ time.Duration) error {
 					if vk != 'F' {
 						t.Errorf("Interact vk = %d, want F", vk)
 					}
 					log.add("interact")
 					return nil
 				}
-				engine, fsm, frames, _ := newSceneEngine(t, actions)
+				engine, fsm, frames, _ := newSceneEngine(t, deps)
 				engine.cfg.ReelMethod, engine.cfg.InteractKey = config.ReelInteractKey, "F"
 				defer fsm.Close()
 				startEngine(t, engine)
@@ -175,7 +178,7 @@ func TestInteractKeyReelRequiresAFreshMarkerAndReleasesOnFocusLoss(t *testing.T)
 func TestEngineStaysQuietOnAStaticBobber(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}
-		engine, fsm, _, _ := newSceneEngine(t, recordingActions(log))
+		engine, fsm, _, _ := newSceneEngine(t, recordingDeps(log))
 		defer fsm.Close()
 		startEngine(t, engine)
 		defer engine.Stop()
@@ -202,16 +205,16 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				log := &actionLog{}
-				actions := recordingActions(log)
-				actions.SimulateHolds = false // the Board times its holds
-				actions.OpenBoard = func(run config.Config) (func(), error) {
+				deps := recordingDeps(log)
+				deps.SimulateHolds = false // the Board times its holds
+				openBoard := func(run config.Config) (func(), error) {
 					if run.ESP32Port != "COM3" {
 						t.Errorf("opened port %q", run.ESP32Port)
 					}
 					log.add("open")
 					return func() { log.add("close") }, nil
 				}
-				inputOf(actions).tap = func(vk byte, _ time.Duration) error {
+				inputOf(deps).tap = func(vk byte, _ time.Duration) error {
 					switch vk {
 					case 0x78:
 						log.add("cast")
@@ -225,7 +228,8 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 					}
 					return nil
 				}
-				engine, fsm, frames, _ := newSceneEngine(t, actions)
+				engine, fsm, frames, _ := newSceneEngine(t, deps)
+				engine.openBoard = openBoard
 				engine.cfg.ReelMethod, engine.cfg.InteractKey, engine.cfg.ESP32Port = config.ReelInteractKey, "F", "COM3"
 				if test.rightClick {
 					// The app routes this move and click to the board through action.Guard.
@@ -267,7 +271,7 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 
 func TestEnginePublishesPreviewUntilStopped(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		engine, fsm, _, _ := newSceneEngine(t, recordingActions(&actionLog{}))
+		engine, fsm, _, _ := newSceneEngine(t, recordingDeps(&actionLog{}))
 		defer fsm.Close()
 		if engine.Preview() != nil {
 			t.Fatal("preview before Start")
@@ -290,11 +294,11 @@ func TestEnginePublishesPreviewUntilStopped(t *testing.T) {
 
 func TestEngineReportsDetectorsItCannotBuild(t *testing.T) {
 	cfg := testConfig()
-	fsm := NewFSM(nil, cfg, recordingActions(&actionLog{}))
+	fsm := NewFSM(nil, cfg, recordingDeps(&actionLog{}))
 	defer fsm.Close()
 	engine := NewEngine(&failingFrames{}, noSound, fsm, func(config.Config) (detect.Locator, detect.BiteDetector, error) {
 		return nil, nil, errors.New("unknown locator")
-	}, cfg, testLogger)
+	}, noBoard, cfg, testLogger)
 
 	if err := engine.Start(); err == nil {
 		t.Fatal("want an error")
@@ -317,12 +321,12 @@ func TestEngineSurvivesCaptureFailures(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		frames := &failingFrames{}
 		cfg := testConfig()
-		fsm := NewFSM(nil, cfg, recordingActions(&actionLog{}))
+		fsm := NewFSM(nil, cfg, recordingDeps(&actionLog{}))
 		defer fsm.Close()
 		detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
 			return nil, deaf{detect.NewSplashSoundDetector(nil)}, nil
 		}
-		engine := NewEngine(frames, noSound, fsm, detectors, cfg, testLogger)
+		engine := NewEngine(frames, noSound, fsm, detectors, noBoard, cfg, testLogger)
 
 		startEngine(t, engine)
 		time.Sleep(time.Second)
@@ -347,7 +351,7 @@ func (earDetector) Hear(pcm []byte, _ time.Time) bool { return pcm[0] != 0 }
 func TestEngineReelsWhenTheDetectorHearsABite(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		log := &actionLog{}
-		engine, fsm, _, _ := newSceneEngine(t, recordingActions(log))
+		engine, fsm, _, _ := newSceneEngine(t, recordingDeps(log))
 		defer fsm.Close()
 		bang := make(chan struct{})
 		engine.detectors = func(config.Config) (detect.Locator, detect.BiteDetector, error) {
@@ -400,12 +404,13 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				var heading, trialCasts, reels int
 				var firstMove time.Time
 				input := &testInput{}
-				actions := ActionCallbacks{
-					Roll:  rand.IntN,
-					Input: input,
-					OpenBoard: func(config.Config) (func(), error) {
-						return func() {}, nil
-					},
+				deps := Deps{
+					Pointer:  &testPointer{},
+					Observer: NopObserver{},
+					PlanReel: func(string) ReelTiming { return ReelTiming{} },
+					Roll:     rand.IntN,
+					InFront:  func() bool { return true },
+					Input:    input,
 				}
 				input.drag = func(dx int) (bool, bool) {
 					if firstMove.IsZero() {
@@ -438,7 +443,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 					}
 					return nil
 				}
-				engine, fsm, scene, _ := newSceneEngine(t, actions)
+				engine, fsm, scene, _ := newSceneEngine(t, deps)
 				frames = scene
 				render := frames.render
 				rendered := map[fakegame.Phase]*image.RGBA{}
@@ -535,7 +540,7 @@ func (c countingEar) Hear([]byte, time.Time) bool { c.heard.Add(1); return false
 // must still all reach the detector, or it never hears a bite start.
 func TestEngineHearsEverySoundPacketWhileCaptureIsSlow(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		engine, fsm, frames, _ := newSceneEngine(t, recordingActions(&actionLog{}))
+		engine, fsm, frames, _ := newSceneEngine(t, recordingDeps(&actionLog{}))
 		defer fsm.Close()
 		engine.frames = slowFrames{frames}
 		var heard, sent atomic.Int32

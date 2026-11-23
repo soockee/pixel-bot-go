@@ -11,7 +11,7 @@ func TestHaltOnItsOwnSaysWhy(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		cfg := testConfig()
 		cfg.MaxFailedCasts = 2
-		m := NewFSM(nil, cfg, recordingActions(&actionLog{}))
+		m := NewFSM(nil, cfg, recordingDeps(&actionLog{}))
 		defer m.Close()
 		startMonitoring(t, m)
 		m.EventTargetLost()
@@ -28,7 +28,7 @@ func TestSessionLimitSaysWhy(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		cfg := testConfig()
 		cfg.MaxFailedCasts, cfg.MaxSessionMinutes = 1000, 1
-		m := NewFSM(nil, cfg, recordingActions(&actionLog{}))
+		m := NewFSM(nil, cfg, recordingDeps(&actionLog{}))
 		defer m.Close()
 		startMonitoring(t, m)
 		time.Sleep(time.Minute + searchTimeout)
@@ -78,10 +78,10 @@ func TestNewRunForgetsTheLastReason(t *testing.T) {
 
 func TestUnknownCastKeySaysWhy(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		actions := recordingActions(&actionLog{})
+		deps := recordingDeps(&actionLog{})
 		cfg := testConfig()
 		cfg.CastKey = "Ctrl" // no key Go Fish can press
-		m := NewFSM(nil, cfg, actions)
+		m := NewFSM(nil, cfg, deps)
 		defer m.Close()
 		m.EventAwaitFocus()
 		m.EventFocusAcquired()

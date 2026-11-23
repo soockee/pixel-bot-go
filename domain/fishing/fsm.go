@@ -21,7 +21,7 @@ const (
 	interactHold   = 40 * time.Millisecond
 )
 
-// FishingFSM manages fishing state, its deadline and input actions. All of them
+// FishingFSM manages fishing state, its deadline and its input. All of them
 // run on one goroutine, so a transition cancels anything the old state had pending.
 type FishingFSM struct {
 	state               FishingState // owned by the loop goroutine; cur mirrors it for other goroutines
@@ -62,7 +62,7 @@ type FishingFSM struct {
 	failedCasts         int
 	sessionEnd          time.Time
 	stats               struct{ casts, reels, reelAttempts, reelInputs, failedInRow, caught, gotAway, notHooked atomic.Int32 } // this run, for the UI
-	actions             ActionCallbacks
+	deps                Deps
 	events              chan any
 	done                <-chan struct{}
 	stopped             chan struct{}
@@ -73,7 +73,7 @@ type FishingFSM struct {
 
 // NewFSM creates and starts a FishingFSM in StateHalt. A nil logger discards
 // logs and a nil cfg uses the defaults.
-func NewFSM(logger *slog.Logger, cfg *config.Config, actions ActionCallbacks) *FishingFSM {
+func NewFSM(logger *slog.Logger, cfg *config.Config, deps Deps) *FishingFSM {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
@@ -82,7 +82,7 @@ func NewFSM(logger *slog.Logger, cfg *config.Config, actions ActionCallbacks) *F
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	f := &FishingFSM{
-		state: StateHalt, logger: logger, source: cfg, cfg: *cfg, actions: actions,
+		state: StateHalt, logger: logger, source: cfg, cfg: *cfg, deps: deps,
 		events: make(chan any, 64), done: ctx.Done(), stopped: make(chan struct{}), cancel: cancel,
 	}
 	f.cur.Store(int32(StateHalt))
@@ -161,10 +161,9 @@ func (f *FishingFSM) handle(ev any) {
 			f.transition(StateSearching)
 		}
 	case evtFocusLost:
-		if f.checkingReposition && f.state != StateHalt {
-			f.why("game focus was lost while checking the new fishing position")
-			f.halt()
-		} else if f.state != StateHalt {
+		// A reposition check goes on once the game is back: its next cast still
+		// counts as the check of the new spot.
+		if f.state != StateHalt {
 			f.transition(StateWaitingFocus)
 		}
 	case evtAwaitFocus:
@@ -184,9 +183,7 @@ func (f *FishingFSM) handle(ev any) {
 			f.checkingReposition = false
 			f.repositionLogout.Store(false)
 			f.planReposition()
-			if f.actions.Cursor != nil {
-				f.actions.Cursor.Reset()
-			}
+			f.deps.Pointer.Reset()
 			limit := f.cfg.MaxSessionMinutes
 			if f.cfg.Schedule {
 				limit = max(limit, f.cfg.PlayMaxMinutes+1)
@@ -292,14 +289,13 @@ func (f *FishingFSM) wake() {
 		point := f.cursorSteps[n-1].Point
 		f.cursorSteps = f.cursorSteps[n:]
 		// Skip elapsed intermediate points instead of sending a burst.
-		if err := f.actions.Input.MoveTo(point); err != nil {
+		if err := f.deps.Input.MoveTo(point); err != nil {
 			if errors.Is(err, ErrPointerMissed) && !f.countFailedCast() {
 				f.logger.Warn("cast given up", "reason", err.Error())
 				f.recast()
 				return
 			}
-			f.why(err.Error())
-			f.halt()
+			f.inputFailed("", err)
 			return
 		}
 	}
@@ -323,14 +319,14 @@ func (f *FishingFSM) deadlineReached() {
 				f.startReposition()
 				return
 			}
-			if f.cfg.IdleMoves && f.actions.Roll(12) == 0 {
+			if f.cfg.IdleMoves && f.deps.Roll(12) == 0 {
 				f.idleTried = true
-				if f.actions.CanAct != nil && !f.actions.CanAct() {
+				if !f.deps.InFront() {
 					f.transition(StateWaitingFocus)
 					return
 				}
 				f.idleMove()
-				f.arm(time.Duration(300+f.actions.Roll(601)) * time.Millisecond)
+				f.arm(time.Duration(300+f.deps.Roll(601)) * time.Millisecond)
 				return
 			}
 		}
@@ -373,7 +369,7 @@ func (f *FishingFSM) castFailed() {
 func (f *FishingFSM) planReposition() {
 	f.nextReposition = 0
 	if f.cfg.Reposition {
-		f.nextReposition = f.stats.reels.Load() + int32(45+f.actions.Roll(11))
+		f.nextReposition = f.stats.reels.Load() + int32(45+f.deps.Roll(11))
 	}
 }
 
@@ -381,7 +377,7 @@ func (f *FishingFSM) startReposition() {
 	f.idleTried = true
 	if !f.checkingReposition {
 		f.repositionAttempt = 0
-		roll := f.actions.Roll
+		roll := f.deps.Roll
 		f.repositionLimit = 4 + roll(3) // initial move plus three to five retries
 		f.repositionDirection = roll(12)
 		f.repositionDX = 8 + roll(9)
@@ -390,7 +386,11 @@ func (f *FishingFSM) startReposition() {
 		}
 	}
 	if !f.moveForReposition() {
-		if f.state != StateHalt {
+		switch {
+		case f.state == StateHalt || f.state == StateWaitingFocus:
+		case !f.deps.InFront():
+			f.transition(StateWaitingFocus)
+		default:
 			f.why("reposition input was blocked. Check the movement binding and game focus")
 			f.halt()
 		}
@@ -398,7 +398,7 @@ func (f *FishingFSM) startReposition() {
 	}
 	f.repositionAttempt++
 	f.checkingReposition = true
-	f.arm(time.Duration(550+f.actions.Roll(251)+f.actions.Roll(251)) * time.Millisecond)
+	f.arm(time.Duration(550+f.deps.Roll(251)+f.deps.Roll(251)) * time.Millisecond)
 }
 
 func (f *FishingFSM) moveForReposition() bool {
@@ -417,7 +417,7 @@ func (f *FishingFSM) moveForReposition() bool {
 		if cameraAttempt == 1 {
 			dx = -dx
 		}
-		if attempted, moved := f.actions.Input.DragCamera(dx); attempted {
+		if attempted, moved := f.deps.Input.DragCamera(dx); attempted {
 			if moved {
 				f.logger.Info("reposition camera drag", "dx", dx)
 			}
@@ -486,16 +486,12 @@ func (f *FishingFSM) transition(next FishingState) {
 	switch next {
 	case StateWaitingFocus:
 		// The person may use the mouse while the game is not in front; that is no takeover.
-		if f.actions.Cursor != nil {
-			f.actions.Cursor.Reset()
-		}
+		f.deps.Pointer.Reset()
 	case StateSearching:
 		f.arm(searchTimeout)
 	case StateCasting:
 		if f.pressCast() {
 			f.transition(StateSearching)
-		} else {
-			f.halt()
 		}
 	case StateMonitoring:
 		f.startMonitoring()
@@ -517,25 +513,22 @@ func (f *FishingFSM) transition(next FishingState) {
 	}
 }
 
-// pressCast reports false when the configured key is unusable, so the wrong
-// key is never pressed.
+// pressCast reports false, after it paused or stopped the run, when the cast
+// did not go out. An unusable key stops the run, so the wrong key is never
+// pressed.
 func (f *FishingFSM) pressCast() bool {
 	vk, ok := config.KeyCode(f.cfg.CastKey)
 	if !ok {
 		f.why(fmt.Sprintf("%q is not a Cast key Go Fish can press", f.cfg.CastKey))
+		f.halt()
 		return false
 	}
-	var dispatched func()
-	if f.actions.ObserveCast != nil {
-		dispatched = f.actions.ObserveCast()
-	}
-	if err := f.actions.Input.Tap(vk, 0); err != nil {
-		f.why("could not cast: " + err.Error())
+	dispatched := f.deps.Observer.Cast()
+	if err := f.deps.Input.Tap(vk, 0); err != nil {
+		f.inputFailed("could not cast: ", err)
 		return false
 	}
-	if dispatched != nil {
-		dispatched()
-	}
+	dispatched()
 	f.stats.casts.Add(1)
 	f.logger.Info("cast action executed", "key", f.cfg.CastKey)
 	return true
@@ -547,10 +540,7 @@ func (f *FishingFSM) startMonitoring() {
 		return
 	}
 	if f.cfg.ReelMethod != config.ReelInteractKey {
-		aim, move := image.Pt(f.coordX, f.coordY), true
-		if f.actions.Approach != nil {
-			aim, move = f.actions.Approach(aim, f.targetBox)
-		}
+		aim, move := f.deps.Pointer.Approach(image.Pt(f.coordX, f.coordY), f.targetBox)
 		if move && !f.beginCursor(aim, true) {
 			return
 		}
@@ -576,10 +566,10 @@ func (f *FishingFSM) startReel() {
 	}
 	f.offTargetReel = false
 	aim := image.Pt(f.coordX, f.coordY)
-	if f.actions.DeliberateMisses {
+	if f.deps.DeliberateMisses {
 		// One bite in reelMissOdds is not reeled, one is clicked beside the
 		// bobber: 5% deliberate misses, as a person makes.
-		switch f.actions.Roll(reelMissOdds) {
+		switch f.deps.Roll(reelMissOdds) {
 		case 0:
 			f.finishMiss("forgot to reel")
 			return
@@ -592,17 +582,13 @@ func (f *FishingFSM) startReel() {
 			aim = *f.missAim
 		}
 	}
-	if f.actions.ObserveReel != nil {
-		f.reelDone = f.actions.ObserveReel()
-	}
+	f.reelDone = f.deps.Observer.Reel()
 	f.reelDelay = reelClickDelay
-	if f.actions.PlanReel != nil {
-		f.reelTiming = f.actions.PlanReel(detect.SplashSoundName)
-		if f.reelTiming.Cooldown == 0 {
-			f.reelTiming.Cooldown = f.pause()
-		}
-		f.reelPressed = false
+	f.reelTiming = f.deps.PlanReel(detect.SplashSoundName)
+	if f.reelTiming.Cooldown == 0 {
+		f.reelTiming.Cooldown = f.pause()
 	}
+	f.reelPressed = false
 	if f.cfg.ReelMethod == config.ReelInteractKey {
 		if f.reelTiming.Hold == 0 {
 			f.reelTiming.Hold = interactHold
@@ -618,7 +604,7 @@ func (f *FishingFSM) startReel() {
 	if elapsed := f.reelTiming.AfterDetection; elapsed > 0 {
 		f.reelDelay = max(0, elapsed-time.Since(f.detectorAt))
 	}
-	if !f.actions.SimulateHolds && f.cfg.ReelMethod != config.ReelInteractKey {
+	if !f.deps.SimulateHolds && f.cfg.ReelMethod != config.ReelInteractKey {
 		f.reelTiming.Hold = 0 // the ESP32 right click owns its press and release
 	}
 	if n := len(f.cursorSteps); n > 0 {
@@ -631,12 +617,12 @@ func (f *FishingFSM) startReel() {
 }
 
 func (f *FishingFSM) beginCursor(target image.Point, settle bool) bool {
-	if f.actions.Cursor == nil {
-		_ = f.actions.Input.MoveTo(target)
-		return true
-	}
-	steps, ok := f.actions.Cursor.Plan(target, settle)
+	steps, ok := f.deps.Pointer.Plan(target, settle)
 	if !ok || len(steps) == 0 || steps[len(steps)-1].Point != target {
+		if !f.deps.InFront() {
+			f.transition(StateWaitingFocus)
+			return false
+		}
 		f.why("could not aim at the bobber. Keep the pointer inside the focused game window")
 		f.halt()
 		return false
@@ -650,7 +636,7 @@ func (f *FishingFSM) finishReel() {
 		f.resumeSearch()
 		return
 	}
-	if f.actions.CanSimulateReel != nil && !f.actions.CanSimulateReel() {
+	if !f.deps.InFront() {
 		f.transition(StateWaitingFocus)
 		return
 	}
@@ -670,26 +656,24 @@ func (f *FishingFSM) finishReel() {
 			f.stats.reelAttempts.Add(1)
 			// The Board times its own hold, or the FSM holds it below.
 			hold := f.reelTiming.Hold
-			if f.actions.SimulateHolds {
+			if f.deps.SimulateHolds {
 				hold = 0
 			}
-			if err := f.actions.Input.Tap(vk, hold); err != nil {
-				f.why("could not reel: " + err.Error())
-				f.halt()
+			if err := f.deps.Input.Tap(vk, hold); err != nil {
+				f.inputFailed("could not reel: ", err)
 				return
 			}
 		} else {
 			f.stats.reelAttempts.Add(1)
-			if err := f.actions.Input.ClickRight(); err != nil {
-				f.why("could not reel: " + err.Error())
-				f.halt()
+			if err := f.deps.Input.ClickRight(); err != nil {
+				f.inputFailed("could not reel: ", err)
 				return
 			}
 		}
 		if f.reelDone != nil {
 			f.reelDone()
 		}
-		if f.reelTiming.Hold > 0 && f.actions.SimulateHolds {
+		if f.reelTiming.Hold > 0 && f.deps.SimulateHolds {
 			f.reelPressed = true
 			f.arm(f.reelTiming.Hold)
 			return
@@ -723,6 +707,18 @@ func (f *FishingFSM) finishMiss(reason string) {
 	f.idleTried = true
 }
 
+// inputFailed pauses the run when the Input dropped input because the game
+// was not in front, and stops it, with what and why, on any other failure.
+func (f *FishingFSM) inputFailed(what string, err error) {
+	if errors.Is(err, ErrNotInFront) {
+		f.logger.Info("paused: the game lost focus", "dropped", what+err.Error())
+		f.transition(StateWaitingFocus)
+		return
+	}
+	f.why(what + err.Error())
+	f.halt()
+}
+
 // pause is the wait after a catch before the next cast: the configured
 // seconds, or by default a quick random 0.4 to 1.2 seconds, as a player
 // throws out again right after reeling in. The next search ignores the last
@@ -731,7 +727,7 @@ func (f *FishingFSM) pause() time.Duration {
 	if f.cfg.CooldownSeconds > 0 {
 		return time.Duration(f.cfg.CooldownSeconds) * time.Second
 	}
-	return quickPauseMin + time.Duration(f.actions.Roll(int((quickPauseMax-quickPauseMin)/time.Millisecond)))*time.Millisecond
+	return quickPauseMin + time.Duration(f.deps.Roll(int((quickPauseMax-quickPauseMin)/time.Millisecond)))*time.Millisecond
 }
 
 const quickPauseMin, quickPauseMax = 400 * time.Millisecond, 1200 * time.Millisecond
@@ -756,12 +752,10 @@ func (f *FishingFSM) resumeSearch() {
 }
 
 func (f *FishingFSM) observeReelTiming(kind, reason string) {
-	if f.actions.ObserveReelTiming != nil {
-		f.actions.ObserveReelTiming(ReelTimingEvent{
-			Kind: kind, Reason: reason, Detector: detect.SplashSoundName,
-			DetectorAt: f.detectorAt, Timing: f.reelTiming, Delay: f.reelDelay,
-		})
-	}
+	f.deps.Observer.ReelTiming(ReelTimingEvent{
+		Kind: kind, Reason: reason, Detector: detect.SplashSoundName,
+		DetectorAt: f.detectorAt, Timing: f.reelTiming, Delay: f.reelDelay,
+	})
 }
 
 func (f *FishingFSM) cancelReel(reason string) {

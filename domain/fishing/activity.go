@@ -11,32 +11,30 @@ import (
 // idleMove plays one between-catch movement: now and then a small camera
 // nudge, or a cursor wander where no drag fits.
 func (f *FishingFSM) idleMove() {
-	roll := f.actions.Roll
+	roll := f.deps.Roll
 	if roll(3) == 0 {
 		dx := 4 + roll(7)
 		if roll(2) == 0 {
 			dx = -dx
 		}
-		if attempted, moved := f.actions.Input.DragCamera(dx); attempted {
+		if attempted, moved := f.deps.Input.DragCamera(dx); attempted {
 			if moved {
 				f.logger.Info("between-catch camera nudge", "dx", dx)
 			}
 			return
 		}
 	}
-	start := image.Pt(f.coordX, f.coordY)
-	if f.actions.CursorPos != nil {
-		if x, y, ok := f.actions.CursorPos(); ok {
-			start = image.Pt(x, y)
-		}
+	start, ok := f.deps.Pointer.Pos()
+	if !ok {
+		start = image.Pt(f.coordX, f.coordY)
 	}
 	// shortcut: the path runs on the FSM loop, so a Stop waits for it (about
 	// half a second); schedule its points as timed steps if that is too slow.
 	for _, p := range wanderPath(start, roll) {
-		if f.actions.CanAct != nil && !f.actions.CanAct() {
+		if !f.deps.InFront() {
 			return
 		}
-		_ = f.actions.Input.MoveTo(p) // a wander step that does not land is skipped
+		_ = f.deps.Input.MoveTo(p) // a wander step that does not land is skipped
 		time.Sleep(wanderStep)
 	}
 	f.logger.Info("between-catch cursor wander", "from", start)
@@ -75,16 +73,15 @@ func (f *FishingFSM) activity(key, name string) bool {
 	if !ok {
 		return false
 	}
-	if f.actions.CanAct != nil && !f.actions.CanAct() {
+	if !f.deps.InFront() {
 		f.transition(StateWaitingFocus)
 		return false
 	}
-	if err := f.actions.Input.Tap(vk, 0); err != nil {
-		f.why("could not reposition: " + err.Error())
-		f.halt()
+	if err := f.deps.Input.Tap(vk, 0); err != nil {
+		f.inputFailed("could not reposition: ", err)
 		return false
 	}
-	if f.actions.SimulateHolds {
+	if f.deps.SimulateHolds {
 		time.Sleep(interactHold) // held on the FSM clock, as the Board would
 	}
 	f.logger.Info(name, "key", key)

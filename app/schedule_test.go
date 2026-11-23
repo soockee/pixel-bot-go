@@ -24,7 +24,7 @@ func TestScheduledBreakWaitsForBothGameScreens(t *testing.T) {
 		cfg.Schedule = true
 		cfg.PlayMinMinutes, cfg.PlayMaxMinutes = 2, 2
 		cfg.BreakMinMinutes, cfg.BreakMaxMinutes = 3, 3
-		fsm := fishing.NewFSM(nil, cfg, fishing.ActionCallbacks{})
+		fsm := fishing.NewFSM(nil, cfg, fishing.Deps{InFront: func() bool { return true }, Pointer: straightPointer{}, Observer: fishing.NopObserver{}, PlanReel: func(string) fishing.ReelTiming { return fishing.ReelTiming{} }})
 		defer fsm.Close()
 		c := &AppContainer{Config: cfg, FSM: fsm, Capture: &model.CaptureModel{}, View: desktop.NewView(desktop.NewFrames(), func(desktop.State) {})}
 		c.CapturePresenter = presenter.NewCapturePresenter(c.Capture, schedulePipeline{}, fsm, c.View)
@@ -118,7 +118,7 @@ func TestScheduledBreakWaitsForBothGameScreens(t *testing.T) {
 func TestRecoveryLogoutStopsAtCharacterSelection(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		cfg := config.DefaultConfig()
-		fsm := fishing.NewFSM(nil, cfg, fishing.ActionCallbacks{})
+		fsm := fishing.NewFSM(nil, cfg, fishing.Deps{InFront: func() bool { return true }, Pointer: straightPointer{}, Observer: fishing.NopObserver{}, PlanReel: func(string) fishing.ReelTiming { return fishing.ReelTiming{} }})
 		defer fsm.Close()
 		c := &AppContainer{Config: cfg, FSM: fsm, Capture: &model.CaptureModel{}, View: desktop.NewView(desktop.NewFrames(), func(desktop.State) {})}
 		c.CapturePresenter = presenter.NewCapturePresenter(c.Capture, schedulePipeline{}, fsm, c.View)

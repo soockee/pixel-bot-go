@@ -15,7 +15,7 @@ import (
 // for a moment. The new cast must not lock onto it.
 func TestNewCastDoesNotLockTheBobberItReplaces(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		engine, fsm, frames, _ := newSceneEngine(t, recordingActions(&actionLog{}))
+		engine, fsm, frames, _ := newSceneEngine(t, recordingDeps(&actionLog{}))
 		defer fsm.Close()
 		startEngine(t, engine)
 		defer engine.Stop()
@@ -40,7 +40,7 @@ func TestNewCastDoesNotLockTheBobberItReplaces(t *testing.T) {
 // before staleFor ends, so the cast must not be lost to waiting for a gap.
 func TestMarkerThatStaysAfterACastIsTheNewBobber(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		engine, fsm, _, _ := newSceneEngine(t, recordingActions(&actionLog{}))
+		engine, fsm, _, _ := newSceneEngine(t, recordingDeps(&actionLog{}))
 		defer fsm.Close()
 		startEngine(t, engine)
 		defer engine.Stop()
@@ -84,7 +84,7 @@ func TestMarkerIsStale(t *testing.T) {
 // The default pause after a catch is quick and varies; a configured pause is
 // kept exactly.
 func TestPauseAfterACatch(t *testing.T) {
-	f := &FishingFSM{cfg: *testConfig(), actions: ActionCallbacks{Roll: rand.IntN}}
+	f := &FishingFSM{cfg: *testConfig(), deps: Deps{Roll: rand.IntN, InFront: func() bool { return true }}}
 	f.cfg.CooldownSeconds = 0
 	seen := map[time.Duration]bool{}
 	for range 100 {

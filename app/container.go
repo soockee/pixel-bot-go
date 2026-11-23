@@ -68,19 +68,16 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	c.Recordings = desktop.NewRecordings(func() string { return cfg.RecordDir })
 	inFront := c.gameFocused
 
-	callbacks := fishing.ActionCallbacks{CanAct: inFront, Roll: rand.IntN}
+	deps := fishing.Deps{InFront: inFront, Roll: rand.IntN, Observer: fishing.NopObserver{}}
 	dryRun := cfg.DryRun
+	openBoard := fishing.BoardOpener(func(config.Config) (func(), error) {
+		return nil, errors.New("a dry run opens no Board")
+	})
 	if dryRun {
 		logger.Warn("dry-run enabled: input actions are logged, not injected")
 		if trace.Model != nil || trace.Output != nil {
 			c.trace = newLiveTrace(trace.Model, trace.Output, trace.Start)
-			callbacks.ObserveCast, callbacks.ObserveReel = c.trace.cast, c.trace.bite
-		}
-		if trace.Output != nil || trace.Timing != nil {
-			callbacks.CanSimulateReel = inFront
-			if trace.Output != nil {
-				callbacks.ObserveReelTiming = c.trace.reelTiming
-			}
+			deps.Observer = c.trace
 		}
 		// A dry run plans the pointer like a live run, with the recorded
 		// profile or the default path, so the fake game shows real movement.
@@ -88,16 +85,15 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		if plan == nil {
 			plan = cursormotion.DefaultPath
 		}
-		cursor, moved := c.dryCursor(plan, inFront)
-		callbacks.Cursor = cursor
-		callbacks.Input = action.DryRun{Logger: logger, InFront: inFront, Area: c.gameArea, Moved: moved}
-		callbacks.SimulateHolds = true
-		callbacks.Approach = cursormotion.ApproachPoint
+		pointer := &dryPointer{c: c, inFront: inFront, plan: plan}
+		deps.Pointer = pointer
+		deps.Input = action.DryRun{Logger: logger, InFront: inFront, Area: c.gameArea, Moved: pointer.Moved}
+		deps.SimulateHolds = true
 	} else {
-		callbacks.DeliberateMisses = true
+		deps.DeliberateMisses = true
 		c.board.board.Logger = logger
 		board := &c.board.board // usable only while a run holds it
-		callbacks.OpenBoard = func(run config.Config) (func(), error) {
+		openBoard = func(run config.Config) (func(), error) {
 			if run.ESP32Port == "" {
 				return nil, errors.New("select or connect the ESP32 board in Settings")
 			}
@@ -193,33 +189,17 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			CanDrag: func() bool { return board.CanDragCamera() && !action.LeftMouseDown() },
 			Drag:    board.DragCamera,
 		}
-		callbacks.Input = guard
-		callbacks.CursorPos = action.CursorPos
+		deps.Input = guard
 		plan := trace.Cursor
 		if plan == nil {
 			plan = cursormotion.DefaultPath
 		}
-		callbacks.Approach = func(center image.Point, box image.Rectangle) (image.Point, bool) {
-			area := c.gameArea()
-			x, y, ok := action.CursorPos()
-			if area == nil || !ok || !image.Pt(x, y).In(*area) {
-				return center, false
-			}
-			return cursormotion.ApproachPoint(center, box.Intersect(*area))
-		}
-		callbacks.Cursor = &fishing.CursorCallbacks{
-			Plan: func(target image.Point, settle bool) ([]fishing.CursorStep, bool) {
-				start, area, ok := guard.BeginCursor()
-				if !ok {
-					return nil, false
-				}
-				return cursorSteps(plan(start, target, area, settle))
-			},
-			Reset: guard.ResetCursor,
-		}
+		deps.Pointer = livePointer{c: c, guard: guard, plan: plan}
 	}
+	// A dry run without a trace keeps every default.
+	deps.PlanReel = func(string) fishing.ReelTiming { return fishing.ReelTiming{} }
 	if !dryRun || trace.Timing != nil || trace.Output != nil {
-		callbacks.PlanReel = func(detector string) fishing.ReelTiming {
+		deps.PlanReel = func(detector string) fishing.ReelTiming {
 			var s inputtiming.Sample
 			if dryRun {
 				s.HoldUS = inputtiming.FixedHoldUS
@@ -239,8 +219,8 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			return timing
 		}
 	}
-	c.input = callbacks.Input
-	c.FSM = fishing.NewFSM(logger, cfg, callbacks)
+	c.input = deps.Input
+	c.FSM = fishing.NewFSM(logger, cfg, deps)
 
 	detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
 		return detect.NewMarkerLocator(), detect.NewSplashSoundDetector(logger), nil
@@ -252,7 +232,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		}
 		return capture.CaptureAudio(ctx, target.PID, emit)
 	}
-	c.Engine = fishing.NewEngine(c.frames(), sound, c.FSM, detectors, cfg, logger)
+	c.Engine = fishing.NewEngine(c.frames(), sound, c.FSM, detectors, openBoard, cfg, logger)
 
 	c.CapturePresenter = presenter.NewCapturePresenter(c.Capture, c.Engine, c.FSM, c.View)
 	c.RecordPresenter = presenter.NewRecordPresenter(c.prepareRecording, c.View)
@@ -272,41 +252,6 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		presenter.NewPreviewPresenter(c.Engine, c.View),
 	)
 	return c
-}
-
-// dryCursor plans a dry run's pointer path from where its last logged move
-// left the pointer; moved, for action.DryRun, keeps that point.
-func (c *AppContainer) dryCursor(plan cursormotion.Planner, inFront func() bool) (cursor *fishing.CursorCallbacks, moved func(image.Point, image.Rectangle)) {
-	var current image.Point
-	var positioned bool
-	moved = func(p image.Point, area image.Rectangle) {
-		current = p
-		if c.trace != nil && c.trace.output != nil {
-			c.trace.cursorWaypoint(p, area)
-		}
-	}
-	return &fishing.CursorCallbacks{
-		Plan: func(target image.Point, settle bool) ([]fishing.CursorStep, bool) {
-			area := c.gameArea()
-			if !inFront() || area == nil {
-				return nil, false
-			}
-			if !positioned || !current.In(*area) {
-				current = area.Min.Add(area.Size().Div(2))
-				positioned = true
-			}
-			return cursorSteps(plan(current, target, *area, settle))
-		},
-		Reset: func() { positioned = false },
-	}, moved
-}
-
-func cursorSteps(path []cursormotion.Step) ([]fishing.CursorStep, bool) {
-	steps := make([]fishing.CursorStep, len(path))
-	for i, step := range path {
-		steps[i] = fishing.CursorStep{After: step.After, Point: step.Point}
-	}
-	return steps, len(steps) > 0
 }
 
 // gameFrames captures screen pixels within the selected game window.

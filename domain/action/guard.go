@@ -5,6 +5,8 @@ import (
 	"image"
 	"log/slog"
 	"time"
+
+	"github.com/soocke/pixel-bot-go/domain/fishing"
 )
 
 // Guard is the live fishing.Input: it sends input to the Board and drops
@@ -31,7 +33,7 @@ type Guard struct {
 func (g *Guard) Tap(vk byte, hold time.Duration) error {
 	if !g.InFront() {
 		g.Logger.Warn("input dropped: selected window is not in front", "action", "press_key")
-		return errors.New("selected game window lost focus")
+		return fishing.ErrNotInFront
 	}
 	return g.Press(vk, hold)
 }
@@ -44,7 +46,7 @@ func (g *Guard) MoveTo(p image.Point) error {
 	g.hasTarget = false
 	if !g.InFront() {
 		g.Logger.Warn("input dropped: window not in front", "x", p.X, "y", p.Y)
-		return errors.New("the game was not in front")
+		return fishing.ErrNotInFront
 	}
 	if area := g.Area(); area == nil || !p.In(*area) {
 		g.Logger.Warn("input dropped: move outside the capture area", "x", p.X, "y", p.Y)
@@ -127,7 +129,7 @@ func (g *Guard) canClick() error {
 	}
 	if !g.InFront() {
 		g.Logger.Warn("input dropped: window not in front", "action", "click_right")
-		return errors.New("the game was not in front")
+		return fishing.ErrNotInFront
 	}
 	area := g.Area()
 	if area == nil || !g.target.In(*area) {

@@ -31,9 +31,10 @@ func TestDryRunTraceAppearsInDebugState(t *testing.T) {
 			SequenceThreshold: traceobserver.Threshold{Cutoff: .1},
 		}
 		trace := newLiveTrace(model, nil, time.Now())
-		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
-			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN,
-			ObserveCast: trace.cast, ObserveReel: trace.bite,
+		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.Deps{
+			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN, InFront: func() bool { return true }, Pointer: straightPointer{},
+			Observer: trace,
+			PlanReel: func(string) fishing.ReelTiming { return fishing.ReelTiming{} },
 		})
 		defer fsm.Close()
 		a := &app{container: &AppContainer{Capture: &uimodel.CaptureModel{}, FSM: fsm, trace: trace}, start: time.Now()}
@@ -87,11 +88,10 @@ func TestDryRunExportsCorrelatedEventsWithoutDetectorModel(t *testing.T) {
 			t.Fatal(err)
 		}
 		trace := newLiveTrace(nil, output, start)
-		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
-			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN,
-			ObserveCast: trace.cast, ObserveReel: trace.bite,
-			PlanReel:          func(string) fishing.ReelTiming { return fishing.ReelTiming{Hold: 60 * time.Millisecond} },
-			ObserveReelTiming: trace.reelTiming,
+		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.Deps{
+			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN, InFront: func() bool { return true }, Pointer: straightPointer{},
+			Observer: trace,
+			PlanReel: func(string) fishing.ReelTiming { return fishing.ReelTiming{Hold: 60 * time.Millisecond} },
 		})
 		defer fsm.Close()
 		fsm.EventAwaitFocus()
@@ -159,3 +159,15 @@ func anywhereDryRun() action.DryRun {
 		Moved:   func(image.Point, image.Rectangle) {},
 	}
 }
+
+// straightPointer goes straight to each target in one step.
+type straightPointer struct{}
+
+func (straightPointer) Plan(target image.Point, _ bool) ([]fishing.CursorStep, bool) {
+	return []fishing.CursorStep{{Point: target}}, true
+}
+func (straightPointer) Reset() {}
+func (straightPointer) Approach(center image.Point, _ image.Rectangle) (image.Point, bool) {
+	return center, true
+}
+func (straightPointer) Pos() (image.Point, bool) { return image.Point{}, false }

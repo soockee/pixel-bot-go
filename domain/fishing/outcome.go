@@ -93,7 +93,7 @@ func (r *run) pollOutcome(window image.Rectangle) {
 	}
 	r.outcomePoll = now.Add(250 * time.Millisecond)
 	e := r.engine
-	if e.fsm.actions.CanAct != nil && !e.fsm.actions.CanAct() {
+	if !e.fsm.deps.InFront() {
 		return
 	}
 	area := OutcomeSignalArea.Add(window.Min)

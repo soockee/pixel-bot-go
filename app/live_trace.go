@@ -29,7 +29,8 @@ func newLiveTrace(model *traceobserver.Model, output *playtrace.Writer, start ti
 	return trace
 }
 
-func (s *liveTrace) cast() func() {
+// Cast is the trace's fishing.Observer side of a cast.
+func (s *liveTrace) Cast() func() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.castID++
@@ -43,7 +44,8 @@ func (s *liveTrace) cast() func() {
 	}
 }
 
-func (s *liveTrace) bite() func() {
+// Reel is the trace's fishing.Observer side of a bite and its reel.
+func (s *liveTrace) Reel() func() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.castID < 0 || s.hasBite {
@@ -66,7 +68,11 @@ func (s *liveTrace) bite() func() {
 	}
 }
 
-func (s *liveTrace) reelTiming(event fishing.ReelTimingEvent) {
+// ReelTiming writes a simulated hold's event into the trace file, if any.
+func (s *liveTrace) ReelTiming(event fishing.ReelTimingEvent) {
+	if s.output == nil {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	id := s.castID

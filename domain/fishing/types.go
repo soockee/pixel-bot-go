@@ -4,8 +4,6 @@ import (
 	"errors"
 	"image"
 	"time"
-
-	"github.com/soocke/pixel-bot-go/config"
 )
 
 // FishingState enumerates fishing FSM states.
@@ -56,24 +54,23 @@ type Input interface {
 	DragCamera(dx int) (attempted, moved bool)
 }
 
-// ActionCallbacks exposes OS actions used by the fishing logic.
-type ActionCallbacks struct {
+// Deps are what the FSM needs from outside: the Input, the Pointer and the
+// Observer, the focus check, the dice and the reel plan. Every field is
+// required or a plain switch, so the FSM checks none of them for nil.
+type Deps struct {
 	// Input is required: every key, click and pointer move goes through it.
 	Input Input
 	// SimulateHolds makes the FSM hold keys on its own clock, so a dry run's
 	// trace shows each press and release. Without it the Board times its holds.
 	SimulateHolds bool
-	// CursorPos reads the pointer, where a between-catch wander starts.
-	CursorPos func() (x, y int, ok bool)
-	// CanAct checks focus just before dispatching an optional action.
-	CanAct func() bool
-	// OpenBoard validates and opens the Board for one run.
-	OpenBoard func(config.Config) (closeBoard func(), err error)
+	// Pointer is required: it plans, aims and reads the pointer that Input moves.
+	Pointer Pointer
+	// InFront is required: whether the game has focus, checked before optional
+	// input and before a reel.
+	InFront func() bool
 
-	// ObserveCast and ObserveReel run when a cast or reel is scheduled.
-	// Each can return a callback to observe its eventual dispatch.
-	ObserveCast func() func()
-	ObserveReel func() func()
+	// Observer is required: NopObserver for a run without a trace.
+	Observer Observer
 
 	// Roll is required: a pseudorandom draw in [0, n), for every pause, idle
 	// move, reposition and deliberate miss the cycle varies.
@@ -82,15 +79,11 @@ type ActionCallbacks struct {
 	// beside the bobber. A dry run leaves it off, so a miss in its trace is
 	// always a missed detection.
 	DeliberateMisses bool
-	// Approach selects a waiting position after the locator locks.
-	Approach func(center image.Point, box image.Rectangle) (image.Point, bool)
 
-	// PlanReel schedules a timed hold and cooldown. A zero cooldown keeps the
-	// configured value. A reel without the Board simulates the hold.
-	PlanReel          func(biteDetector string) ReelTiming
-	ObserveReelTiming func(ReelTimingEvent)
-	CanSimulateReel   func() bool
-	Cursor            *CursorCallbacks
+	// PlanReel is required: it schedules a reel's hold, cooldown and delay
+	// after the bite. A zero field keeps the default. With SimulateHolds the
+	// FSM holds on its own clock.
+	PlanReel func(biteDetector string) ReelTiming
 }
 
 // CursorStep places the pointer at Point, After time has elapsed in a plan.
@@ -99,16 +92,45 @@ type CursorStep struct {
 	Point image.Point
 }
 
-// ErrPointerMissed is a Cursor.Move error for a pointer that still works but
+// ErrNotInFront is the Input's error for input it dropped because the game
+// was not in front. The run pauses on it and continues once the game is back.
+var ErrNotInFront = errors.New("the game was not in front")
+
+// ErrPointerMissed is an Input.MoveTo error for a pointer that still works but
 // did not land on the point. The FSM gives up that cast instead of halting.
 var ErrPointerMissed = errors.New("the pointer did not land on the bobber")
 
-// CursorCallbacks plans a path that the FSM loop moves along with
-// Input.MoveTo. False from Plan means the app cannot safely take control of
-// the pointer.
-type CursorCallbacks struct {
-	Plan  func(target image.Point, settle bool) ([]CursorStep, bool)
-	Reset func()
+// Observer watches the cycle for a dry run's trace.
+type Observer interface {
+	// Cast and Reel run when a cast or reel is planned, and return what to
+	// run once it goes out.
+	Cast() (dispatched func())
+	Reel() (dispatched func())
+	// ReelTiming sees each simulated hold planned, released or canceled.
+	ReelTiming(ReelTimingEvent)
+}
+
+// NopObserver watches nothing.
+type NopObserver struct{}
+
+func (NopObserver) Cast() func()               { return func() {} }
+func (NopObserver) Reel() func()               { return func() {} }
+func (NopObserver) ReelTiming(ReelTimingEvent) {}
+
+// Pointer plans the pointer paths that the FSM loop moves along with
+// Input.MoveTo.
+type Pointer interface {
+	// Plan is the path to target. False means the app cannot safely take
+	// control of the pointer.
+	Plan(target image.Point, settle bool) ([]CursorStep, bool)
+	// Reset forgets where the last path left the pointer, so a move by the
+	// person after it is no takeover.
+	Reset()
+	// Approach is where to wait while watching the bobber at center in box,
+	// and whether to move there at all.
+	Approach(center image.Point, box image.Rectangle) (image.Point, bool)
+	// Pos is where the pointer is now, where a between-catch wander starts.
+	Pos() (image.Point, bool)
 }
 
 // ReelTiming is the hold and the wait from release to the next cast.
