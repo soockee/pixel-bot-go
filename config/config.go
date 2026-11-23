@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -46,6 +47,11 @@ const (
 	ReelInteractKey = "interact_key" // Reel with the game's native Interact binding.
 )
 
+// WaterBuffs are the buffs Bobber Marker can keep up so the character stands
+// on water: the shaman's Water Walking, the priest's Levitate, or the Elixir
+// of Water Walking. The addon knows each one's spell and item IDs.
+var WaterBuffs = []string{"water_walking", "levitate", "elixir_water_walking"}
+
 // Config holds runtime configuration for detection and app behavior.
 // Fields may be loaded from a JSON file and overridden by command-line flags.
 type Config struct {
@@ -67,6 +73,9 @@ type Config struct {
 	ReelMethod string `json:"reel_method"`
 	// InteractKey matches the game's native Interact binding when selected.
 	InteractKey string `json:"interact_key,omitempty"`
+	// WaterBuff is one of WaterBuffs, or "" for none. Bobber Marker turns the
+	// Cast macro into renewing it while it is missing or about to run out.
+	WaterBuff string `json:"water_buff,omitempty"`
 	// ESP32Port selects the required serial BLE keyboard backend. AUTO finds the board.
 	ESP32Port string `json:"esp32_port,omitempty"`
 	// IdleMoves now and then wanders the cursor or nudges the camera between catches.
@@ -147,6 +156,9 @@ func (c *Config) Validate() error {
 		c.ReelMethod = d.ReelMethod
 	}
 	c.InteractKey = strings.TrimSpace(c.InteractKey)
+	if !slices.Contains(WaterBuffs, c.WaterBuff) {
+		c.WaterBuff = ""
+	}
 	c.ESP32Port = strings.ToUpper(strings.TrimSpace(c.ESP32Port))
 	if c.OverlayX < 0 || c.OverlayX > 1 {
 		c.OverlayX = d.OverlayX

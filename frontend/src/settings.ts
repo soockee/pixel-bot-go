@@ -8,7 +8,7 @@ type Value = Settings[Key];
 
 /** when hides a field the other values make pointless. */
 type Field = { key: Key; label: string; hint: string; when?: (v: Settings) => boolean } & (
-  | { kind: "key" | "switch" | "text" | "port" | "reelMethod" }
+  | { kind: "key" | "switch" | "text" | "port" | "reelMethod" | "waterBuff" }
   | { kind: "slider"; min: number; max: number; step: number; unit?: string; zero?: string }
 );
 
@@ -21,6 +21,7 @@ const groups: { title: string; show?: "debug"; fields: Field[] }[] = [
     title: "Fishing keys",
     fields: [
       { key: "castKey", label: "Cast key", hint: "Choose a key or mouse side button. Bobber Marker binds it to Fishing in WoW.", kind: "key" },
+      { key: "waterBuff", label: "Water walking", hint: "Fish standing on water. When the buff is gone or about to end, the Cast key renews it once instead of fishing.", kind: "waterBuff" },
     ],
   },
   {
@@ -363,6 +364,9 @@ export function setupSettings() {
       case "text": return textControl();
       case "port": return portControl();
       case "reelMethod": return selectControl(["right_click", "interact_key"], { right_click: "Right click", interact_key: "Interact key" });
+      case "waterBuff": return selectControl(["", "water_walking", "levitate", "elixir_water_walking"], {
+        "": "Off", water_walking: "Water Walking (shaman)", levitate: "Levitate (priest)", elixir_water_walking: "Elixir of Water Walking",
+      });
     }
   }
 

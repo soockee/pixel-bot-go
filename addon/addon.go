@@ -42,8 +42,9 @@ func Version() string {
 const keysFile = "Keys.lua"
 
 // Keys are the bindings Go Fish presses, in the game's names (see BindingKey).
-// An empty key is not bound.
-type Keys struct{ Cast, Interact, Logout string }
+// An empty key is not bound. Buff is the water buff the Cast macro keeps up
+// (config.WaterBuffs), "" for none.
+type Keys struct{ Cast, Interact, Logout, Buff string }
 
 // BindingKey converts a Go Fish key name (a letter, a digit, F1 to F12, Mouse4
 // or Mouse5) into the name the game uses for a binding. It returns "" for any
@@ -68,7 +69,7 @@ func BindingKey(name string) string {
 
 func keysLua(k Keys) []byte {
 	return fmt.Appendf(nil, "-- Written by Go Fish when it installs the addon: the keys it presses.\n"+
-		"BobberMarkerKeys = { cast = %q, interact = %q, logout = %q };\n", k.Cast, k.Interact, k.Logout)
+		"BobberMarkerKeys = { cast = %q, interact = %q, logout = %q, buff = %q };\n", k.Cast, k.Interact, k.Logout, k.Buff)
 }
 
 // State reports whether the addon is installed in gameDir, and whether every

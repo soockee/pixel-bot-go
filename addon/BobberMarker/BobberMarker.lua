@@ -341,8 +341,8 @@ end
 -- Go Fish presses the Cast key and, when it reels with the Interact key, the
 -- Interact key, and the Logout key when it takes breaks. Its installer writes
 -- them into BobberMarkerKeys (Keys.lua, loaded before this file), and this puts
--- them to work in the game so nobody has to: a macro that casts Fishing on the
--- Cast key, the game's own Interact action on the Interact key, and a macro
+-- them to work in the game so nobody has to: a macro that casts Fishing (or the
+-- water buff, see CastBody) on the Cast key, the game's own Interact action on the Interact key, and a macro
 -- that logs out on the Logout key. Macros and bindings cannot change in combat, so
 -- this waits for it to end. It changes only what differs and never writes to the
 -- chat; what went wrong is kept in keyProblems for /bobbermarker to show.
@@ -363,14 +363,106 @@ local function Problem(text)
 	keyProblems[#keyProblems + 1] = text;
 end
 
-local function FishingName()
+local function SpellName(id, fallback)
 	local name;
 	if C_Spell and C_Spell.GetSpellName then
-		name = C_Spell.GetSpellName(FISHING);
+		name = C_Spell.GetSpellName(id);
 	elseif GetSpellInfo then
-		name = GetSpellInfo(FISHING);
+		name = GetSpellInfo(id);
 	end
-	return name or "Fishing";
+	return name or fallback;
+end
+
+-- The water buff (BobberMarkerKeys.buff) Go Fish keeps up so you stand on
+-- water. While it is missing or runs out within RENEW_BEFORE seconds, and you
+-- can cast it, the Cast macro casts it instead of Fishing: Go Fish sees no
+-- bobber, casts again, and that cast fishes. IDs are the same in every language.
+local WATER_BUFFS = {
+	water_walking = { spell = 546, aura = 546, name = "Water Walking" }, -- shaman
+	levitate = { spell = 1706, aura = 1706, name = "Levitate" },         -- priest
+	elixir_water_walking = { item = 8827, aura = 11319, name = "Elixir of Water Walking" },
+};
+local RENEW_BEFORE = 45; -- seconds; a cast and its wait for a bite take up to about 30
+local BUFF_POLL = 5;     -- seconds between checks of the time left
+local renewing = false;  -- whether the Cast macro casts the buff
+local buffProblem;       -- why the buff cannot be renewed, for /bobbermarker
+
+local function WaterBuff()
+	return type(BobberMarkerKeys) == "table" and WATER_BUFFS[BobberMarkerKeys.buff];
+end
+
+-- Seconds left on the player's aura id, 0 without it. An unreadable or endless
+-- one counts as lasting, so the macro never loops on a buff it cannot see.
+local function AuraLeft(id)
+	local expires;
+	if C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID then
+		local aura = C_UnitAuras.GetPlayerAuraBySpellID(id);
+		if not aura then
+			return 0;
+		end
+		expires = aura.expirationTime;
+	else
+		for i = 1, 40 do
+			local name, _, _, _, _, expirationTime, _, _, _, spellId = UnitBuff("player", i);
+			if not name then
+				return 0;
+			end
+			if spellId == id then
+				expires = expirationTime;
+				break;
+			end
+		end
+	end
+	if not Readable(expires) or expires == 0 then
+		return math.huge;
+	end
+	return expires - GetTime();
+end
+
+-- Whether the buff can be cast now: the spell is learned and usable (mana and
+-- reagent), or an elixir is in the bags.
+local function CanRenew(buff)
+	if buff.item then
+		local count = C_Item and C_Item.GetItemCount and C_Item.GetItemCount(buff.item) or GetItemCount(buff.item);
+		return (count or 0) > 0;
+	end
+	if not IsPlayerSpell(buff.spell) then
+		return false;
+	end
+	if C_Spell and C_Spell.IsSpellUsable then
+		return C_Spell.IsSpellUsable(buff.spell) and true or false;
+	end
+	return IsUsableSpell(buff.spell) and true or false;
+end
+
+local function NeedsRenew()
+	local buff = WaterBuff();
+	if not buff or AuraLeft(buff.aura) > RENEW_BEFORE then
+		buffProblem = nil;
+		return false;
+	end
+	if CanRenew(buff) then
+		buffProblem = nil;
+		return true;
+	end
+	if buff.item then
+		buffProblem = "no " .. buff.name .. " in your bags; fishing on without it.";
+	else
+		buffProblem = "cannot cast " .. buff.name .. " (not learned, no reagent or no mana); fishing on without it.";
+	end
+	return false;
+end
+
+-- The Cast macro: Fishing, or the water buff while it needs renewing.
+local function CastBody()
+	local buff = WaterBuff();
+	if not renewing or not buff then
+		return "#showtooltip\n/cast " .. SpellName(FISHING, "Fishing");
+	end
+	if buff.item then
+		return "#showtooltip\n/use item:" .. buff.item;
+	end
+	return "#showtooltip\n/cast [@player] " .. SpellName(buff.spell, buff.name);
 end
 
 -- Makes sure the account-wide macro name holds body. False when it cannot.
@@ -432,7 +524,7 @@ local function SetUpKeys()
 	keyProblems = {};
 	local changed = false;
 	local interact = keys.interact;
-	changed = BindMacro(keys.cast, CAST_MACRO, "#showtooltip\n/cast " .. FishingName()) or changed;
+	changed = BindMacro(keys.cast, CAST_MACRO, CastBody()) or changed;
 	changed = BindMacro(keys.logout, LOGOUT_MACRO, "/logout") or changed;
 	if interact == "" then
 		interact = nil;
@@ -474,6 +566,16 @@ end
 -- Events and the slash command
 ---------------------------------------------------------------------------
 
+-- Points the Cast macro at what the water buff needs. A failure keeps fishing.
+local function CheckBuff()
+	local ok, want = pcall(NeedsRenew);
+	want = ok and want;
+	if want ~= renewing then
+		renewing = want;
+		TrySetUpKeys(); -- in combat it waits for PLAYER_REGEN_ENABLED
+	end
+end
+
 local handlers = {};
 
 -- Called for this addon only; see the event frame below.
@@ -485,6 +587,8 @@ end
 
 function handlers.PLAYER_ENTERING_WORLD()
 	LayoutWorldSignal();
+	local ok, want = pcall(NeedsRenew);
+	renewing = ok and want;
 	TrySetUpKeys();
 	if IsChanneling() then
 		StartFishing();
@@ -496,6 +600,12 @@ end
 function handlers.PLAYER_REGEN_ENABLED()
 	if keysPending then
 		TrySetUpKeys();
+	end
+end
+
+function handlers.UNIT_AURA(unit)
+	if unit == "player" and WaterBuff() then
+		CheckBuff();
 	end
 end
 
@@ -558,6 +668,12 @@ end);
 for event in pairs(handlers) do
 	pcall(events.RegisterEvent, events, event);
 end
+-- The time left runs out without an event.
+C_Timer.NewTicker(BUFF_POLL, function()
+	if db and WaterBuff() then
+		CheckBuff();
+	end
+end);
 
 SLASH_BOBBERMARKER1 = "/bobbermarker";
 SlashCmdList.BOBBERMARKER = function(input)
@@ -573,5 +689,8 @@ SlashCmdList.BOBBERMARKER = function(input)
 	print(("|cffff00ffBobber Marker:|r the base vertical offset from the nameplate's centre is %d pixels at full zoom-out. Move it with /bobbermarker y <pixels>, negative is down (default %d). At this zoom the box and offset are x%.2f."):format(db.y, DEFAULT_Y, ZoomScale()));
 	for _, problem in ipairs(keyProblems) do
 		print("|cffff00ffBobber Marker:|r " .. problem);
+	end
+	if buffProblem then
+		print("|cffff00ffBobber Marker:|r " .. buffProblem);
 	end
 end

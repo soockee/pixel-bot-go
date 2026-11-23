@@ -55,6 +55,10 @@ func TestKeysFollowTheSettings(t *testing.T) {
 	if _, current := State(game, Keys{Cast: "F3"}); current {
 		t.Fatal("a removed Interact key left the addon current")
 	}
+	// So does the water buff the Cast macro keeps up.
+	if _, current := State(game, Keys{Cast: "F3", Interact: "F", Buff: "water_walking"}); current {
+		t.Fatal("a new water buff left the addon current")
+	}
 	if err := Install(game, Keys{Cast: "F4"}); err != nil {
 		t.Fatal(err)
 	}
