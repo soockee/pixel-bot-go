@@ -3,9 +3,12 @@ package app
 import (
 	"errors"
 	"fmt"
+	"log/slog"
+	"slices"
 	"sync"
 	"time"
 
+	"github.com/soocke/pixel-bot-go/config"
 	"github.com/soocke/pixel-bot-go/domain/action"
 	"github.com/soocke/pixel-bot-go/internal/esp32"
 )
@@ -33,6 +36,115 @@ func (o *boardOwner) open(port string) (board *esp32.Board, release func(), err 
 		o.board.Close()
 		o.mu.Unlock()
 	}, nil
+}
+
+// portOf is the Board's port in cfg, or why there is none.
+func portOf(cfg config.Config) (string, error) {
+	if cfg.ESP32Port == "" {
+		return "", errors.New("select or connect the ESP32 board in Settings")
+	}
+	return esp32.PortName(cfg.ESP32Port)
+}
+
+// boardNeeds are the Board features a use of it needs from the firmware.
+type boardNeeds struct {
+	camera      bool // camera drags, for Reposition and idle nudges
+	rightClick  bool // pointer moves and right clicks, for the right-click reel
+	wander      bool // pointer moves, for idle wanders
+	timedTaps   bool // holds other than 40 ms, for a timing profile
+	sideButtons bool // Mouse 4 or Mouse 5 is a bound key
+}
+
+// needsFor is what a fishing run with run's settings needs from the Board.
+func needsFor(run config.Config, timedTaps bool) boardNeeds {
+	keys := []string{run.CastKey}
+	if run.Schedule || run.Reposition {
+		keys = append(keys, run.LogoutKey)
+	}
+	if run.ReelMethod == config.ReelInteractKey {
+		keys = append(keys, run.InteractKey)
+	}
+	return boardNeeds{
+		camera:      run.Reposition || run.IdleMoves,
+		rightClick:  run.ReelMethod != config.ReelInteractKey,
+		wander:      run.IdleMoves,
+		timedTaps:   timedTaps,
+		sideButtons: slices.ContainsFunc(keys, isSideButton),
+	}
+}
+
+// isSideButton reports whether key names Mouse 4 or Mouse 5.
+func isSideButton(key string) bool {
+	vk, _ := config.KeyCode(key)
+	return vk == 0x05 || vk == 0x06
+}
+
+// openFor takes the Board, opens it on port and asks it for each feature in
+// needs. It refuses, and lets the Board go, when the firmware lacks one.
+func (o *boardOwner) openFor(port string, needs boardNeeds) (release func(), err error) {
+	board, release, err := o.open(port)
+	if err != nil {
+		return nil, err
+	}
+	if err := prepare(board, needs); err != nil {
+		release()
+		return nil, err
+	}
+	return release, nil
+}
+
+func prepare(board *esp32.Board, needs boardNeeds) error {
+	if needs.timedTaps {
+		if err := board.PrepareTimedTaps(); err != nil {
+			return err
+		}
+	}
+	if needs.camera {
+		if err := board.PrepareCamera(); err != nil {
+			return err
+		}
+	}
+	if needs.rightClick || needs.wander {
+		if err := board.PreparePointer(); err != nil {
+			return err
+		}
+	}
+	if err := board.PrepareButtons(); err != nil {
+		return err
+	}
+	switch {
+	case needs.sideButtons && !board.CanPressButtons():
+		return errors.New("flash the current ESP32 firmware to press Mouse 4 and Mouse 5")
+	case needs.rightClick && !board.CanPoint():
+		return errors.New("flash the current ESP32 firmware to reel with a right click")
+	case needs.wander && !board.CanPoint():
+		return errors.New("flash the current ESP32 firmware to move the pointer")
+	}
+	return nil
+}
+
+// openRun opens the Board for a fishing run with run's settings and logs what
+// it can do. The run summary counts runs by that log line.
+func (o *boardOwner) openRun(run config.Config, timedTaps bool, logger *slog.Logger) (release func(), err error) {
+	port, err := portOf(run)
+	if err != nil {
+		return nil, err
+	}
+	needs := needsFor(run, timedTaps)
+	if release, err = o.openFor(port, needs); err != nil {
+		return nil, err
+	}
+	board := &o.board
+	// Only what this run asked the board: a capability it never asked reads false.
+	ready := []any{"port", board.Name(), "buttons", board.CanPressButtons()}
+	if needs.camera {
+		ready = append(ready, "camera", board.CanDragCamera())
+	}
+	if needs.rightClick || needs.wander {
+		ready = append(ready, "pointer", board.CanPoint())
+	}
+	logger.Info("ESP32 keyboard ready", ready...)
+	return release, nil
 }
 
 // find opens the ESP32 on port, or finds it with esp32.AutoPort, which checks
