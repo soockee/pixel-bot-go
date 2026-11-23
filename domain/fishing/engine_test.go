@@ -5,7 +5,7 @@ import (
 	"errors"
 	"image"
 	"log/slog"
-	"slices"
+	"math/rand/v2"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -414,6 +414,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				var firstMove time.Time
 				input := &testInput{}
 				actions := ActionCallbacks{
+					Roll:  rand.IntN,
 					Input: input,
 					ParseVK: func(key string) (byte, bool) {
 						switch key {
@@ -505,7 +506,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				}
 				t.Logf("test casts=%d, WASD=%q, drags=%v, simulated recovery=%s",
 					trialCasts, steps, drags, time.Since(firstMove))
-				if !slices.Equal(drags, []int{12, -12}) || heading != 0 {
+				if len(drags) != 2 || drags[0] != -drags[1] || max(drags[0], -drags[0]) < 8 || max(drags[0], -drags[0]) > 16 || heading != 0 {
 					t.Fatalf("expected opposite ESP32 drags, got %v at heading %d", drags, heading)
 				}
 				if tc.blocked {

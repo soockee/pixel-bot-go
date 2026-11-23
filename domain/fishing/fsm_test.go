@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"math/rand/v2"
 	"slices"
 	"strings"
 	"sync"
@@ -74,6 +75,9 @@ func (i *testInput) DragCamera(dx int) (attempted, moved bool) {
 // inputOf is the testInput of actions made by recordingActions.
 func inputOf(actions ActionCallbacks) *testInput { return actions.Input.(*testInput) }
 
+// settleAtRollZero is the wait after a reposition move when every Roll is 0.
+const settleAtRollZero = 550 * time.Millisecond
+
 func recordingActions(log *actionLog) ActionCallbacks {
 	return ActionCallbacks{
 		Input: &testInput{
@@ -83,6 +87,7 @@ func recordingActions(log *actionLog) ActionCallbacks {
 		},
 		ParseVK:       func(string) (byte, bool) { return 0, true },
 		SimulateHolds: true, // testConfig has no Board
+		Roll:          rand.New(rand.NewPCG(1, 2)).IntN,
 	}
 }
 
@@ -281,7 +286,8 @@ func TestSampledReelMiss(t *testing.T) {
 			log := &actionLog{}
 			actions := recordingActions(log)
 			samples := 0
-			actions.ReelRoll = func(_ int) int {
+			actions.DeliberateMisses = true
+			actions.Roll = func(_ int) int {
 				samples++
 				if samples == 1 {
 					return 0
@@ -337,7 +343,8 @@ func TestOffTargetReel(t *testing.T) {
 				}
 				log := &actionLog{}
 				actions := recordingActions(log)
-				actions.ReelRoll = func(int) int { return 1 }
+				actions.DeliberateMisses = true
+				actions.Roll = func(int) int { return 1 }
 				aim := image.Pt(52, 100)
 				at := image.Point{}
 				inputOf(actions).move = func(p image.Point) error { at = p; return nil }
@@ -388,6 +395,7 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 				cfg.Reposition = true
 				log := &actionLog{}
 				actions := recordingActions(log)
+				actions.Roll = func(int) int { return 0 } // reposition after 45 reels, settle 550 ms
 				actions.ParseVK = func(key string) (byte, bool) {
 					if len(key) == 1 && strings.Contains("WASD", key) {
 						return key[0], true
@@ -432,7 +440,7 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 					}
 					return
 				}
-				time.Sleep(interactHold + repositionSettle) // a dry run holds the key first
+				time.Sleep(interactHold + settleAtRollZero) // a dry run holds the key first
 				wantState(t, m, StateSearching)
 				wantActions(t, log, append(before, "cast")...)
 				if outcome == "no bobber" || outcome == "recovered after retry" {
@@ -443,7 +451,7 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 					for attempt := 1; attempt < limit; attempt++ {
 						time.Sleep(searchTimeout)
 						wantState(t, m, StateCooldown)
-						time.Sleep(interactHold + repositionSettle)
+						time.Sleep(interactHold + settleAtRollZero)
 						wantState(t, m, StateSearching)
 						before = append(before, "cast", "reposition")
 						wantActions(t, log, append(before, "cast")...)
@@ -588,4 +596,21 @@ func TestApproachAndReelDelayAreIndependent(t *testing.T) {
 			wantActions(t, log, append(want, "click")...)
 		})
 	}
+}
+
+// A dry run reels every bite: without DeliberateMisses, a roll of 0 is not a
+// planned miss.
+func TestNoDeliberateMissWithoutTheSwitch(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		log := &actionLog{}
+		actions := recordingActions(log)
+		actions.Roll = func(int) int { return 0 } // "forgot to reel" when misses are on
+		m := NewFSM(nil, testConfig(), actions)
+		defer m.Close()
+		startMonitoring(t, m)
+		m.EventFishBite()
+		time.Sleep(reelClickDelay)
+		wantState(t, m, StateCooldown)
+		wantActions(t, log, "move", "move", "click")
+	})
 }

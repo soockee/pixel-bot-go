@@ -5,6 +5,7 @@ import (
 	"image"
 	"io"
 	"log/slog"
+	"math/rand/v2"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -31,7 +32,7 @@ func TestDryRunTraceAppearsInDebugState(t *testing.T) {
 		}
 		trace := newLiveTrace(model, nil, time.Now())
 		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
-			Input: anywhereDryRun(), SimulateHolds: true, ParseVK: func(string) (byte, bool) { return 0x72, true },
+			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN, ParseVK: func(string) (byte, bool) { return 0x72, true },
 			ObserveCast: trace.cast, ObserveReel: trace.bite,
 		})
 		defer fsm.Close()
@@ -87,7 +88,7 @@ func TestDryRunExportsCorrelatedEventsWithoutDetectorModel(t *testing.T) {
 		}
 		trace := newLiveTrace(nil, output, start)
 		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
-			Input: anywhereDryRun(), SimulateHolds: true, ParseVK: func(string) (byte, bool) { return 0x72, true },
+			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN, ParseVK: func(string) (byte, bool) { return 0x72, true },
 			ObserveCast: trace.cast, ObserveReel: trace.bite,
 			PlanReel:          func(string) fishing.ReelTiming { return fishing.ReelTiming{Hold: 60 * time.Millisecond} },
 			ObserveReelTiming: trace.reelTiming,

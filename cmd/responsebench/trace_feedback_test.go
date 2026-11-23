@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"image"
 	"log/slog"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -203,6 +204,7 @@ func TestFakeGameReplayFeedsDryRunAttemptsToScorer(t *testing.T) {
 			},
 			ParseVK:       func(string) (byte, bool) { return 0x72, true },
 			SimulateHolds: true, // as the app's dry run
+			Roll:          rand.IntN,
 		})
 		defer fsm.Close()
 		bite := detect.NewSplashSoundDetector(nil)
