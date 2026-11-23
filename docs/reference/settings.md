@@ -20,7 +20,7 @@ order: 1
 | Pause after a catch | Quick | Wait before the next cast. **Quick** casts again after a random 0.4 to 1.2 seconds, like a player; or pick 1 to 60 seconds. The next search ignores the old bobber. |
 | Cast length | 30 s | Cast again when nothing bites within this time. 5 to 180 seconds. |
 | **Between catches** | | |
-| Move the mouse | Off | Now and then after a catch, the cursor drifts a little along a curved path, or the camera turns slightly. |
+| Move the mouse | Off | After every catch, before the next cast, the cursor drifts along a curved path, and about one time in four it circles the whole game window. Sometimes the camera turns slightly instead, and the next turn puts it back. It never clicks or holds a button, and it stops as soon as the next cast is due, so it never gets in the way of watching or reeling. |
 | Change spot | Off | Every 45 to 55 catches, Go Fish takes a step with W, A, S or D, or turns the camera, and checks the next cast. Needs the Logout key, to log out if it gets stuck. |
 | **Scheduled breaks** | | |
 | Take breaks | Off | Alternates random fishing sessions with logged-out breaks after Start. |

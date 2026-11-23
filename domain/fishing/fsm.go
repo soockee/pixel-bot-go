@@ -49,6 +49,8 @@ type FishingFSM struct {
 	detectorAt          time.Time
 	reelDelay           time.Duration
 	idleTried           bool
+	idlePath            []image.Point // the rest of a between-catch pointer path, stepped on the cooldown's deadline
+	idleNudge           int           // the camera turn the last idle nudge left, which the next one turns back
 	outcomesShown       bool          // Bobber Marker showed its outcome blocks this run
 	awaitOutcome        bool          // the cooldown about to start follows a reel that should bring an outcome
 	castPause           time.Duration // the pause before the next cast while the cooldown waits for the outcome
@@ -248,6 +250,7 @@ func (f *FishingFSM) arm(d time.Duration) {
 func (f *FishingFSM) disarm() {
 	f.deadline = time.Time{}
 	f.cursorSteps = nil
+	f.idlePath = nil
 	f.stopTimer()
 }
 
@@ -320,22 +323,22 @@ func (f *FishingFSM) deadlineReached() {
 		f.finishReel()
 	case StateCooldown:
 		f.castPause = 0 // the outcome did not come in time
+		if len(f.idlePath) > 0 {
+			f.idleStep()
+			return
+		}
 		if !f.idleTried && time.Now().Before(f.sessionEnd) {
 			if f.nextReposition != 0 && f.stats.reels.Load() >= f.nextReposition {
 				f.startReposition()
 				return
 			}
-			if f.cfg.IdleMoves && f.deps.Roll(12) == 0 {
+			if f.cfg.IdleMoves {
 				f.idleTried = true
 				if !f.deps.InFront() {
 					f.transition(StateWaitingFocus)
 					return
 				}
-				f.idleMove()
-				if f.state != StateCooldown {
-					return // the idle move paused the run
-				}
-				f.arm(time.Duration(300+f.deps.Roll(601)) * time.Millisecond)
+				f.startIdle()
 				return
 			}
 		}

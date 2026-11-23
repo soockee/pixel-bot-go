@@ -79,6 +79,7 @@ type testPointer struct {
 	plan     func(target image.Point, settle bool) ([]CursorStep, error)
 	reset    func()
 	approach func(center image.Point, box image.Rectangle) (image.Point, bool)
+	pos      func() (image.Point, image.Rectangle, bool)
 }
 
 func (p *testPointer) Plan(target image.Point, settle bool) ([]CursorStep, error) {
@@ -101,7 +102,12 @@ func (p *testPointer) Approach(center image.Point, box image.Rectangle) (image.P
 	return p.approach(center, box)
 }
 
-func (p *testPointer) Pos() (image.Point, bool) { return image.Point{}, false }
+func (p *testPointer) Pos() (image.Point, image.Rectangle, bool) {
+	if p.pos == nil {
+		return image.Point{}, image.Rectangle{}, false
+	}
+	return p.pos()
+}
 
 // pointerOf is the testPointer of deps made by recordingDeps.
 func pointerOf(deps Deps) *testPointer { return deps.Pointer.(*testPointer) }

@@ -49,7 +49,7 @@ const groups: { title: string; show?: "debug"; fields: Field[] }[] = [
   {
     title: "Between catches",
     fields: [
-      { key: "idleMoves", label: "Move the mouse", hint: "Now and then, drift the cursor a little or nudge the camera", kind: "switch" },
+      { key: "idleMoves", label: "Move the mouse", hint: "After every catch, drift the cursor, sometimes circle the game window, or nudge the camera", kind: "switch" },
       { key: "reposition", label: "Change spot", hint: "Every 45 to 55 catches, take a step with WASD or turn the camera, then check the next cast. Logs out if no spot works.", kind: "switch" },
     ],
   },
