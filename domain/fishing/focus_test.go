@@ -84,6 +84,7 @@ func TestFocusRaceAtRepositionPauses(t *testing.T) {
 			InFront:  func() bool { return true },
 			Pointer:  &testPointer{},
 			Observer: NopObserver{},
+			PlanReel: func(string) ReelTiming { return ReelTiming{} },
 			Roll:     func(int) int { return 0 },
 			Input:    &testInput{tap: func(byte, time.Duration) error { return ErrNotInFront }},
 		},

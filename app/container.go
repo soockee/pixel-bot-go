@@ -193,6 +193,8 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		}
 		callbacks.Pointer = livePointer{c: c, guard: guard, plan: plan}
 	}
+	// A dry run without a trace keeps every default.
+	callbacks.PlanReel = func(string) fishing.ReelTiming { return fishing.ReelTiming{} }
 	if !dryRun || trace.Timing != nil || trace.Output != nil {
 		callbacks.PlanReel = func(detector string) fishing.ReelTiming {
 			var s inputtiming.Sample

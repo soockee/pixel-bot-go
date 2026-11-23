@@ -403,6 +403,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				actions := ActionCallbacks{
 					Pointer:  &testPointer{},
 					Observer: NopObserver{},
+					PlanReel: func(string) ReelTiming { return ReelTiming{} },
 					Roll:     rand.IntN,
 					InFront:  func() bool { return true },
 					Input:    input,

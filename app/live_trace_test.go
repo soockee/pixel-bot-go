@@ -34,6 +34,7 @@ func TestDryRunTraceAppearsInDebugState(t *testing.T) {
 		fsm := fishing.NewFSM(nil, config.DefaultConfig(), fishing.ActionCallbacks{
 			Input: anywhereDryRun(), SimulateHolds: true, Roll: rand.IntN, InFront: func() bool { return true }, Pointer: straightPointer{},
 			Observer: trace,
+			PlanReel: func(string) fishing.ReelTiming { return fishing.ReelTiming{} },
 		})
 		defer fsm.Close()
 		a := &app{container: &AppContainer{Capture: &uimodel.CaptureModel{}, FSM: fsm, trace: trace}, start: time.Now()}

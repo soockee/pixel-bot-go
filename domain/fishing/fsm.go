@@ -584,13 +584,11 @@ func (f *FishingFSM) startReel() {
 	}
 	f.reelDone = f.actions.Observer.Reel()
 	f.reelDelay = reelClickDelay
-	if f.actions.PlanReel != nil {
-		f.reelTiming = f.actions.PlanReel(detect.SplashSoundName)
-		if f.reelTiming.Cooldown == 0 {
-			f.reelTiming.Cooldown = f.pause()
-		}
-		f.reelPressed = false
+	f.reelTiming = f.actions.PlanReel(detect.SplashSoundName)
+	if f.reelTiming.Cooldown == 0 {
+		f.reelTiming.Cooldown = f.pause()
 	}
+	f.reelPressed = false
 	if f.cfg.ReelMethod == config.ReelInteractKey {
 		if f.reelTiming.Hold == 0 {
 			f.reelTiming.Hold = interactHold

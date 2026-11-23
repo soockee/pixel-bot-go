@@ -130,6 +130,7 @@ func recordingActions(log *actionLog) ActionCallbacks {
 		InFront:       func() bool { return true },
 		Pointer:       &testPointer{},
 		Observer:      NopObserver{},
+		PlanReel:      func(string) ReelTiming { return ReelTiming{} },
 		Roll:          rand.New(rand.NewPCG(1, 2)).IntN,
 	}
 }

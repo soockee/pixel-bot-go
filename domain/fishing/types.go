@@ -82,8 +82,9 @@ type ActionCallbacks struct {
 	// always a missed detection.
 	DeliberateMisses bool
 
-	// PlanReel schedules a timed hold and cooldown. A zero cooldown keeps the
-	// configured value. A reel without the Board simulates the hold.
+	// PlanReel is required: it schedules a reel's hold, cooldown and delay
+	// after the bite. A zero field keeps the default. With SimulateHolds the
+	// FSM holds on its own clock.
 	PlanReel func(biteDetector string) ReelTiming
 }
 
