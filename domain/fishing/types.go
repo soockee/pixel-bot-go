@@ -60,6 +60,9 @@ type Input interface {
 type ActionCallbacks struct {
 	// Input is required: every key, click and pointer move goes through it.
 	Input Input
+	// SimulateHolds makes the FSM hold keys on its own clock, so a dry run's
+	// trace shows each press and release. Without it the Board times its holds.
+	SimulateHolds bool
 	// CursorPos reads the pointer, where a between-catch wander starts.
 	CursorPos func() (x, y int, ok bool)
 	ParseVK   func(key string) (byte, bool)
