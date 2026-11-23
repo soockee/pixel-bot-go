@@ -70,6 +70,9 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 
 	callbacks := fishing.ActionCallbacks{InFront: inFront, Roll: rand.IntN, Observer: fishing.NopObserver{}}
 	dryRun := cfg.DryRun
+	openBoard := fishing.BoardOpener(func(config.Config) (func(), error) {
+		return nil, errors.New("a dry run opens no Board")
+	})
 	if dryRun {
 		logger.Warn("dry-run enabled: input actions are logged, not injected")
 		if trace.Model != nil || trace.Output != nil {
@@ -90,7 +93,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		callbacks.DeliberateMisses = true
 		c.board.board.Logger = logger
 		board := &c.board.board // usable only while a run holds it
-		callbacks.OpenBoard = func(run config.Config) (func(), error) {
+		openBoard = func(run config.Config) (func(), error) {
 			if run.ESP32Port == "" {
 				return nil, errors.New("select or connect the ESP32 board in Settings")
 			}
@@ -229,7 +232,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 		}
 		return capture.CaptureAudio(ctx, target.PID, emit)
 	}
-	c.Engine = fishing.NewEngine(c.frames(), sound, c.FSM, detectors, cfg, logger)
+	c.Engine = fishing.NewEngine(c.frames(), sound, c.FSM, detectors, openBoard, cfg, logger)
 
 	c.CapturePresenter = presenter.NewCapturePresenter(c.Capture, c.Engine, c.FSM, c.View)
 	c.RecordPresenter = presenter.NewRecordPresenter(c.prepareRecording, c.View)

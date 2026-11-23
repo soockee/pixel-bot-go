@@ -4,8 +4,6 @@ import (
 	"errors"
 	"image"
 	"time"
-
-	"github.com/soocke/pixel-bot-go/config"
 )
 
 // FishingState enumerates fishing FSM states.
@@ -68,8 +66,6 @@ type ActionCallbacks struct {
 	// InFront is required: whether the game has focus, checked before optional
 	// input and before a reel.
 	InFront func() bool
-	// OpenBoard validates and opens the Board for one run.
-	OpenBoard func(config.Config) (closeBoard func(), err error)
 
 	// Observer is required: NopObserver for a run without a trace.
 	Observer Observer

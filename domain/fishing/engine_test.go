@@ -65,9 +65,12 @@ func newSceneEngine(t *testing.T, actions ActionCallbacks) (*Engine, *FishingFSM
 	detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
 		return detect.NewMarkerLocator(), deaf{detect.NewSplashSoundDetector(nil)}, nil
 	}
-	engine := NewEngine(frames, noSound, fsm, detectors, cfg, testLogger)
+	engine := NewEngine(frames, noSound, fsm, detectors, noBoard, cfg, testLogger)
 	return engine, fsm, frames, r.BobberRect().Add(frames.origin)
 }
+
+// noBoard is a BoardOpener for tests: there is nothing to open or close.
+func noBoard(config.Config) (func(), error) { return func() {}, nil }
 
 // The whole pipeline without Tk: rendered frames, real matcher, real detector,
 // real FSM, recorded input.
@@ -204,7 +207,7 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 				log := &actionLog{}
 				actions := recordingActions(log)
 				actions.SimulateHolds = false // the Board times its holds
-				actions.OpenBoard = func(run config.Config) (func(), error) {
+				openBoard := func(run config.Config) (func(), error) {
 					if run.ESP32Port != "COM3" {
 						t.Errorf("opened port %q", run.ESP32Port)
 					}
@@ -226,6 +229,7 @@ func TestEngineRoutesCastAndReelToESP32(t *testing.T) {
 					return nil
 				}
 				engine, fsm, frames, _ := newSceneEngine(t, actions)
+				engine.openBoard = openBoard
 				engine.cfg.ReelMethod, engine.cfg.InteractKey, engine.cfg.ESP32Port = config.ReelInteractKey, "F", "COM3"
 				if test.rightClick {
 					// The app routes this move and click to the board through action.Guard.
@@ -294,7 +298,7 @@ func TestEngineReportsDetectorsItCannotBuild(t *testing.T) {
 	defer fsm.Close()
 	engine := NewEngine(&failingFrames{}, noSound, fsm, func(config.Config) (detect.Locator, detect.BiteDetector, error) {
 		return nil, nil, errors.New("unknown locator")
-	}, cfg, testLogger)
+	}, noBoard, cfg, testLogger)
 
 	if err := engine.Start(); err == nil {
 		t.Fatal("want an error")
@@ -322,7 +326,7 @@ func TestEngineSurvivesCaptureFailures(t *testing.T) {
 		detectors := func(config.Config) (detect.Locator, detect.BiteDetector, error) {
 			return nil, deaf{detect.NewSplashSoundDetector(nil)}, nil
 		}
-		engine := NewEngine(frames, noSound, fsm, detectors, cfg, testLogger)
+		engine := NewEngine(frames, noSound, fsm, detectors, noBoard, cfg, testLogger)
 
 		startEngine(t, engine)
 		time.Sleep(time.Second)
@@ -407,9 +411,6 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 					Roll:     rand.IntN,
 					InFront:  func() bool { return true },
 					Input:    input,
-					OpenBoard: func(config.Config) (func(), error) {
-						return func() {}, nil
-					},
 				}
 				input.drag = func(dx int) (bool, bool) {
 					if firstMove.IsZero() {

@@ -83,6 +83,7 @@ type Engine struct {
 	sound     SoundSource
 	fsm       *FishingFSM
 	detectors DetectorFactory
+	openBoard BoardOpener
 	cfg       *config.Config
 	logger    *slog.Logger
 	preview   atomic.Pointer[Preview]
@@ -90,13 +91,17 @@ type Engine struct {
 	done      chan struct{}
 }
 
+// BoardOpener opens the Board for one live run, checked against that run's
+// config, and returns what closes it again.
+type BoardOpener func(config.Config) (closeBoard func(), err error)
+
 // DetectorFactory builds the detectors for a run from that run's config.
 type DetectorFactory func(config.Config) (detect.Locator, detect.BiteDetector, error)
 
 // NewEngine returns a stopped Engine. It listens to sound only for a bite
 // detector that implements detect.SoundBiteDetector.
-func NewEngine(frames FrameSource, sound SoundSource, fsm *FishingFSM, detectors DetectorFactory, cfg *config.Config, logger *slog.Logger) *Engine {
-	return &Engine{frames: frames, sound: sound, fsm: fsm, detectors: detectors, cfg: cfg, logger: logger}
+func NewEngine(frames FrameSource, sound SoundSource, fsm *FishingFSM, detectors DetectorFactory, openBoard BoardOpener, cfg *config.Config, logger *slog.Logger) *Engine {
+	return &Engine{frames: frames, sound: sound, fsm: fsm, detectors: detectors, openBoard: openBoard, cfg: cfg, logger: logger}
 }
 
 // Start begins a run with the detectors the current config names. Starting twice
@@ -118,14 +123,11 @@ func (e *Engine) Start() error {
 	if err != nil {
 		return err
 	}
-	var closeBoard func()
-	if !cfg.DryRun && e.fsm.actions.OpenBoard != nil {
-		closeBoard, err = e.fsm.actions.OpenBoard(cfg)
-		if err != nil {
+	closeBoard := func() {} // a dry run opens no Board
+	if !cfg.DryRun {
+		if closeBoard, err = e.openBoard(cfg); err != nil {
 			return err
 		}
-	} else if !cfg.DryRun && cfg.ESP32Port != "" {
-		return errors.New("ESP32 keyboard backend unavailable")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel, e.done = cancel, make(chan struct{})
@@ -175,9 +177,7 @@ type run struct {
 
 func (r *run) loop(ctx context.Context, done chan<- struct{}, closeBoard func()) {
 	defer close(done)
-	if closeBoard != nil {
-		defer closeBoard()
-	}
+	defer closeBoard()
 	var listening sync.WaitGroup
 	defer listening.Wait()
 	sounds := r.listen(ctx, &listening)
