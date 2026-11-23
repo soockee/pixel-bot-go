@@ -8,16 +8,20 @@ import (
 )
 
 // startGlances makes the pointer glance round the window while the bobber is
-// watched, first 1.5 to 4 s after it reached where it waits.
+// watched, first 1.5 to 4 s after it reached where it waits. A pointer that
+// did not move to the bobber comes back to the bobber itself.
 func (f *FishingFSM) startGlances() {
-	if len(f.cursorSteps) == 0 {
+	f.restAim = image.Pt(f.coordX, f.coordY)
+	if n := len(f.cursorSteps); n > 0 {
+		f.restAim = f.cursorSteps[n-1].Point
+	} else {
 		at, area, ok := f.deps.Pointer.Pos()
 		if !ok || !at.In(area) {
 			return
 		}
 		f.cursorStart, f.cursorSteps = time.Now(), []CursorStep{{Point: at}}
 	}
-	f.watchIdle, f.restAim, f.away = true, f.cursorSteps[len(f.cursorSteps)-1].Point, false
+	f.watchIdle, f.away = true, false
 	f.holdCursor(time.Duration(1500+f.deps.Roll(2501)) * time.Millisecond)
 }
 

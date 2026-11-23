@@ -301,6 +301,16 @@ func (f *FishingFSM) wake() {
 		f.cursorSteps = f.cursorSteps[n:]
 		// Skip elapsed intermediate points instead of sending a burst.
 		if err := f.deps.Input.MoveTo(point); err != nil {
+			if f.watchIdle {
+				// A glance is optional: a failed one stops the glances, not the
+				// run, and the reel aims anew from wherever the pointer is.
+				if !f.pauseFor(err) {
+					f.logger.Warn("glances stopped", "error", err.Error())
+					f.cursorSteps, f.watchIdle = nil, false
+					f.schedule()
+				}
+				return
+			}
 			if errors.Is(err, ErrPointerMissed) && !f.countFailedCast() {
 				f.logger.Warn("cast given up", "reason", err.Error())
 				f.recast()
