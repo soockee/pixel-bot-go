@@ -381,7 +381,7 @@ func (f *FishingFSM) castFailed() {
 func (f *FishingFSM) planReposition() {
 	f.nextReposition = 0
 	if f.cfg.Reposition {
-		f.nextReposition = f.stats.reels.Load() + int32(45+f.deps.Roll(11))
+		f.nextReposition = f.stats.reels.Load() + int32(15+f.deps.Roll(11))
 	}
 }
 

@@ -21,7 +21,7 @@ order: 1
 | Cast length | 30 s | Cast again when nothing bites within this time. 5 to 180 seconds. |
 | **Between catches** | | |
 | Move the mouse | Off | After every catch, before the next cast, the cursor drifts along a curved path, and about one time in four it circles the whole game window. Sometimes the camera turns slightly instead, and the next turn puts it back. It never clicks or holds a button, and it stops as soon as the next cast is due, so it never gets in the way of watching or reeling. |
-| Change spot | Off | Every 45 to 55 catches, Go Fish takes a step with W, A, S or D, or turns the camera, and checks the next cast. Needs the Logout key, to log out if it gets stuck. |
+| Change spot | Off | Every 15 to 25 catches, Go Fish takes a step with W, A, S or D, or turns the camera, and checks the next cast. Needs the Logout key, to log out if it gets stuck. |
 | **Scheduled breaks** | | |
 | Take breaks | Off | Alternates random fishing sessions with logged-out breaks after Start. |
 | Shortest / longest session | 20 / 45 min | Shown with breaks on: the range for each fishing session. |
@@ -29,7 +29,7 @@ order: 1
 | Logout key | F12 | Shown with breaks or Change spot on: a spare key. The addon puts a **Logout** macro on it after an **Update addon** and `/reload`. |
 | Move overlay | Top centre | A button, not a setting you type: drag the pill that shows a run over the game, then click **Done** to keep its place. See [Change keys and limits](../how-to/settings.md#move-the-overlay). |
 
-With **Change spot** on, Go Fish moves after 45 to 55 catches. If the board
+With **Change spot** on, Go Fish moves after 15 to 25 catches. If the board
 supports camera drags and the pointer is inside the game window, Go Fish may
 turn the camera with a short mouse drag instead of a step. If no bobber
 appears after the first move, it tries three to five more times. If it still

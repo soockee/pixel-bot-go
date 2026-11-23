@@ -82,7 +82,7 @@ type Config struct {
 	// then a swirl round the game window, or nudges the camera a little.
 	IdleMoves bool `json:"idle_moves,omitempty"`
 	// Reposition steps the character with WASD, or turns the camera with a
-	// mouse drag, every 45 to 55 catches, before a verification cast.
+	// mouse drag, every 15 to 25 catches, before a verification cast.
 	Reposition bool `json:"reposition,omitempty"`
 	// MaxFailedCasts halts the bot after this many casts in a row end without a reel.
 	MaxFailedCasts int `json:"max_failed_casts"`

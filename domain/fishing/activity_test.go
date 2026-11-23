@@ -9,6 +9,8 @@ import (
 	"testing"
 	"testing/synctest"
 	"time"
+
+	"github.com/soocke/pixel-bot-go/config"
 )
 
 func TestWanderPathDriftsAShortSmoothWay(t *testing.T) {
@@ -83,17 +85,28 @@ func TestInWorldReadsTheAddonBlocks(t *testing.T) {
 	}
 }
 
-// idleFSM is an FSM with IdleMoves on, whose pointer rests in a 1000x800
-// window and whose moves are recorded with the state they were made in.
-func idleFSM(roll func(int) int) (m *FishingFSM, moves func() []stateMove) {
+// idleFSM is an FSM with IdleMoves and Reposition on, whose pointer rests in
+// a 1000x800 window. Its moves, and its taps other than the Cast key, are
+// recorded with the state they were made in.
+func idleFSM(roll func(int) int) (m *FishingFSM, moves func() []stateMove, steps func() []FishingState) {
 	var mu sync.Mutex
 	var made []stateMove
+	var tapped []FishingState
 	deps := recordingDeps(&actionLog{})
 	deps.Roll = roll
 	at, area := image.Pt(500, 400), image.Rect(0, 0, 1000, 800)
 	pointerOf(deps).pos = func() (image.Point, image.Rectangle, bool) { return at, area, true }
 	cfg := testConfig()
-	cfg.IdleMoves = true
+	cfg.IdleMoves, cfg.Reposition = true, true
+	cast, _ := config.KeyCode(cfg.CastKey)
+	inputOf(deps).tap = func(vk byte, _ time.Duration) error {
+		if vk != cast {
+			mu.Lock()
+			tapped = append(tapped, m.state)
+			mu.Unlock()
+		}
+		return nil
+	}
 	inputOf(deps).move = func(p image.Point) error {
 		mu.Lock()
 		defer mu.Unlock()
@@ -102,7 +115,8 @@ func idleFSM(roll func(int) int) (m *FishingFSM, moves func() []stateMove) {
 		return nil
 	}
 	m = NewFSM(nil, cfg, deps)
-	return m, func() []stateMove { mu.Lock(); defer mu.Unlock(); return slices.Clone(made) }
+	return m, func() []stateMove { mu.Lock(); defer mu.Unlock(); return slices.Clone(made) },
+		func() []FishingState { mu.Lock(); defer mu.Unlock(); return slices.Clone(tapped) }
 }
 
 type stateMove struct {
@@ -125,15 +139,24 @@ func catchOne(t *testing.T, m *FishingFSM) {
 	t.Fatalf("state = %v after a catch, want searching", m.Current())
 }
 
-func TestIdleMovesRunOnlyBetweenCatches(t *testing.T) {
+func TestBetweenCatchActivityRunsOnlyInCooldown(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		m, moves := idleFSM(rand.New(rand.NewPCG(5, 6)).IntN)
+		m, moves, steps := idleFSM(rand.New(rand.NewPCG(5, 6)).IntN)
 		defer m.Close()
 		m.EventAwaitFocus()
 		m.EventFocusAcquired()
 		wantState(t, m, StateSearching)
-		for range 12 {
+		for range 30 {
 			catchOne(t, m)
+		}
+		repositions := steps()
+		if len(repositions) == 0 {
+			t.Fatal("no change of spot in 30 catches")
+		}
+		for _, s := range repositions {
+			if s != StateCooldown {
+				t.Fatalf("a change of spot while %v", s)
+			}
 		}
 		idle, swirls := 0, 0
 		var span image.Rectangle // what the current cooldown's moves covered
@@ -158,8 +181,8 @@ func TestIdleMovesRunOnlyBetweenCatches(t *testing.T) {
 			}
 		}
 		wide()
-		if idle < 12*10 || swirls == 0 {
-			t.Fatalf("%d idle moves and %d swirls in 12 catches, want a path every catch and a swirl", idle, swirls)
+		if idle < 30*10 || swirls == 0 {
+			t.Fatalf("%d idle moves and %d swirls in 30 catches, want a path every catch and a swirl", idle, swirls)
 		}
 	})
 }
@@ -173,7 +196,7 @@ func TestTransitionsEndAnIdleSwirl(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				// Every roll 0 makes the path a swirl.
-				m, moves := idleFSM(func(int) int { return 0 })
+				m, moves, _ := idleFSM(func(int) int { return 0 })
 				defer m.Close()
 				startMonitoring(t, m)
 				m.EventFishBite()

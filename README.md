@@ -36,7 +36,7 @@ While it fishes, leave the mouse alone and keep the game in front. Moving the mo
 
 - **Fishing**: what Go Fish sees, the step it is on (Focus, Search, Watch, Reel, Pause, Cast), your catches this run and how each reel ended: caught, got away or not hooked
 - **Overlay**: a small pill over the game that shows how the run goes. It takes no clicks, and you can move it out of your way
-- **Between catches**, all optional: move the mouse or nudge the camera after every catch, change spot every 45 to 55 catches, and take logged-out breaks on a schedule
+- **Between catches**, all optional: move the mouse or nudge the camera after every catch, change spot every 15 to 25 catches, and take logged-out breaks on a schedule
 - **Updates**: Go Fish checks GitHub when it starts and every hour, verifies the download against the release's checksum and replaces itself. **Settings → Addon** installs and updates Bobber Marker
 - **Problems**: **Report a problem** opens a GitHub issue in your browser with the version and recent warnings filled in; nothing is sent until you submit it. See [what Go Fish sends](https://soockee.github.io/pixel-bot-go/explanation/data-sharing/)
 

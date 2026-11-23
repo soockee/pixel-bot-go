@@ -464,7 +464,7 @@ func TestFakeGameESP32CameraRecovery(t *testing.T) {
 				fsm.EventFocusAcquired()
 				wantState(t, fsm, StateSearching)
 				// Exercise recovery immediately. The FSM tests cover the normal
-				// 45–55 reel trigger and the retry budget.
+				// 15–25 reel trigger and the retry budget.
 				fsm.nextReposition = 1
 				fsm.ForceCast()
 				time.Sleep(500 * time.Millisecond)
