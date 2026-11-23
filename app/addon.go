@@ -33,10 +33,10 @@ func (a *app) gameDir() (string, error) {
 
 // addonKeys are the bindings the addon sets up in the game: the Cast key
 // always, the Interact key only when it is the reel method, the Logout key
-// only when breaks or Change spot may log out.
+// only when breaks or Change spot may log out, and the water buff to keep up.
 func (a *app) addonKeys() addon.Keys {
 	cfg := a.container.Config
-	keys := addon.Keys{Cast: addon.BindingKey(cfg.CastKey)}
+	keys := addon.Keys{Cast: addon.BindingKey(cfg.CastKey), Buff: cfg.WaterBuff}
 	if cfg.ReelMethod == config.ReelInteractKey {
 		keys.Interact = addon.BindingKey(cfg.InteractKey)
 	}

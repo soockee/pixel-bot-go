@@ -33,6 +33,8 @@ func TestValidateClamps(t *testing.T) {
 		{"failed casts unset", func(c *Config) { c.MaxFailedCasts = 0 }, func(c *Config) any { return c.MaxFailedCasts }, 5},
 		{"empty record folder", func(c *Config) { c.RecordDir = "" }, func(c *Config) any { return c.RecordDir }, "datasets"},
 		{"session limit unset", func(c *Config) { c.MaxSessionMinutes = 0 }, func(c *Config) any { return c.MaxSessionMinutes }, 60},
+		{"unknown water buff", func(c *Config) { c.WaterBuff = "flying" }, func(c *Config) any { return c.WaterBuff }, ""},
+		{"known water buff", func(c *Config) { c.WaterBuff = "levitate" }, func(c *Config) any { return c.WaterBuff }, "levitate"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

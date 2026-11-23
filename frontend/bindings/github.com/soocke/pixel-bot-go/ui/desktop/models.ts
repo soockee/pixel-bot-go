@@ -38,6 +38,7 @@ export interface Settings {
     "castKey": string;
     "reelMethod": string;
     "interactKey": string;
+    "waterBuff": string;
     "esp32Port": string;
     "idleMoves": boolean;
     "reposition": boolean;

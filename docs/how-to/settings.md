@@ -9,6 +9,7 @@ Open the **Settings** tab. Every change saves at once. Settings are locked while
 ## Fishing keys
 
 - **Cast key**: click it, then press a spare key: a letter, a number on the top row, F1 to F12, or a mouse side button, without Shift, Ctrl or Alt. The addon puts Fishing on that key for you. After a change, click **Update addon** on the Fishing tab and type `/reload` in the game.
+- **Water walking**: to fish while standing on water, choose the buff you use: **Water Walking** (shaman), **Levitate** (priest) or **Elixir of Water Walking**. When the buff is missing or has less than 45 seconds left, the next press of the Cast key renews it instead of fishing, and the press after that fishes again. Cast the buff yourself before you step onto the water. If you cannot renew it (out of Fish Oil, Light Feathers, elixirs or mana), Go Fish keeps fishing without it; type `/bobbermarker` in the game to see why. Any damage takes Water Walking off, so you may drop into the water before it is renewed. After a change, click **Update addon** and type `/reload` in the game.
 
 ## Reeling
 
