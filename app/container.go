@@ -68,7 +68,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 	c.Recordings = desktop.NewRecordings(func() string { return cfg.RecordDir })
 	inFront := c.gameFocused
 
-	callbacks := fishing.ActionCallbacks{ParseVK: action.ParseVK, CanAct: inFront, Roll: rand.IntN}
+	callbacks := fishing.ActionCallbacks{CanAct: inFront, Roll: rand.IntN}
 	dryRun := cfg.DryRun
 	if dryRun {
 		logger.Warn("dry-run enabled: input actions are logged, not injected")
@@ -105,18 +105,14 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 			if err != nil {
 				return nil, err
 			}
+			// Engine.Start checked the keys (config.CheckRunKeys); the Board
+			// only needs to know whether its firmware presses Mouse 4 and 5.
 			keys := []string{run.CastKey}
 			if run.Schedule || run.Reposition {
 				keys = append(keys, run.LogoutKey)
 			}
 			if run.ReelMethod == config.ReelInteractKey {
 				keys = append(keys, run.InteractKey)
-			}
-			for _, key := range keys {
-				vk, valid := action.ParseVK(key)
-				if !valid || !esp32.SupportsKey(vk) {
-					return nil, errors.New("ESP32 supports letters, digits, F1–F12, Mouse 4 and Mouse 5 for configured keys")
-				}
 			}
 			_, release, err := c.board.open(port)
 			if err != nil {
@@ -147,7 +143,7 @@ func BuildContainer(cfg *config.Config, logger *slog.Logger, trace TraceOptions,
 				return nil, err
 			}
 			for _, key := range keys {
-				vk, _ := action.ParseVK(key)
+				vk, _ := config.KeyCode(key)
 				if (vk == 0x05 || vk == 0x06) && !board.CanPressButtons() {
 					return nil, errors.New("flash the current ESP32 firmware to press Mouse 4 and Mouse 5")
 				}

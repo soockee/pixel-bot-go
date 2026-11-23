@@ -106,15 +106,11 @@ func (e *Engine) Start() error {
 		return nil
 	}
 	cfg := *e.cfg
-	if err := CheckActivityKeys(cfg, e.fsm.actions.ParseVK); err != nil {
+	if err := cfg.CheckRunKeys(); err != nil {
 		return err
 	}
 	switch cfg.ReelMethod {
-	case "", config.ReelRightClick:
-	case config.ReelInteractKey:
-		if _, ok := e.fsm.interactVK(cfg); !ok {
-			return errors.New("set an Interact key that differs from the Cast key")
-		}
+	case "", config.ReelRightClick, config.ReelInteractKey:
 	default:
 		return errors.New("unknown reel method")
 	}

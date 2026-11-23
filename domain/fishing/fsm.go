@@ -520,7 +520,7 @@ func (f *FishingFSM) transition(next FishingState) {
 // pressCast reports false when the configured key is unusable, so the wrong
 // key is never pressed.
 func (f *FishingFSM) pressCast() bool {
-	vk, ok := f.actions.ParseVK(f.cfg.CastKey)
+	vk, ok := config.KeyCode(f.cfg.CastKey)
 	if !ok {
 		f.why(fmt.Sprintf("%q is not a Cast key Go Fish can press", f.cfg.CastKey))
 		return false
@@ -741,8 +741,8 @@ const quickPauseMin, quickPauseMax = 400 * time.Millisecond, 1200 * time.Millise
 const outcomeWait = 3 * time.Second
 
 func (f *FishingFSM) interactVK(cfg config.Config) (byte, bool) {
-	vk, ok := f.actions.ParseVK(cfg.InteractKey)
-	cast, castOK := f.actions.ParseVK(cfg.CastKey)
+	vk, ok := config.KeyCode(cfg.InteractKey)
+	cast, castOK := config.KeyCode(cfg.CastKey)
 	return vk, ok && !(castOK && cast == vk)
 }
 

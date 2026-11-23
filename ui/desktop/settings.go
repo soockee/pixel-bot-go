@@ -5,8 +5,6 @@ import (
 	"strings"
 
 	"github.com/soocke/pixel-bot-go/config"
-	"github.com/soocke/pixel-bot-go/domain/action"
-	"github.com/soocke/pixel-bot-go/domain/fishing"
 	"github.com/soocke/pixel-bot-go/internal/esp32"
 )
 
@@ -55,42 +53,14 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 			invalid = append(invalid, label)
 		}
 	}
-	castVK, castOK := action.ParseVK(s.CastKey)
-	check(castOK && esp32.SupportsKey(castVK), "Cast key")
 	check(s.ReelMethod == config.ReelRightClick || s.ReelMethod == config.ReelInteractKey, "Reel method")
-	interactVK, interactOK := action.ParseVK(s.InteractKey)
-	if s.ReelMethod == config.ReelInteractKey {
-		if !interactOK {
-			return c, errors.New("set the Interact key before enabling this reel method")
-		}
-		if sameKey(s.InteractKey, s.CastKey) {
-			return c, errors.New("the Interact key must differ from the Cast key")
-		}
-	} else if strings.TrimSpace(s.InteractKey) != "" {
-		check(interactOK, "Interact key")
-	}
 	port, err := esp32.PortName(s.ESP32Port)
 	if err != nil {
 		return c, err
 	}
-	if s.ReelMethod == config.ReelInteractKey && !esp32.SupportsKey(interactVK) {
-		return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Interact")
-	}
 	check(strings.TrimSpace(s.RecordDir) != "", "Recording folder")
 	if len(invalid) > 0 {
 		return c, errors.New("not saved, invalid: " + strings.Join(invalid, ", "))
-	}
-	// Breaks may be switched on before the Logout key is set; starting a run
-	// asks for it (config.CheckSchedule).
-	if s.LogoutKey != "" {
-		vk, ok := action.ParseVK(s.LogoutKey)
-		if !ok || sameKey(s.LogoutKey, s.CastKey) ||
-			s.ReelMethod == config.ReelInteractKey && sameKey(s.LogoutKey, s.InteractKey) {
-			return c, errors.New("the Logout key must differ from the Cast and Interact keys")
-		}
-		if !esp32.SupportsKey(vk) {
-			return c, errors.New("ESP32 requires a letter, digit, F1–F12, Mouse 4 or Mouse 5 for Logout")
-		}
 	}
 	c.CastKey = s.CastKey
 	c.ReelMethod, c.InteractKey, c.ESP32Port = s.ReelMethod, s.InteractKey, port
@@ -102,17 +72,14 @@ func (s Settings) apply(c config.Config) (config.Config, error) {
 	c.LogoutKey = s.LogoutKey
 	c.RecordDir, c.RecordKeys = strings.TrimSpace(s.RecordDir), s.RecordKeys
 	c.CooldownSeconds, c.MaxCastDurationSeconds = s.CooldownSeconds, s.MaxCastDurationSeconds
+	// Before Validate, which would fill an empty Cast key with the default.
+	// Breaks may be switched on before the Logout key is set; starting a run
+	// asks for it (config.CheckRunKeys).
+	if err := c.CheckKeys(); err != nil {
+		return c, err
+	}
 	if err := c.Validate(); err != nil {
 		return c, err
 	}
-	if err := fishing.CheckActivityKeys(c, action.ParseVK); err != nil {
-		return c, err
-	}
 	return c, c.CheckSchedule()
-}
-
-func sameKey(a, b string) bool {
-	av, aOK := action.ParseVK(a)
-	bv, bOK := action.ParseVK(b)
-	return aOK && bOK && av == bv
 }

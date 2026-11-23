@@ -51,10 +51,14 @@ func TestSettingsApply(t *testing.T) {
 	}
 
 	bad := good
-	bad.CastKey, bad.RecordDir = "Ctrl", " "
-	if _, err := bad.apply(base); err == nil ||
-		!strings.Contains(err.Error(), "Cast key, Recording folder") {
-		t.Errorf("invalid settings: err = %v", err)
+	bad.RecordDir = " "
+	if _, err := bad.apply(base); err == nil || err.Error() != "not saved, invalid: Recording folder" {
+		t.Errorf("invalid folder: err = %v", err)
+	}
+	bad = good
+	bad.CastKey = "Ctrl" // a key rule says what is wrong in its own words
+	if _, err := bad.apply(base); err == nil || !strings.Contains(err.Error(), "is not a Cast key") {
+		t.Errorf("invalid Cast key: err = %v", err)
 	}
 }
 

@@ -74,13 +74,13 @@ func TestPortName(t *testing.T) {
 
 func TestSupportsKey(t *testing.T) {
 	for _, vk := range []byte{'A', 'Z', '0', '9', 0x70, 0x7b} {
-		if !SupportsKey(vk) {
-			t.Errorf("SupportsKey(%#x) = false", vk)
+		if !supportsKey(vk) {
+			t.Errorf("supportsKey(%#x) = false", vk)
 		}
 	}
 	for _, vk := range []byte{0x0d, 0x20, 0x6f, 0x7c} {
-		if SupportsKey(vk) {
-			t.Errorf("SupportsKey(%#x) = true", vk)
+		if supportsKey(vk) {
+			t.Errorf("supportsKey(%#x) = true", vk)
 		}
 	}
 }

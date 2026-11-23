@@ -45,9 +45,9 @@ const (
 	vkMouse5 = 0x06
 )
 
-// SupportsKey reports whether the backend accepts this Windows virtual key:
+// supportsKey reports whether the backend accepts this Windows virtual key:
 // letters, digits, F1 to F12, and Mouse 4 and 5.
-func SupportsKey(vk byte) bool {
+func supportsKey(vk byte) bool {
 	return vk >= 'A' && vk <= 'Z' || vk >= '0' && vk <= '9' || vk >= 0x70 && vk <= 0x7b ||
 		vk == vkMouse4 || vk == vkMouse5
 }

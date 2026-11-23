@@ -1,40 +1,12 @@
 package fishing
 
 import (
-	"fmt"
 	"image"
 	"math"
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
 )
-
-// CheckActivityKeys rejects the WASD keys a reposition presses when another
-// Go Fish action already uses one.
-func CheckActivityKeys(cfg config.Config, parse func(string) (byte, bool)) error {
-	if !cfg.Reposition {
-		return nil
-	}
-	if parse == nil {
-		return fmt.Errorf("optional game keys cannot be resolved")
-	}
-	used := make(map[byte]string)
-	for _, binding := range []struct{ key, label string }{
-		{cfg.CastKey, "Cast"}, {cfg.InteractKey, "Interact"}, {cfg.LogoutKey, "Logout"},
-	} {
-		if vk, ok := parse(binding.key); binding.key != "" && ok {
-			used[vk] = binding.label
-		}
-	}
-	for _, key := range "WASD" {
-		if vk, ok := parse(string(key)); ok {
-			if other, exists := used[vk]; exists {
-				return fmt.Errorf("repositioning walks with %s, which is assigned to %s", string(key), other)
-			}
-		}
-	}
-	return nil
-}
 
 // idleMove plays one between-catch movement: now and then a small camera
 // nudge, or a cursor wander where no drag fits.
@@ -96,10 +68,10 @@ func wanderPath(start image.Point, roll func(int) int) []image.Point {
 }
 
 func (f *FishingFSM) activity(key, name string) bool {
-	if key == "" || f.actions.ParseVK == nil {
+	if key == "" {
 		return false
 	}
-	vk, ok := f.actions.ParseVK(key)
+	vk, ok := config.KeyCode(key)
 	if !ok {
 		return false
 	}
