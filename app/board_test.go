@@ -36,7 +36,7 @@ func TestNeedsFor(t *testing.T) {
 		{"right-click reel points", func(*config.Config) {}, false, boardNeeds{rightClick: true}},
 		{"Interact reel needs no pointer", func(c *config.Config) { c.ReelMethod = config.ReelInteractKey }, false, boardNeeds{}},
 		{"reposition drags the camera", func(c *config.Config) { c.ReelMethod, c.Reposition = config.ReelInteractKey, true }, false, boardNeeds{camera: true}},
-		{"idle moves drag and wander", func(c *config.Config) { c.ReelMethod, c.IdleMoves = config.ReelInteractKey, true }, false, boardNeeds{camera: true, wander: true}},
+		{"idle moves wander", func(c *config.Config) { c.ReelMethod, c.IdleMoves = config.ReelInteractKey, true }, false, boardNeeds{wander: true}},
 		{"a timing profile times taps", func(*config.Config) {}, true, boardNeeds{rightClick: true, timedTaps: true}},
 		{"Mouse 4 as Cast", func(c *config.Config) { c.CastKey = "Mouse4" }, false, boardNeeds{rightClick: true, sideButtons: true}},
 		{"Mouse 5 as Interact only with that reel", func(c *config.Config) { c.InteractKey = "Mouse5" }, false, boardNeeds{rightClick: true}},

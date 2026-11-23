@@ -20,8 +20,8 @@ order: 1
 | Pause after a catch | Quick | Wait before the next cast. **Quick** casts again after a random 0.4 to 1.2 seconds, like a player; or pick 1 to 60 seconds. The next search ignores the old bobber. |
 | Cast length | 30 s | Cast again when nothing bites within this time. 5 to 180 seconds. |
 | **Between catches** | | |
-| Move the mouse | Off | Now and then after a catch, the cursor drifts a little along a curved path, or the camera turns slightly. |
-| Change spot | Off | Every 45 to 55 catches, Go Fish takes a step with W, A, S or D, or turns the camera, and checks the next cast. Needs the Logout key, to log out if it gets stuck. |
+| Move the mouse | Off | While Go Fish watches the bobber, the cursor now and then moves off to somewhere in the game window, sometimes on to one or two more places, and comes back beside the bobber, the same way it moves to the bobber after a cast. It never clicks or holds a button. When a fish bites, it goes straight to the bobber and reels; from far away that can take up to about a second. |
+| Change spot | Off | Every 15 to 25 catches, Go Fish takes a step with W, A, S or D, or turns the camera, and checks the next cast. Needs the Logout key, to log out if it gets stuck. |
 | **Scheduled breaks** | | |
 | Take breaks | Off | Alternates random fishing sessions with logged-out breaks after Start. |
 | Shortest / longest session | 20 / 45 min | Shown with breaks on: the range for each fishing session. |
@@ -29,7 +29,7 @@ order: 1
 | Logout key | F12 | Shown with breaks or Change spot on: a spare key. The addon puts a **Logout** macro on it after an **Update addon** and `/reload`. |
 | Move overlay | Top centre | A button, not a setting you type: drag the pill that shows a run over the game, then click **Done** to keep its place. See [Change keys and limits](../how-to/settings.md#move-the-overlay). |
 
-With **Change spot** on, Go Fish moves after 45 to 55 catches. If the board
+With **Change spot** on, Go Fish moves after 15 to 25 catches. If the board
 supports camera drags and the pointer is inside the game window, Go Fish may
 turn the camera with a short mouse drag instead of a step. If no bobber
 appears after the first move, it tries three to five more times. If it still

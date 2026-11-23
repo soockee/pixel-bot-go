@@ -1,33 +1,18 @@
 package fishing
 
 import (
+	"errors"
 	"image"
 	"image/color"
 	"math/rand/v2"
+	"slices"
+	"sync"
 	"testing"
-)
+	"testing/synctest"
+	"time"
 
-func TestWanderPathDriftsAShortSmoothWay(t *testing.T) {
-	rng := rand.New(rand.NewPCG(1, 2))
-	start := image.Pt(500, 400)
-	for range 200 {
-		path := wanderPath(start, rng.IntN)
-		if len(path) < 10 || len(path) > 16 {
-			t.Fatalf("%d points", len(path))
-		}
-		end := path[len(path)-1].Sub(start)
-		if d := end.X*end.X + end.Y*end.Y; d < 38*38 || d > 162*162 {
-			t.Fatalf("ends %v from the start", end)
-		}
-		prev := start
-		for _, p := range path {
-			if step := p.Sub(prev); step.X*step.X+step.Y*step.Y > 45*45 {
-				t.Fatalf("jumps %v in one step", step)
-			}
-			prev = p
-		}
-	}
-}
+	"github.com/soocke/pixel-bot-go/config"
+)
 
 func TestInWorldReadsTheAddonBlocks(t *testing.T) {
 	img := image.NewRGBA(WorldSignalArea.Sub(WorldSignalArea.Min))
@@ -48,4 +33,181 @@ func TestInWorldReadsTheAddonBlocks(t *testing.T) {
 	if InWorld(img) {
 		t.Fatal("a wrong middle block counted as in world")
 	}
+}
+
+// glanceFSM is an FSM with IdleMoves and Reposition on, whose pointer starts
+// in the middle of a 1000x800 window. Its moves, and its taps other than the
+// Cast key, are recorded with the state they were made in, and a click fails
+// the test unless the pointer is on the bobber at (10,10).
+func glanceFSM(t *testing.T, roll func(int) int, approach func(image.Point, image.Rectangle) (image.Point, bool)) (m *FishingFSM, moves func() []stateMove, steps func() []FishingState) {
+	var mu sync.Mutex
+	var made []stateMove
+	var tapped []FishingState
+	deps := recordingDeps(&actionLog{})
+	deps.Roll = roll
+	at, area := image.Pt(500, 400), image.Rect(0, 0, 1000, 800)
+	pointerOf(deps).approach = approach
+	pointerOf(deps).pos = func() (image.Point, image.Rectangle, bool) { return at, area, true }
+	cfg := testConfig()
+	cfg.IdleMoves, cfg.Reposition = true, true
+	cast, _ := config.KeyCode(cfg.CastKey)
+	in := inputOf(deps)
+	in.tap = func(vk byte, _ time.Duration) error {
+		if vk != cast {
+			mu.Lock()
+			tapped = append(tapped, m.state) // input runs on the FSM loop, which owns state
+			mu.Unlock()
+		}
+		return nil
+	}
+	in.move = func(p image.Point) error {
+		mu.Lock()
+		defer mu.Unlock()
+		made = append(made, stateMove{m.state, p})
+		at = p
+		return nil
+	}
+	in.click = func() error {
+		if at != image.Pt(10, 10) {
+			t.Errorf("reeled with the pointer at %v, not on the bobber", at)
+		}
+		return nil
+	}
+	m = NewFSM(nil, cfg, deps)
+	return m, func() []stateMove { mu.Lock(); defer mu.Unlock(); return slices.Clone(made) },
+		func() []FishingState { mu.Lock(); defer mu.Unlock(); return slices.Clone(tapped) }
+}
+
+type stateMove struct {
+	state FishingState
+	at    image.Point
+}
+
+// catchAfter watches a bobber at (10,10) for watch, reels it and waits for the next cast.
+func catchAfter(t *testing.T, m *FishingFSM, watch time.Duration) {
+	t.Helper()
+	m.EventTargetAcquiredAt(10, 10)
+	wantState(t, m, StateMonitoring)
+	time.Sleep(watch)
+	wantState(t, m, StateMonitoring)
+	m.EventFishBite()
+	for range 400 {
+		time.Sleep(25 * time.Millisecond)
+		if m.Current() == StateSearching {
+			return
+		}
+	}
+	t.Fatalf("state = %v after a catch, want searching", m.Current())
+}
+
+func TestGlancesRunOnlyWhileWatching(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m, moves, steps := glanceFSM(t, rand.New(rand.NewPCG(5, 6)).IntN, nil)
+		defer m.Close()
+		m.EventAwaitFocus()
+		m.EventFocusAcquired()
+		wantState(t, m, StateSearching)
+		for i := range 30 {
+			catchAfter(t, m, time.Duration(i%10)*time.Second) // bites at every point of a glance
+		}
+		repositions := steps()
+		if len(repositions) == 0 {
+			t.Fatal("no change of spot in 30 catches")
+		}
+		for _, s := range repositions {
+			if s != StateCooldown {
+				t.Fatalf("a change of spot while %v", s)
+			}
+		}
+		glances := 0
+		for _, mv := range moves() {
+			switch {
+			case mv.state != StateMonitoring && mv.state != StateReeling:
+				t.Fatalf("a move to %v while %v", mv.at, mv.state)
+			case mv.state == StateReeling && mv.at != image.Pt(10, 10):
+				t.Fatalf("a reel aimed at %v", mv.at)
+			case mv.at != image.Pt(10, 10):
+				glances++
+				if !mv.at.In(image.Rect(80, 80, 920, 720)) {
+					t.Fatalf("a glance to %v, near the window's edge", mv.at)
+				}
+			}
+		}
+		if glances < 20 {
+			t.Fatalf("%d glances in 30 catches", glances)
+		}
+	})
+}
+
+func TestTransitionsEndTheGlances(t *testing.T) {
+	for name, interrupt := range map[string]func(m *FishingFSM){
+		"bite":       (*FishingFSM).EventFishBite,
+		"cast":       (*FishingFSM).ForceCast,
+		"focus lost": (*FishingFSM).EventFocusLost,
+		"stop":       (*FishingFSM).EventHalt,
+	} {
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				// Every roll 0: the first glance goes to (80,80) 1.5 s in.
+				m, moves, _ := glanceFSM(t, func(int) int { return 0 }, nil)
+				defer m.Close()
+				startMonitoring(t, m)
+				time.Sleep(1600 * time.Millisecond)
+				if got := moves(); got[len(got)-1].at != image.Pt(80, 80) {
+					t.Fatalf("moves %v, want a glance to (80,80)", got)
+				}
+				interrupt(m)
+				time.Sleep(10 * time.Second)
+				for _, mv := range moves() {
+					if mv.state == StateMonitoring {
+						continue
+					}
+					if mv.state != StateReeling || mv.at != image.Pt(10, 10) {
+						t.Fatalf("a move to %v while %v after the %s", mv.at, mv.state, name)
+					}
+				}
+			})
+		})
+	}
+}
+
+// A pointer that waited where it was comes back to the bobber, not to where
+// it waited, which may be beside an earlier bobber.
+func TestGlancesComeBackToTheBobber(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		stay := func(c image.Point, _ image.Rectangle) (image.Point, bool) { return c, false }
+		m, moves, _ := glanceFSM(t, func(int) int { return 0 }, stay)
+		defer m.Close()
+		startMonitoring(t, m)
+		time.Sleep(10 * time.Second) // out to (80,80), then back
+		got := moves()
+		if len(got) < 2 || got[0].at != image.Pt(500, 400) || got[len(got)-1].at != image.Pt(10, 10) {
+			t.Fatalf("moves %v, want a wait at (500,400), a glance and a way back to the bobber at (10,10)", got)
+		}
+	})
+}
+
+// A glance that fails stops the glances, and the run still reels the bite.
+func TestFailedGlanceKeepsWatching(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m, moves, _ := glanceFSM(t, func(int) int { return 0 }, nil)
+		defer m.Close()
+		in := inputOf(m.deps)
+		move := in.move
+		in.move = func(p image.Point) error {
+			if p != image.Pt(10, 10) {
+				return errors.New("ESP32 pointer move acknowledgment: short write")
+			}
+			return move(p)
+		}
+		startMonitoring(t, m)
+		time.Sleep(10 * time.Second)
+		wantState(t, m, StateMonitoring)
+		m.EventFishBite()
+		time.Sleep(time.Second)
+		wantState(t, m, StateCooldown)
+		if got := moves(); got[len(got)-1].state != StateReeling {
+			t.Fatalf("moves %v, want the reel's move last", got)
+		}
+	})
 }

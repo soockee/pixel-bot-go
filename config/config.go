@@ -78,10 +78,11 @@ type Config struct {
 	WaterBuff string `json:"water_buff,omitempty"`
 	// ESP32Port selects the required serial BLE keyboard backend. AUTO finds the board.
 	ESP32Port string `json:"esp32_port,omitempty"`
-	// IdleMoves now and then wanders the cursor or nudges the camera between catches.
+	// IdleMoves lets the pointer glance round the game window while the bobber
+	// is watched, and come back beside it.
 	IdleMoves bool `json:"idle_moves,omitempty"`
 	// Reposition steps the character with WASD, or turns the camera with a
-	// mouse drag, every 45 to 55 catches, before a verification cast.
+	// mouse drag, every 15 to 25 catches, before a verification cast.
 	Reposition bool `json:"reposition,omitempty"`
 	// MaxFailedCasts halts the bot after this many casts in a row end without a reel.
 	MaxFailedCasts int `json:"max_failed_casts"`

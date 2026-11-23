@@ -452,9 +452,10 @@ func (b *Board) TapFor(usage byte, hold time.Duration) error {
 	return b.sendAction(command, "tap")
 }
 
-// sendAction runs with the port locked. A lost OK or a Bluetooth drop does not
-// halt the run once the board answers HELLO again: the action went out or was
-// dropped, and a cast or reel that never happened costs only that cast.
+// sendAction runs with the port locked. A lost OK, a cut-short write or a
+// Bluetooth drop does not halt the run once the board answers HELLO again: the
+// action went out or was dropped, and a cast or reel that never happened costs
+// only that cast.
 func (b *Board) sendAction(command, action string) error {
 	reply, err := b.exchange(command)
 	if b.recovered(action, reply, err) {
@@ -463,13 +464,15 @@ func (b *Board) sendAction(command, action string) error {
 	return b.result(action, reply, err)
 }
 
-// recovered reports whether the board is ready again after its OK was lost or
-// its Bluetooth link dropped. handshake waits up to pairWait for the link.
+// recovered reports whether the board is ready again after its OK was lost,
+// a command went out only in part, or its Bluetooth link dropped. handshake waits up to pairWait for the link.
 func (b *Board) recovered(action, reply string, err error) bool {
 	cause := ""
 	switch {
 	case errors.Is(err, os.ErrDeadlineExceeded):
 		cause = "reply lost"
+	case errors.Is(err, io.ErrShortWrite):
+		cause = "write cut short" // HELLO completes the half line, which the firmware rejects
 	case err == nil && reply == "ERR disconnected":
 		cause = "Bluetooth link dropped"
 	default:

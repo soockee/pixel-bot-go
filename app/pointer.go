@@ -28,17 +28,20 @@ func (p livePointer) Plan(target image.Point, settle bool) ([]fishing.CursorStep
 func (p livePointer) Reset() { p.guard.ResetCursor() }
 
 func (p livePointer) Approach(center image.Point, box image.Rectangle) (image.Point, bool) {
-	area := p.c.gameArea()
-	at, ok := p.Pos()
-	if area == nil || !ok || !at.In(*area) {
+	at, area, ok := p.Pos()
+	if !ok || !at.In(area) {
 		return center, false
 	}
-	return cursormotion.ApproachPoint(center, box.Intersect(*area))
+	return cursormotion.ApproachPoint(center, box.Intersect(area))
 }
 
-func (p livePointer) Pos() (image.Point, bool) {
+func (p livePointer) Pos() (image.Point, image.Rectangle, bool) {
 	x, y, ok := action.CursorPos()
-	return image.Pt(x, y), ok
+	area := p.c.gameArea()
+	if area == nil {
+		return image.Point{}, image.Rectangle{}, false
+	}
+	return image.Pt(x, y), *area, ok
 }
 
 // dryPointer is a dry run's fishing.Pointer. A dry run moves no pointer, so
@@ -56,14 +59,12 @@ func (p *dryPointer) Plan(target image.Point, settle bool) ([]fishing.CursorStep
 	if !p.inFront() {
 		return nil, fishing.ErrNotInFront
 	}
-	area := p.c.gameArea()
-	if area == nil {
+	at, area, ok := p.Pos()
+	if !ok {
 		return nil, errors.New("the game window is not known")
 	}
-	if !p.positioned || !p.current.In(*area) {
-		p.current, p.positioned = area.Min.Add(area.Size().Div(2)), true
-	}
-	return cursorSteps(p.plan(p.current, target, *area, settle))
+	p.current, p.positioned = at, true
+	return cursorSteps(p.plan(at, target, area, settle))
 }
 
 func (p *dryPointer) Reset() { p.positioned = false }
@@ -72,7 +73,18 @@ func (p *dryPointer) Approach(center image.Point, box image.Rectangle) (image.Po
 	return cursormotion.ApproachPoint(center, box)
 }
 
-func (p *dryPointer) Pos() (image.Point, bool) { return p.current, p.positioned }
+// Pos is where the last logged move left the pointer, or the window's middle
+// before the first one.
+func (p *dryPointer) Pos() (image.Point, image.Rectangle, bool) {
+	area := p.c.gameArea()
+	if area == nil {
+		return image.Point{}, image.Rectangle{}, false
+	}
+	if !p.positioned || !p.current.In(*area) {
+		return area.Min.Add(area.Size().Div(2)), *area, true
+	}
+	return p.current, *area, true
+}
 
 // Moved records a logged move, and draws it into the trace when one is written.
 func (p *dryPointer) Moved(at image.Point, area image.Rectangle) {

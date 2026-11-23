@@ -49,6 +49,10 @@ type FishingFSM struct {
 	detectorAt          time.Time
 	reelDelay           time.Duration
 	idleTried           bool
+	watchIdle           bool          // the pointer glances round the window while the bobber is watched
+	restAim             image.Point   // where the pointer waits while the bobber is watched
+	away                bool          // a glance has the pointer away from restAim
+	glancesLeft         int           // points still to visit before the pointer goes back
 	outcomesShown       bool          // Bobber Marker showed its outcome blocks this run
 	awaitOutcome        bool          // the cooldown about to start follows a reel that should bring an outcome
 	castPause           time.Duration // the pause before the next cast while the cooldown waits for the outcome
@@ -248,6 +252,7 @@ func (f *FishingFSM) arm(d time.Duration) {
 func (f *FishingFSM) disarm() {
 	f.deadline = time.Time{}
 	f.cursorSteps = nil
+	f.watchIdle = false
 	f.stopTimer()
 }
 
@@ -296,6 +301,16 @@ func (f *FishingFSM) wake() {
 		f.cursorSteps = f.cursorSteps[n:]
 		// Skip elapsed intermediate points instead of sending a burst.
 		if err := f.deps.Input.MoveTo(point); err != nil {
+			if f.watchIdle {
+				// A glance is optional: a failed one stops the glances, not the
+				// run, and the reel aims anew from wherever the pointer is.
+				if !f.pauseFor(err) {
+					f.logger.Warn("glances stopped", "error", err.Error())
+					f.cursorSteps, f.watchIdle = nil, false
+					f.schedule()
+				}
+				return
+			}
 			if errors.Is(err, ErrPointerMissed) && !f.countFailedCast() {
 				f.logger.Warn("cast given up", "reason", err.Error())
 				f.recast()
@@ -309,6 +324,9 @@ func (f *FishingFSM) wake() {
 		f.deadlineReached()
 		return
 	}
+	if len(f.cursorSteps) == 0 && f.watchIdle && !f.glance() {
+		return
+	}
 	f.schedule()
 }
 
@@ -320,24 +338,9 @@ func (f *FishingFSM) deadlineReached() {
 		f.finishReel()
 	case StateCooldown:
 		f.castPause = 0 // the outcome did not come in time
-		if !f.idleTried && time.Now().Before(f.sessionEnd) {
-			if f.nextReposition != 0 && f.stats.reels.Load() >= f.nextReposition {
-				f.startReposition()
-				return
-			}
-			if f.cfg.IdleMoves && f.deps.Roll(12) == 0 {
-				f.idleTried = true
-				if !f.deps.InFront() {
-					f.transition(StateWaitingFocus)
-					return
-				}
-				f.idleMove()
-				if f.state != StateCooldown {
-					return // the idle move paused the run
-				}
-				f.arm(time.Duration(300+f.deps.Roll(601)) * time.Millisecond)
-				return
-			}
+		if !f.idleTried && time.Now().Before(f.sessionEnd) && f.nextReposition != 0 && f.stats.reels.Load() >= f.nextReposition {
+			f.startReposition()
+			return
 		}
 		f.recast()
 	}
@@ -378,7 +381,7 @@ func (f *FishingFSM) castFailed() {
 func (f *FishingFSM) planReposition() {
 	f.nextReposition = 0
 	if f.cfg.Reposition {
-		f.nextReposition = f.stats.reels.Load() + int32(45+f.deps.Roll(11))
+		f.nextReposition = f.stats.reels.Load() + int32(15+f.deps.Roll(11))
 	}
 }
 
@@ -556,6 +559,9 @@ func (f *FishingFSM) startMonitoring() {
 		if move && !f.beginCursor(aim, true) {
 			return
 		}
+	}
+	if f.cfg.IdleMoves {
+		f.startGlances()
 	}
 	f.logger.Info("found blobber", "x", f.coordX, "y", f.coordY)
 	f.arm(time.Duration(f.cfg.MaxCastDurationSeconds) * time.Second)

@@ -79,6 +79,7 @@ type testPointer struct {
 	plan     func(target image.Point, settle bool) ([]CursorStep, error)
 	reset    func()
 	approach func(center image.Point, box image.Rectangle) (image.Point, bool)
+	pos      func() (image.Point, image.Rectangle, bool)
 }
 
 func (p *testPointer) Plan(target image.Point, settle bool) ([]CursorStep, error) {
@@ -101,7 +102,12 @@ func (p *testPointer) Approach(center image.Point, box image.Rectangle) (image.P
 	return p.approach(center, box)
 }
 
-func (p *testPointer) Pos() (image.Point, bool) { return image.Point{}, false }
+func (p *testPointer) Pos() (image.Point, image.Rectangle, bool) {
+	if p.pos == nil {
+		return image.Point{}, image.Rectangle{}, false
+	}
+	return p.pos()
+}
 
 // pointerOf is the testPointer of deps made by recordingDeps.
 func pointerOf(deps Deps) *testPointer { return deps.Pointer.(*testPointer) }
@@ -439,7 +445,7 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 				cfg.Reposition = true
 				log := &actionLog{}
 				deps := recordingDeps(log)
-				deps.Roll = func(int) int { return 0 } // reposition after 45 reels, settle 550 ms
+				deps.Roll = func(int) int { return 0 } // reposition after 15 reels, settle 550 ms
 				inputOf(deps).tap = func(vk byte, _ time.Duration) error {
 					if strings.ContainsRune("WASD", rune(vk)) {
 						log.add("reposition")
@@ -452,7 +458,7 @@ func TestRepositionChecksTheNextCast(t *testing.T) {
 				defer m.Close()
 				startMonitoring(t, m)
 				threshold := m.nextReposition
-				if threshold < 45 || threshold > 55 {
+				if threshold < 15 || threshold > 25 {
 					t.Fatalf("reposition threshold = %d", threshold)
 				}
 				for reel := int32(1); reel <= threshold; reel++ {

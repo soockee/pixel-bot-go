@@ -6,7 +6,7 @@ order: 6
 
 ## Enable Debug Mode
 
-Set `"debug": true` in `pixle_bot_config.json` then start the app. Visit `http://localhost:6060/debug/pprof/` for profiles. Disable via `"debug": false`. Debug mode switches on the developer tools (pprof, `/debug/state`, DevTools, the Recorder tab and the recording settings); the log holds the Debug lines, such as `splash seen`, `spray under the bar` (a cast's spray that stayed under the splash bar, each new hundredth from 0.04), `sound without a splash` and `detection.search`, in every mode. A Warn `ESP32 recovered` (`action`, `cause` "reply lost" or "Bluetooth link dropped") marks an ESP32 action the run got past instead of halting.
+Set `"debug": true` in `pixle_bot_config.json` then start the app. Visit `http://localhost:6060/debug/pprof/` for profiles. Disable via `"debug": false`. Debug mode switches on the developer tools (pprof, `/debug/state`, DevTools, the Recorder tab and the recording settings); the log holds the Debug lines, such as `splash seen`, `spray under the bar` (a cast's spray that stayed under the splash bar, each new hundredth from 0.04), `sound without a splash` and `detection.search`, in every mode. A Warn `ESP32 recovered` (`action`, `cause` "reply lost", "write cut short" or "Bluetooth link dropped") marks an ESP32 action the run got past instead of halting.
 
 ## Collect CPU / Heap Profiles
 

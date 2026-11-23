@@ -170,4 +170,6 @@ func (straightPointer) Reset() {}
 func (straightPointer) Approach(center image.Point, _ image.Rectangle) (image.Point, bool) {
 	return center, true
 }
-func (straightPointer) Pos() (image.Point, bool) { return image.Point{}, false }
+func (straightPointer) Pos() (image.Point, image.Rectangle, bool) {
+	return image.Point{}, image.Rectangle{}, false
+}

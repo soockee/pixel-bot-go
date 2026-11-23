@@ -2,71 +2,82 @@ package fishing
 
 import (
 	"image"
-	"math"
 	"time"
 
 	"github.com/soocke/pixel-bot-go/config"
 )
 
-// idleMove plays one between-catch movement: now and then a small camera
-// nudge, or a cursor wander where no drag fits.
-func (f *FishingFSM) idleMove() {
-	roll := f.deps.Roll
-	if roll(3) == 0 {
-		dx := 4 + roll(7)
-		if roll(2) == 0 {
-			dx = -dx
-		}
-		if attempted, err := f.deps.Input.DragCamera(dx); attempted {
-			if err == nil {
-				f.logger.Info("between-catch camera nudge", "dx", dx)
-			}
-			f.pauseFor(err) // a failed nudge costs nothing, unless the person took over
+// startGlances makes the pointer glance round the window while the bobber is
+// watched, first 1.5 to 4 s after it reached where it waits. A pointer that
+// did not move to the bobber comes back to the bobber itself.
+func (f *FishingFSM) startGlances() {
+	f.restAim = image.Pt(f.coordX, f.coordY)
+	if n := len(f.cursorSteps); n > 0 {
+		f.restAim = f.cursorSteps[n-1].Point
+	} else {
+		at, area, ok := f.deps.Pointer.Pos()
+		if !ok || !at.In(area) {
 			return
 		}
+		f.cursorStart, f.cursorSteps = time.Now(), []CursorStep{{Point: at}}
 	}
-	start, ok := f.deps.Pointer.Pos()
-	if !ok {
-		start = image.Pt(f.coordX, f.coordY)
-	}
-	// shortcut: the path runs on the FSM loop, so a Stop waits for it (about
-	// half a second); schedule its points as timed steps if that is too slow.
-	for _, p := range wanderPath(start, roll) {
-		if !f.deps.InFront() {
-			return
-		}
-		// A wander step that does not land is skipped, unless the person took over.
-		if f.pauseFor(f.deps.Input.MoveTo(p)) {
-			return
-		}
-		time.Sleep(wanderStep)
-	}
-	f.logger.Info("between-catch cursor wander", "from", start)
+	f.watchIdle, f.away = true, false
+	f.holdCursor(time.Duration(1500+f.deps.Roll(2501)) * time.Millisecond)
 }
 
-const wanderStep = 30 * time.Millisecond
-
-// wanderPath is a cursor drift of 40 to 160 px from start along a bent curve,
-// slow at both ends, with a pixel of tremble on the way. roll draws in [0, n).
-func wanderPath(start image.Point, roll func(int) int) []image.Point {
-	distance := float64(40 + roll(121))
-	angle := float64(roll(360)) * math.Pi / 180
-	end := image.Pt(start.X+int(distance*math.Cos(angle)), start.Y+int(distance*math.Sin(angle)))
-	// The control point sits off the straight line by up to a quarter of its length.
-	bend := float64(roll(51)-25) / 100 * distance
-	mid := image.Pt((start.X+end.X)/2+int(-math.Sin(angle)*bend), (start.Y+end.Y)/2+int(math.Cos(angle)*bend))
-	n := 10 + roll(7)
-	path := make([]image.Point, n)
-	for i := range path {
-		t := (1 - math.Cos(math.Pi*float64(i+1)/float64(n))) / 2
-		x := (1-t)*(1-t)*float64(start.X) + 2*(1-t)*t*float64(mid.X) + t*t*float64(end.X)
-		y := (1-t)*(1-t)*float64(start.Y) + 2*(1-t)*t*float64(mid.Y) + t*t*float64(end.Y)
-		path[i] = image.Pt(int(math.Round(x)), int(math.Round(y)))
-		if i < n-1 {
-			path[i] = path[i].Add(image.Pt(roll(3)-1, roll(3)-1))
+// glance plans the pointer's next move while the bobber is watched, along the
+// same planned paths as the aim: out to a point anywhere in the game window,
+// on to one or two more now and then, and back to where it waits beside the
+// bobber, with a rest after each. The moves are the monitoring state's cursor
+// steps, so a bite, a lost bobber or any other transition replaces them, and
+// the reel plans its own path to the bobber from wherever the pointer is.
+// glance reports false when it paused the run.
+func (f *FishingFSM) glance() bool {
+	roll := f.deps.Roll
+	target, settle := f.restAim, true
+	rest := time.Duration(2000+roll(4001)) * time.Millisecond
+	if f.glancesLeft > 0 || !f.away {
+		at, area, ok := f.deps.Pointer.Pos()
+		if !ok || !at.In(area) {
+			f.watchIdle = false
+			return true
+		}
+		in := idleBounds(area)
+		target, settle = image.Pt(in.Min.X+roll(in.Dx()), in.Min.Y+roll(in.Dy())), false
+		rest = time.Duration(300+roll(901)) * time.Millisecond
+		if f.away {
+			f.glancesLeft--
+		} else {
+			f.glancesLeft = roll(3)
 		}
 	}
-	return path
+	steps, err := f.deps.Pointer.Plan(target, settle)
+	if err != nil || len(steps) == 0 {
+		if f.pauseFor(err) {
+			return false
+		}
+		f.logger.Info("watching pointer move skipped", "error", err)
+		f.watchIdle = false
+		return true
+	}
+	f.away = target != f.restAim
+	f.logger.Info("watching pointer move", "x", target.X, "y", target.Y, "back", !f.away)
+	f.cursorStart, f.cursorSteps = time.Now(), steps
+	f.holdCursor(rest)
+	return true
+}
+
+// holdCursor keeps the pointer where its plan ends for d more, so the loop
+// wakes then to plan the next glance.
+func (f *FishingFSM) holdCursor(d time.Duration) {
+	last := f.cursorSteps[len(f.cursorSteps)-1]
+	f.cursorSteps = append(f.cursorSteps, CursorStep{After: last.After + d, Point: last.Point})
+}
+
+// idleBounds keeps glances a tenth of the window away from its edges, so the
+// pointer stays well inside the game.
+func idleBounds(area image.Rectangle) image.Rectangle {
+	return area.Inset(min(area.Dx(), area.Dy()) / 10)
 }
 
 func (f *FishingFSM) activity(key, name string) bool {

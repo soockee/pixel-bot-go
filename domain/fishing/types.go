@@ -134,8 +134,9 @@ type Pointer interface {
 	// Approach is where to wait while watching the bobber at center in box,
 	// and whether to move there at all.
 	Approach(center image.Point, box image.Rectangle) (image.Point, bool)
-	// Pos is where the pointer is now, where a between-catch wander starts.
-	Pos() (image.Point, bool)
+	// Pos is where the pointer is now and the game window it may move in,
+	// where a between-catch move starts. ok is false when either is unknown.
+	Pos() (at image.Point, area image.Rectangle, ok bool)
 }
 
 // ReelTiming is the hold and the wait from release to the next cast.
